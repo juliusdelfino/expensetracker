@@ -1,0 +1,141 @@
+/* ============================================
+   Expense Tracker - Responsive Media Queries
+   ============================================ */
+
+/* Desktop: hide mobile-only elements */
+@media (min-width: 900px) {
+    .swipe-wrapper { display: none !important; }
+    .bottom-tab-bar { display: none !important; }
+
+    .dashboard-grid { grid-template-columns: 1fr 1fr; }
+
+    .desktop-chat-fab { display: flex; }
+    .desktop-chat-panel { display: none; }
+
+    /* Show inline nav links on desktop */
+    .nav-inline { display: flex; }
+    /* Hide duplicated items in drawer on desktop */
+    .drawer-mobile-only { display: none !important; }
+
+    /* On desktop: always show extra filters, hide "More filters" button */
+    .exp-extra-filters { display: flex !important; }
+    .exp-more-filters-btn { display: none !important; }
+}
+
+/* Mobile */
+@media (max-width: 899px) {
+    .container { padding: 1rem; }
+    .dashboard-grid { grid-template-columns: 1fr; }
+    .discovery-section { grid-template-columns: 1fr; }
+    .side-by-side { grid-template-columns: 1fr; }
+    .form-row, .form-row-3 { grid-template-columns: 1fr; }
+    .filter-bar { flex-direction: column; }
+
+    /* Expense filters: tighter compact layout on mobile */
+    .expense-filters-bar {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        gap: 0.3rem;
+    }
+    .exp-extra-filters input[type="date"] {
+        flex: 1 1 0;
+        min-width: 0 !important;
+        max-width: calc(50% - 0.15rem);
+        font-size: 0.75rem;
+        padding: 0.3rem 0.25rem;
+    }
+    .exp-extra-filters select { flex: 1 1 calc(50% - 0.15rem); min-width: 0 !important; font-size: 0.8rem; }
+
+    /* Hide CSV, JSON, Deleted buttons on mobile */
+    .expense-desktop-only { display: none !important; }
+
+    /* Expense table: hide Base and Actions columns on mobile */
+    .expense-table th:nth-child(5),
+    .expense-table td:nth-child(5),
+    .expense-table th:nth-child(6),
+    .expense-table td:nth-child(6) {
+        display: none !important;
+    }
+    .item-child-row td:nth-child(5),
+    .item-child-row td:nth-child(6) {
+        display: none !important;
+    }
+    /* Remove left padding from status column on mobile */
+    .td-status { padding-left: 0 !important; padding-right: 0 !important; }
+    /* Right-align amount columns on mobile, no right padding */
+    .expense-table td.amount-primary,
+    .expense-table td.amount-secondary,
+    .expense-table td.item-child-amount {
+        text-align: right !important;
+        padding-right: 0 !important;
+    }
+    /* Pagination: constrain to screen, wrap gracefully */
+    .pagination-bar {
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+    .pagination-info { font-size: 0.72rem; width: 100%; }
+    .pagination-btns { flex-wrap: nowrap; overflow: hidden; }
+    .pagination-btns .btn { min-width: 28px; padding: 0.25rem 0.35rem; font-size: 0.75rem; }
+    /* Allow description text to wrap on mobile */
+    .td-description {
+        white-space: normal !important;
+        word-break: break-word;
+        max-width: none !important;
+    }
+
+    .action-bar { flex-direction: column; align-items: flex-start; }
+    .action-bar-right { flex-wrap: wrap; }
+
+    .navbar { padding: 0 0.75rem; }
+    .navbar-brand { font-size: 1.1rem; }
+
+    .auth-container { margin: 2rem auto; padding: 0 1rem; }
+
+    .desktop-chat-fab { display: none !important; }
+    .desktop-chat-panel { display: none !important; }
+
+    /* Expense detail: narrower datetime, inline amount+currency */
+    .detail-datetime {
+        font-size: 0.75rem;
+        padding: 0.35rem 0.4rem;
+        max-width: 100%;
+    }
+    .detail-amount-row {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 0.75rem !important;
+    }
+    .detail-amount-row .form-group:nth-child(3) {
+        grid-column: 1 / -1;
+    }
+
+    /* Store form: inline rows on mobile */
+    .store-row-inline {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 0.5rem !important;
+    }
+    .store-row-inline-3 {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr 1fr !important;
+        gap: 0.5rem !important;
+    }
+
+    /* Store read-only: stack on mobile */
+    .store-readonly-layout {
+        grid-template-columns: 1fr !important;
+    }
+    .store-readonly-map-wrap {
+        min-height: 180px;
+    }
+
+    /* Receipt image: enable pinch-zoom */
+    .receipt-image {
+        touch-action: pinch-zoom;
+    }
+
+    /* Hide lat/lon fields on mobile (map is shown instead) */
+    .store-latlng-fields { display: none !important; }
+}
+

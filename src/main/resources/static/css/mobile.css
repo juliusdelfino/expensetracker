@@ -1,0 +1,525 @@
+/* ============================================
+   Expense Tracker - Mobile: Swipe Panels, Scan, Home Feed
+   ============================================ */
+
+/* ============================================================
+   SWIPE CONTAINER + BOTTOM TAB BAR
+   ============================================================ */
+.swipe-wrapper {
+    position: fixed;
+    top: var(--navbar-h);
+    left: 0;
+    right: 0;
+    bottom: var(--tabbar-h);
+    overflow: hidden;
+    z-index: 1;
+}
+.swipe-container {
+    display: flex;
+    width: 300vw;
+    height: 100%;
+    transform: translateX(-100vw); /* start at second panel (Home) */
+    will-change: transform;
+}
+.swipe-panel {
+    width: 100vw;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ===================== BOTTOM TAB BAR ===================== */
+.bottom-tab-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: var(--tabbar-h);
+    background: linear-gradient(135deg, var(--aegean-dark), var(--aegean-mid));
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    z-index: 1000;
+    padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: 0 -2px 8px rgba(27, 58, 92, 0.15);
+}
+.tab-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.5);
+    font-size: 0.7rem;
+    cursor: pointer;
+    padding: 0.4rem 1.5rem;
+    border-radius: var(--radius);
+    transition: var(--transition);
+}
+.tab-btn i { font-size: 1.2rem; }
+.tab-btn.active { color: var(--sand); }
+.tab-btn:hover { color: rgba(255,255,255,0.8); }
+
+/* ===================== SCAN PANEL ===================== */
+.scan-panel-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+.camera-viewport {
+    flex: 1;
+    background: #000;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.camera-viewport video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.camera-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255,255,255,0.4);
+    gap: 0.5rem;
+    text-align: center;
+    padding: 2rem;
+}
+.camera-placeholder i { font-size: 3rem; }
+.camera-placeholder p { font-size: 0.85rem; }
+
+.scan-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: var(--bg);
+    justify-content: center;
+    flex-wrap: wrap;}
+.scan-action-btn { flex: 1; min-width: 100px; justify-content: center; }
+
+/* Capture confirmation overlay */
+.capture-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.capture-preview-container {
+    max-width: 90vw;
+    max-height: 80vh;
+    text-align: center;
+}
+.capture-preview-img {
+    max-width: 100%;
+    max-height: 60vh;
+    border-radius: var(--radius);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+.capture-prompt {
+    color: #fff;
+    font-size: 1.1rem;
+    margin: 1rem 0;
+    font-weight: 500;
+}
+.capture-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+/* ===================== HOME FEED (social-scroll) ===================== */
+.home-feed {
+    padding: 0.75rem;
+    padding-bottom: 2rem;
+}
+.feed-card {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+/* Hero card */
+.hero-card {
+    background: linear-gradient(135deg, var(--aegean-dark), var(--aegean-mid));
+    color: #fff;
+    text-align: center;
+    padding: 1.5rem 1rem;
+}
+.hero-title {
+    font-size: 0.9rem;
+    opacity: 0.8;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+}
+.hero-amount {
+    font-size: 2.2rem;
+    font-weight: 700;
+}
+.hero-currency {
+    font-size: 1rem;
+    font-weight: 400;
+    opacity: 0.7;
+}
+.hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-top: 1rem;
+}
+.hero-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.hero-stat-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+.hero-stat-label {
+    font-size: 0.7rem;
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.hero-loading {
+    padding: 2rem;
+    text-align: center;
+    color: rgba(255,255,255,0.7);
+}
+
+/* ===================== EXPENSE MINI CARDS ===================== */
+.expense-mini-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 0;
+    border-bottom: 1px solid var(--border-color);
+    text-decoration: none;
+    color: var(--text);
+    transition: var(--transition);
+}
+.expense-mini-card:last-child { border-bottom: none; }
+.expense-mini-card:hover { background: var(--table-stripe); }
+
+.mini-card-icon {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--aegean-pale);
+    color: var(--aegean-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+.mini-card-info { flex: 1; min-width: 0; }
+.mini-card-category {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--aegean-dark);
+}
+.mini-card-date { font-size: 0.75rem; color: var(--text-light); }
+.mini-card-amount {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--aegean-dark);
+    white-space: nowrap;
+}
+
+/* ===================== DATE RANGE SLIDER ===================== */
+.date-range-slider-container {
+    margin-top: 0.3rem;
+}
+.date-range-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+}
+.date-range-label {
+    font-size: 0.75rem;
+    color: var(--aegean-dark);
+    font-weight: 600;
+}
+.dual-range-wrapper {
+    position: relative;
+    height: 28px;
+    display: flex;
+    align-items: center;
+}
+.dual-range {
+    position: absolute;
+    width: 100%;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    pointer-events: none;
+    z-index: 2;
+    margin: 0;
+}
+.dual-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--aegean-mid);
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(27, 58, 92, 0.3);
+    cursor: pointer;
+    pointer-events: auto;
+}
+.dual-range::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--aegean-mid);
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(27, 58, 92, 0.3);
+    cursor: pointer;
+    pointer-events: auto;
+}
+.dual-range-track {
+    position: absolute;
+    height: 4px;
+    background: var(--aegean-mid);
+    border-radius: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1;
+}
+.dual-range-wrapper::before {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 4px;
+    background: var(--border-color);
+    border-radius: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+/* ===================== HERO CARD DROPDOWN ===================== */
+.hero-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+.hero-period-select {
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: var(--radius);
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M1.5 5.5l6.5 6.5 6.5-6.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.4rem center;
+    padding-right: 1.5rem;
+}
+.hero-period-select option,
+.hero-period-select optgroup {
+    color: var(--text);
+    background: var(--bg-card);
+}
+
+/* ===================== CARD TITLE ROW (with dropdown) ===================== */
+.card-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+.card-title-row .card-title {
+    margin-bottom: 0;
+}
+.chart-period-select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    outline: none;
+}
+.chart-period-select:focus {
+    border-color: var(--aegean-mid);
+}
+
+/* ===================== RANK ROWS (top shops, items) ===================== */
+.rank-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+.rank-row:last-child { border-bottom: none; }
+.rank-badge {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--aegean-pale);
+    color: var(--aegean-dark);
+    font-size: 0.75rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.rank-name {
+    flex: 1;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.rank-value {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--aegean-mid);
+    white-space: nowrap;
+}
+
+/* ===================== DISCOVERY CARDS ===================== */
+.discovery-card {
+    padding: 1.25rem;
+    border-left: 4px solid var(--sand);
+}
+.discovery-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding-left: 0;
+    border-left: none;
+}
+.discovery-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--sand-pale);
+    color: var(--sand);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    flex-shrink: 0;
+}
+.discovery-title-area { flex: 1; min-width: 0; }
+.discovery-title {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--aegean-dark);
+    line-height: 1.2;
+}
+.discovery-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-light);
+    margin-top: 0.15rem;
+}
+.discovery-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    text-align: center;
+}
+.discovery-metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.5rem 0.25rem;
+    background: var(--bg);
+    border-radius: var(--radius);
+}
+.discovery-metric-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--aegean-dark);
+    line-height: 1.2;
+}
+.discovery-metric-label {
+    font-size: 0.7rem;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-top: 0.1rem;
+}
+.discovery-metric-orig {
+    font-size: 0.7rem;
+    color: var(--text-light);
+    margin-top: 0.1rem;
+}
+.discovery-shops {
+    font-size: 0.8rem;
+    color: var(--text-light);
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color);
+}
+.discovery-shops i { color: var(--sand); margin-right: 0.3rem; }
+
+.discovery-section { margin-top: 1.5rem; }
+.discovery-section .feed-card { margin-bottom: 1rem; }
+.discovery-load-trigger { text-align: center; padding: 0.5rem; }
+
+/* ===================== GEO MAP COUNTRY MARKERS ===================== */
+.geo-country-marker {
+    background: none;
+    border: none;
+}
+.geo-country-dot {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--aegean-mid);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+.geo-popup {
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+.geo-popup b {
+    font-size: 0.95rem;
+    color: var(--aegean-dark);
+}
+.geo-popup-row i {
+    width: 16px;
+    text-align: center;
+    margin-right: 0.3rem;
+    color: var(--aegean-mid);
+}
+

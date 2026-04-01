@@ -1,0 +1,82 @@
+Configuration:
+  status: warn
+  monitorInterval: 30
+
+  Properties:
+    Property:
+      - name: LOG_PATTERN
+        value: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"
+      - name: LOG_DIR
+        value: logs
+
+  Appenders:
+    Console:
+      name: Console
+      target: SYSTEM_OUT
+      PatternLayout:
+        pattern: "%d{HH:mm:ss.SSS} [%t] %highlight{%-5level}{FATAL=red blink, ERROR=red, WARN=yellow bold, INFO=green, DEBUG=cyan, TRACE=white} %style{%logger{36}}{cyan} - %msg%n"
+
+    RollingFile:
+      - name: RollingFileInfo
+        fileName: "${LOG_DIR}/expensetracker.log"
+        filePattern: "${LOG_DIR}/expensetracker-%d{yyyy-MM-dd}-%i.log.gz"
+        PatternLayout:
+          pattern: "${LOG_PATTERN}"
+        Policies:
+          TimeBasedTriggeringPolicy:
+            interval: 1
+            modulate: true
+          SizeBasedTriggeringPolicy:
+            size: 10MB
+        DefaultRolloverStrategy:
+          max: 30
+
+      - name: RollingFileError
+        fileName: "${LOG_DIR}/expensetracker-error.log"
+        filePattern: "${LOG_DIR}/expensetracker-error-%d{yyyy-MM-dd}-%i.log.gz"
+        PatternLayout:
+          pattern: "${LOG_PATTERN}"
+        Filters:
+          ThresholdFilter:
+            level: ERROR
+            onMatch: ACCEPT
+            onMismatch: DENY
+        Policies:
+          TimeBasedTriggeringPolicy:
+            interval: 1
+            modulate: true
+          SizeBasedTriggeringPolicy:
+            size: 10MB
+        DefaultRolloverStrategy:
+          max: 30
+
+  Loggers:
+    Logger:
+      - name: com.gb.sasdsn
+        level: DEBUG
+        additivity: false
+        AppenderRef:
+          - ref: Console
+          - ref: RollingFileInfo
+          - ref: RollingFileError
+
+      - name: org.springframework
+        level: INFO
+        additivity: false
+        AppenderRef:
+          - ref: Console
+          - ref: RollingFileInfo
+
+      - name: org.springframework.security
+        level: WARN
+        additivity: false
+        AppenderRef:
+          - ref: Console
+          - ref: RollingFileInfo
+
+    Root:
+      level: WARN
+      AppenderRef:
+        - ref: Console
+        - ref: RollingFileInfo
+

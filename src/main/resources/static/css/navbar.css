@@ -1,0 +1,92 @@
+/* ============================================
+   Expense Tracker - Navbar & Navigation Drawer
+   ============================================ */
+.navbar {
+    background: linear-gradient(135deg, var(--aegean-dark), var(--aegean-mid));
+    padding: 0 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    height: var(--navbar-h);
+}
+.navbar-brand {
+    color: var(--sand);
+    font-size: 1.25rem;
+    font-weight: 700;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+/* Burger button (always visible) */
+.burger-btn {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.85);
+    font-size: 1.3rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: var(--radius);
+    transition: var(--transition);
+}
+.burger-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+/* Inline nav links (desktop only) */
+.nav-inline {
+    display: none;
+    align-items: center;
+    gap: 0.25rem;
+    margin-left: auto;
+    margin-right: 0.5rem;
+}
+.nav-inline a {
+    color: rgba(255,255,255,0.85);
+    text-decoration: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
+}
+.nav-inline a:hover { background: rgba(255,255,255,0.12); color: #fff; }
+
+/* Nav drawer (slide-down overlay) */
+.nav-drawer {
+    display: none;
+    position: absolute;
+    top: var(--navbar-h);
+    right: 0;
+    background: linear-gradient(180deg, var(--aegean-dark), #152d49);
+    min-width: 220px;
+    border-radius: 0 0 var(--radius) var(--radius);
+    box-shadow: var(--shadow-hover);
+    z-index: 999;
+    flex-direction: column;
+    padding: 0.5rem 0;
+}
+.nav-drawer.open { display: flex; }
+.nav-drawer a {
+    color: rgba(255,255,255,0.85);
+    text-decoration: none;
+    padding: 0.75rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.9rem;
+    transition: var(--transition);
+}
+.nav-drawer a:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--sand);
+}
+

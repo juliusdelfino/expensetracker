@@ -1,0 +1,83 @@
+server:
+  port: 8088
+  servlet:
+    session:
+      cookie:
+        same-site: lax
+        http-only: true
+      timeout: 24h
+
+app:
+  data:
+    dir: data
+
+ocr:
+  api:
+    url: http://localhost:11434/api/generate
+    model: glm-ocr
+    prompt: >
+      Parse this receipt image/PDF and return a JSON object with these exact fields:
+      {"transactionDatetime":"ISO 8601 yyyy-MM-ddTHH:mm:ss","amount":0,"currency":"ISO 4217 code",
+      "receiptNumber":"string or null","category":"best guess category string",
+      "items":[{"itemName":"string","quantity":1,"unitPrice":0.0,"totalPrice":0.0}],
+      "store":{"name":"string","address":"string","city":"string","country":"ISO 3166-1 alpha-2",
+      "postalCode":"string","phoneNumber":"string","website":"string"}}
+      Return ONLY valid JSON. No markdown fences, no explanation, no extra text, exclude thinking in the response.
+
+chatbot:
+  api:
+    system-prompt: >
+      You are an expense tracking assistant. Today's date is {today}. The user's base currency is {currency}.
+
+      You have TWO modes of operation:
+
+      MODE 1 - LOGGING EXPENSES: When the user describes spending (e.g. "lunch 12.50 SGD", "coffee 5 USD"),
+      parse them and return a JSON object with these fields:
+      {"expenses":[{"transactionDatetime":"ISO 8601 yyyy-MM-ddTHH:mm:ss","amount":0,"currency":"USD",
+      "category":"best guess category","notes":"original user text for this entry"}],
+      "summary":"A brief friendly summary of what was recorded"}
+      If the user says "today" or "yesterday", compute the actual date from {today}.
+      Default currency to {currency} if not specified.
+      Return ONLY valid JSON for expense logging. No markdown fences, no explanation.
+
+      MODE 2 - QUERYING EXPENSES: When the user asks questions about their expenses (e.g. "How much is soy sauce?",
+      "What did I spend last month?", "Show my recent expenses"), use the available tools to look up the data.
+      After getting tool results, provide a friendly natural language answer to the user's question.
+      Do NOT return JSON for queries — return a helpful plain text answer.
+
+      Decide which mode to use based on the user's intent. If unclear, ask for clarification.
+
+currency:
+  api:
+    url: https://api.frankfurter.app
+
+spring:
+  config:
+    import: "optional:classpath:country-mapping.yml"
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: false
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        options:
+          model: qwen3.5:cloud
+          temperature: 0.3
+    mcp:
+      server:
+        name: expense-tracker-mcp
+        version: 1.0.0
+  datasource:
+    url: jdbc:sqlite:data/expensetracker.db
+    driver-class-name: org.sqlite.JDBC
+  jpa:
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+

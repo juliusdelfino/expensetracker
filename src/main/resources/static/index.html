@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Expense Tracker</title>
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/navbar.css">
+    <link rel="stylesheet" href="/css/dashboard.css">
+    <link rel="stylesheet" href="/css/mobile.css">
+    <link rel="stylesheet" href="/css/chat.css">
+    <link rel="stylesheet" href="/css/responsive.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar" id="navbar" style="display:none;">
+    <a href="#/dashboard" class="navbar-brand" onclick="if(isMobile()){ goToDashboard(); return false; }">
+        <i class="fa-solid fa-wallet"></i> Expense Tracker
+    </a>
+    <div class="nav-inline" id="navInline">
+        <a href="#/dashboard" onclick="if(isMobile()){ goToDashboard(); return false; }"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+        <a href="#/expenses"><i class="fa-solid fa-receipt"></i> Expenses</a>
+        <a href="#/expenses/new"><i class="fa-solid fa-plus"></i> New Expense</a>
+        <a href="#/chat" onclick="openChat(event)"><i class="fa-solid fa-comment"></i> Chat</a>
+    </div>
+    <button class="burger-btn" id="burgerBtn" onclick="toggleNavDrawer()">
+        <i class="fa-solid fa-bars"></i>
+    </button>
+    <div class="nav-drawer" id="navDrawer">
+        <a href="#/dashboard" class="drawer-mobile-only" onclick="goToDashboard(); closeNavDrawer()"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+        <a href="#/expenses" class="drawer-mobile-only" onclick="closeNavDrawer()"><i class="fa-solid fa-receipt"></i> Expenses</a>
+        <a href="#/expenses/new" class="drawer-mobile-only" onclick="closeNavDrawer()"><i class="fa-solid fa-plus"></i> New Expense</a>
+        <a href="#/chat" class="drawer-mobile-only" onclick="openChat(event); closeNavDrawer()"><i class="fa-solid fa-comment"></i> Chat</a>
+        <a href="#/profile" onclick="closeNavDrawer()"><i class="fa-solid fa-user-gear"></i> <span id="nav-username"></span></a>
+        <a href="#" onclick="logout(); closeNavDrawer(); return false;"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+    </div>
+</nav>
+
+<!-- Desktop: normal page content rendered here -->
+<div id="app"></div>
+
+<!-- Mobile: swipe container (shown only on mobile after login) -->
+<div class="swipe-wrapper" id="swipeWrapper" style="display:none;">
+    <div class="swipe-container" id="swipeContainer">
+        <div class="swipe-panel" id="panel-newexpense"></div>
+        <div class="swipe-panel" id="panel-home"></div>
+        <div class="swipe-panel" id="panel-chat"></div>
+    </div>
+</div>
+
+<!-- Mobile: bottom tab bar -->
+<nav class="bottom-tab-bar" id="bottomTabBar" style="display:none;">
+    <button class="tab-btn" data-panel="0" onclick="goToPanel(0)">
+        <i class="fa-solid fa-camera"></i>
+        <span>Scan</span>
+    </button>
+    <button class="tab-btn active" data-panel="1" onclick="goToPanel(1)">
+        <i class="fa-solid fa-house"></i>
+        <span>Home</span>
+    </button>
+    <button class="tab-btn" data-panel="2" onclick="goToPanel(2)">
+        <i class="fa-solid fa-comment"></i>
+        <span>Chat</span>
+    </button>
+</nav>
+
+<!-- Desktop: Chatbot FAB + Panel -->
+<button class="desktop-chat-fab" id="desktopChatFab" onclick="toggleDesktopChat()" title="Chat with Expense Assistant">
+    <i class="fa-solid fa-comment"></i>
+</button>
+<div class="desktop-chat-panel" id="desktopChatPanel" style="display:none;">
+    <div class="desktop-chat-panel-header">
+        <span><i class="fa-solid fa-robot"></i> Expense Assistant</span>
+        <button class="desktop-chat-close" onclick="toggleDesktopChat()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="desktopChatContent" class="desktop-chat-content"></div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<!-- Split JS files by feature -->
+<script src="/js/utils.js"></script>
+<script src="/js/router.js"></script>
+<script src="/js/scan.js"></script>
+<script src="/js/home.js"></script>
+<script src="/js/chat.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/expenses.js"></script>
+</body>
+</html>
