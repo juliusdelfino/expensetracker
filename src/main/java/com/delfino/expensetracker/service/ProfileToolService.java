@@ -38,14 +38,12 @@ public class ProfileToolService {
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) return "User not found.";
 
-        StringBuilder sb = new StringBuilder("Your profile:\n");
-        sb.append("- Username: ").append(user.getUsername()).append("\n");
-        sb.append("- Email: ").append(user.getEmail() != null ? user.getEmail() : "not set").append("\n");
-        sb.append("- Phone: ").append(user.getPhoneNumber() != null ? user.getPhoneNumber() : "not set").append("\n");
-        sb.append("- Base Currency: ").append(user.getBaseCurrency() != null ? user.getBaseCurrency() : "not set").append("\n");
-        sb.append("- Base City: ").append(user.getBaseCity() != null ? user.getBaseCity() : "not set").append("\n");
-        sb.append("- Base Country: ").append(user.getBaseCountry() != null ? user.getBaseCountry() : "not set").append("\n");
-        return sb.toString();
+        return "Your profile:\n" + "- Username: " + user.getUsername() + "\n" +
+                "- Email: " + (user.getEmail() != null ? user.getEmail() : "not set") + "\n" +
+                "- Phone: " + (user.getPhoneNumber() != null ? user.getPhoneNumber() : "not set") + "\n" +
+                "- Base Currency: " + (user.getBaseCurrency() != null ? user.getBaseCurrency() : "not set") + "\n" +
+                "- Base City: " + (user.getBaseCity() != null ? user.getBaseCity() : "not set") + "\n" +
+                "- Base Country: " + (user.getBaseCountry() != null ? user.getBaseCountry() : "not set") + "\n";
     }
 
     @Tool(description = "Update the current user's profile. Only updates fields that are provided (non-empty). " +

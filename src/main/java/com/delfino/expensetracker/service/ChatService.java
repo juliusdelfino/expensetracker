@@ -108,7 +108,7 @@ public class ChatService {
             List<UUID> savedExpenseIds = new ArrayList<>();
             String botText = llmResponse;
 
-            if (llmResponse != null && looksLikeExpenseJson(llmResponse)) {
+            if (looksLikeExpenseJson(llmResponse)) {
                 try {
                     String cleaned = cleanJsonResponse(llmResponse);
                     JsonNode parsed = objectMapper.readTree(cleaned);

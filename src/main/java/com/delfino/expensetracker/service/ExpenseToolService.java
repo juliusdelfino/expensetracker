@@ -201,7 +201,7 @@ public class ExpenseToolService {
                     }
                     return true;
                 })
-                .collect(Collectors.toList());
+                .toList();
 
         if (filtered.isEmpty()) {
             return "No expenses found" +
@@ -280,14 +280,13 @@ public class ExpenseToolService {
                             && e.getTransactionDatetime().toLocalDate().isBefore(start)) return false;
                     if (end != null && e.getTransactionDatetime() != null
                             && e.getTransactionDatetime().toLocalDate().isAfter(end)) return false;
-                    if (catLower != null && (e.getCategory() == null ||
-                            !e.getCategory().toLowerCase().contains(catLower))) return false;
-                    return true;
+                    return catLower == null || (e.getCategory() != null &&
+                            e.getCategory().toLowerCase().contains(catLower));
                 })
                 .sorted(Comparator.comparing(Expense::getTransactionDatetime,
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(limit > 0 ? limit : 10)
-                .collect(Collectors.toList());
+                .toList();
 
         if (filtered.isEmpty()) {
             return "No expenses found" +
@@ -332,11 +331,10 @@ public class ExpenseToolService {
                 .filter(e -> {
                     if (start != null && e.getTransactionDatetime() != null
                             && e.getTransactionDatetime().toLocalDate().isBefore(start)) return false;
-                    if (end != null && e.getTransactionDatetime() != null
-                            && e.getTransactionDatetime().toLocalDate().isAfter(end)) return false;
-                    return true;
+                    return end == null || e.getTransactionDatetime() == null
+                            || !e.getTransactionDatetime().toLocalDate().isAfter(end);
                 })
-                .collect(Collectors.toList());
+                .toList();
 
         if (filtered.isEmpty()) {
             return "No expenses found" +

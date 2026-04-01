@@ -24,11 +24,10 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * One-time migration runner that reads existing JSON data files
- * and imports them into the SQLite database on first startup.
+ * and imports them into the SQLite database on the first startup.
  *
  * The migration runs only when the database is empty AND JSON files exist.
  * After successful migration, JSON files are renamed to *.json.migrated as backup.
@@ -118,7 +117,7 @@ public class DataMigrationRunner implements ApplicationRunner {
 
             // Check if stores have expense_id data
             int storesWithExpenseId = 0;
-            boolean hasExpenseIdCol = false;
+            boolean hasExpenseIdCol;
             try (ResultSet rs = conn.getMetaData().getColumns(null, null, "stores", "expense_id")) {
                 hasExpenseIdCol = rs.next();
             }

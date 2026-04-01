@@ -52,7 +52,7 @@ Configuration:
 
   Loggers:
     Logger:
-      - name: com.gb.sasdsn
+      - name: com.delfino
         level: DEBUG
         additivity: false
         AppenderRef:

@@ -102,7 +102,7 @@ public class GeocodingService {
         List<Store> stores = storeRepository.findAll().stream()
                 .filter(s -> s.getLatitude() == null || s.getLongitude() == null)
                 .filter(s -> s.getAddress() != null || s.getCity() != null || s.getCountry() != null)
-                .collect(Collectors.toList());
+                .toList();
 
         if (stores.isEmpty()) {
             log.info("No stores without coordinates found — skipping retroactive geocoding");

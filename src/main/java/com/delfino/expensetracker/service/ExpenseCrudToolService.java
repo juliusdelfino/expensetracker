@@ -4,7 +4,6 @@ import com.delfino.expensetracker.config.CountryConfig;
 import com.delfino.expensetracker.config.UserContext;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.ExpenseItem;
-import com.delfino.expensetracker.model.Store;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
@@ -233,11 +232,10 @@ public class ExpenseCrudToolService {
                 .filter(e -> {
                     if (start != null && e.getTransactionDatetime() != null
                             && e.getTransactionDatetime().toLocalDate().isBefore(start)) return false;
-                    if (end != null && e.getTransactionDatetime() != null
-                            && e.getTransactionDatetime().toLocalDate().isAfter(end)) return false;
-                    return true;
+                    return end == null || e.getTransactionDatetime() == null
+                            || !e.getTransactionDatetime().toLocalDate().isAfter(end);
                 })
-                .collect(Collectors.toList());
+                .toList();
 
         // Build store visit data
         Map<String, Integer> visitCounts = new LinkedHashMap<>();
@@ -290,7 +288,7 @@ public class ExpenseCrudToolService {
         // Sort by visit count descending
         List<Map.Entry<String, Integer>> sorted = visitCounts.entrySet().stream()
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .collect(Collectors.toList());
+                .toList();
 
         StringBuilder sb = new StringBuilder();
         sb.append("Stores visited");

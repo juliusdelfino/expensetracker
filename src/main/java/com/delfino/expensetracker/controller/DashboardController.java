@@ -3,11 +3,12 @@ package com.delfino.expensetracker.controller;
 import com.delfino.expensetracker.config.CountryConfig;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.ExpenseItem;
+import com.delfino.expensetracker.model.ExpenseStatus;
+import com.delfino.expensetracker.model.Store;
 import com.delfino.expensetracker.model.User;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
-import com.delfino.expensetracker.repository.UserRepository;
 import com.delfino.expensetracker.service.ExpenseService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseEntity;
@@ -28,16 +29,13 @@ public class DashboardController {
     private final StoreRepository storeRepository;
     private final ExpenseItemRepository expenseItemRepository;
     private final ExpenseService expenseService;
-    private final UserRepository userRepository;
 
     public DashboardController(ExpenseRepository expenseRepository, StoreRepository storeRepository,
-                               ExpenseItemRepository expenseItemRepository, ExpenseService expenseService,
-                               UserRepository userRepository) {
+                               ExpenseItemRepository expenseItemRepository, ExpenseService expenseService) {
         this.expenseRepository = expenseRepository;
         this.storeRepository = storeRepository;
         this.expenseItemRepository = expenseItemRepository;
         this.expenseService = expenseService;
-        this.userRepository = userRepository;
     }
 
     @GetMapping
@@ -52,8 +50,8 @@ public class DashboardController {
         List<Expense> expenses = new ArrayList<>(allExpenses);
 
         // Preload all stores for this user into a map for efficient lookup
-        Map<UUID, com.delfino.expensetracker.model.Store> storeMap = new LinkedHashMap<>();
-        for (com.delfino.expensetracker.model.Store s : storeRepository.findByUserId(userId)) {
+        Map<UUID, Store> storeMap = new LinkedHashMap<>();
+        for (Store s : storeRepository.findByUserId(userId)) {
             storeMap.put(s.getId(), s);
         }
 
@@ -63,19 +61,19 @@ public class DashboardController {
             expenses = expenses.stream()
                     .filter(e -> e.getTransactionDatetime() != null
                             && !e.getTransactionDatetime().toLocalDate().isBefore(start))
-                    .collect(Collectors.toList());
+                    .toList();
         }
         if (endDate != null && !endDate.isBlank()) {
             LocalDate end = LocalDate.parse(endDate);
             expenses = expenses.stream()
                     .filter(e -> e.getTransactionDatetime() != null
                             && !e.getTransactionDatetime().toLocalDate().isAfter(end))
-                    .collect(Collectors.toList());
+                    .toList();
         }
         if (category != null && !category.isBlank()) {
             expenses = expenses.stream()
                     .filter(e -> category.equalsIgnoreCase(e.getCategory()))
-                    .collect(Collectors.toList());
+                    .toList();
         }
 
         // Monthly totals (in base currency)
@@ -214,7 +212,7 @@ public class DashboardController {
                     m.put("visits", entry.getValue());
                     return m;
                 })
-                .collect(Collectors.toList());
+                .toList();
 
         // Most bought items (from filtered expenses)
         Map<String, BigDecimal> itemCounts = new LinkedHashMap<>();
@@ -236,7 +234,7 @@ public class DashboardController {
                     m.put("count", entry.getValue());
                     return m;
                 })
-                .collect(Collectors.toList());
+                .toList();
 
         // Discovery cards: random country+month combos from all expenses (unfiltered)
         // Only show places outside the user's base city and country
@@ -277,7 +275,7 @@ public class DashboardController {
         result.put("maxDate", maxDate);
         // Top expenses by amount in base currency (from filtered expenses)
         List<Map<String, Object>> topExpenses = expenses.stream()
-                .filter(e -> com.delfino.expensetracker.model.ExpenseStatus.COMPLETED.equals(e.getStatus()))
+                .filter(e -> ExpenseStatus.COMPLETED.equals(e.getStatus()))
                 .sorted((a, b) -> {
                     BigDecimal ba = getBaseAmount(b);
                     BigDecimal aa = getBaseAmount(a);
@@ -291,7 +289,7 @@ public class DashboardController {
                             ? storeMap.get(e.getStoreId()).getName() : null;
                     String cat = e.getCategory() != null ? e.getCategory() : "Uncategorized";
                     String displayName = storeName != null && !storeName.isBlank()
-                            ? cat + " \u2014 " + storeName : cat;
+                            ? cat + " — " + storeName : cat;
                     m.put("displayName", displayName);
                     m.put("amount", e.getAmount());
                     m.put("currency", e.getCurrency());
@@ -300,7 +298,7 @@ public class DashboardController {
                     m.put("category", e.getCategory());
                     return m;
                 })
-                .collect(Collectors.toList());
+                .toList();
 
         result.put("topShops", topShops);
         result.put("topItems", topItems);
@@ -350,7 +348,7 @@ public class DashboardController {
      * Build random "discovery" cards from all-time expenses: e.g. "Expenses in Spain on July 2025"
      * Only includes places outside the user's base city and country.
      */
-    private List<Map<String, Object>> buildDiscoveryCards(List<Expense> allExpenses, User user, Map<UUID, com.delfino.expensetracker.model.Store> storeMap) {
+    private List<Map<String, Object>> buildDiscoveryCards(List<Expense> allExpenses, User user, Map<UUID, Store> storeMap) {
         String baseCity = user != null ? user.getBaseCity() : null;
         String baseCountry = user != null ? user.getBaseCountry() : null;
 
@@ -366,8 +364,7 @@ public class DashboardController {
                 String country = store.getCountry();
                 String city = store.getCity();
                 if (country != null && !country.isBlank()) {
-                    if (baseCity != null && baseCountry != null
-                            && city != null && city.equalsIgnoreCase(baseCity)
+                    if (city != null && city.equalsIgnoreCase(baseCity)
                             && country.equalsIgnoreCase(baseCountry)) {
                         continue; // Skip — this is the user's home location
                     }
@@ -447,13 +444,13 @@ public class DashboardController {
                         String sName = exp.getStoreId() != null && storeMap.containsKey(exp.getStoreId())
                                 ? storeMap.get(exp.getStoreId()).getName() : null;
                         String cat = exp.getCategory() != null ? exp.getCategory() : "Uncategorized";
-                        em.put("displayName", sName != null && !sName.isBlank() ? cat + " \u2014 " + sName : cat);
+                        em.put("displayName", sName != null && !sName.isBlank() ? cat + " — " + sName : cat);
                         em.put("amount", exp.getAmount());
                         em.put("currency", exp.getCurrency());
                         em.put("amountInBase", getBaseAmount(exp));
                         return em;
                     })
-                    .collect(Collectors.toList());
+                    .toList();
 
             Map<String, Object> card = new LinkedHashMap<>();
             card.put("type", "discovery");
@@ -470,7 +467,7 @@ public class DashboardController {
             card.put("originalCurrency", originalCurrency);
             card.put("originalTotal", originalTotal);
             card.put("shops", new ArrayList<>(shops).subList(0, Math.min(3, shops.size())));
-            card.put("title", "Expenses in " + locationLabel + " \u2014 " + monthName + " " + year);
+            card.put("title", "Expenses in " + locationLabel + " — " + monthName + " " + year);
             card.put("topExpenses", topExpensesInCard);
             cards.add(card);
         }

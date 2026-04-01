@@ -219,7 +219,7 @@ public class ExpenseService {
                 : expenseRepository.findByUserIdAndDeletedFalse(userId);
         return expenses.stream()
                 .filter(e -> matchesSearch(e, query))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private boolean matchesSearch(Expense e, String query) {
@@ -249,9 +249,7 @@ public class ExpenseService {
             // Match country name against the stored 2-letter code
             if (s.getCountry() != null) {
                 String countryName = CountryConfig.getName(s.getCountry());
-                if (countryName != null && countryName.toLowerCase().contains(q)) {
-                    return true;
-                }
+                return countryName != null && countryName.toLowerCase().contains(q);
             }
         }
         return false;
@@ -340,13 +338,7 @@ public class ExpenseService {
                 store.getCountry(), store.getPostalCode());
 
         if (existing.isPresent()) {
-            Store matched = existing.get();
-            // Update mutable fields on the matched store
-            if (store.getPhoneNumber() != null) matched.setPhoneNumber(store.getPhoneNumber());
-            if (store.getWebsite() != null) matched.setWebsite(store.getWebsite());
-            if (store.getLatitude() != null) matched.setLatitude(store.getLatitude());
-            if (store.getLongitude() != null) matched.setLongitude(store.getLongitude());
-            if (store.getSourceId() != null) matched.setSourceId(store.getSourceId());
+            Store matched = getMatched(store, existing);
             storeRepository.save(matched);
             // Link expense to this store
             expense.setStoreId(matched.getId());
@@ -362,6 +354,17 @@ public class ExpenseService {
         expense.setUpdatedAt(LocalDateTime.now());
         expenseRepository.save(expense);
         return saved;
+    }
+
+    private static Store getMatched(Store store, Optional<Store> existing) {
+        Store matched = existing.get();
+        // Update mutable fields on the matched store
+        if (store.getPhoneNumber() != null) matched.setPhoneNumber(store.getPhoneNumber());
+        if (store.getWebsite() != null) matched.setWebsite(store.getWebsite());
+        if (store.getLatitude() != null) matched.setLatitude(store.getLatitude());
+        if (store.getLongitude() != null) matched.setLongitude(store.getLongitude());
+        if (store.getSourceId() != null) matched.setSourceId(store.getSourceId());
+        return matched;
     }
 
     /** Backward-compatible overload */

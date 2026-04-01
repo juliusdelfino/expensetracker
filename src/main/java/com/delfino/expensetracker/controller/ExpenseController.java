@@ -59,20 +59,20 @@ public class ExpenseController {
             expenses = expenses.stream()
                     .filter(e -> e.getTransactionDatetime() != null
                             && !e.getTransactionDatetime().toLocalDate().isBefore(start))
-                    .collect(Collectors.toList());
+                    .toList();
         }
         if (endDate != null && !endDate.isBlank()) {
             LocalDate end = LocalDate.parse(endDate);
             expenses = expenses.stream()
                     .filter(e -> e.getTransactionDatetime() != null
                             && !e.getTransactionDatetime().toLocalDate().isAfter(end))
-                    .collect(Collectors.toList());
+                    .toList();
         }
         // Apply category filter
         if (category != null && !category.isBlank()) {
             expenses = expenses.stream()
                     .filter(e -> category.equalsIgnoreCase(e.getCategory()))
-                    .collect(Collectors.toList());
+                    .toList();
         }
         // Apply country filter (supports both code and name)
         if (country != null && !country.isBlank()) {
@@ -87,13 +87,13 @@ public class ExpenseController {
                                 if (s.getCountry() == null) return false;
                                 String sc = s.getCountry().toLowerCase();
                                 if (sc.contains(countryFilter)) return true;
-                                if (resolvedCode != null && sc.equalsIgnoreCase(resolvedCode)) return true;
+                                if (sc.equalsIgnoreCase(resolvedCode)) return true;
                                 String name = CountryConfig.getName(s.getCountry());
                                 return name != null && name.toLowerCase().contains(countryFilter);
                             })
                             .orElse(false);
                     })
-                    .collect(Collectors.toList());
+                    .toList();
         }
 
         // Sort by date descending
@@ -135,7 +135,7 @@ public class ExpenseController {
                     ? CountryConfig.getName(store.getCountry()) : null);
             String cat = e.getCategory() != null ? e.getCategory() : "Uncategorized";
             map.put("displayName", storeName != null && !storeName.isBlank()
-                    ? cat + " \u2014 " + storeName : cat);
+                    ? cat + " — " + storeName : cat);
 
             // Include matching items when search is active
             if (searchLower != null) {
@@ -150,7 +150,7 @@ public class ExpenseController {
                             im.put("totalPrice", i.getTotalPrice());
                             return im;
                         })
-                        .collect(Collectors.toList());
+                        .toList();
                 if (!matchingItems.isEmpty()) {
                     map.put("matchingItems", matchingItems);
                 }
@@ -171,7 +171,7 @@ public class ExpenseController {
                 .filter(c -> !c.isBlank())
                 .distinct()
                 .sorted()
-                .collect(Collectors.toList());
+                .toList();
         return ResponseEntity.ok(cats);
     }
 
