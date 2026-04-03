@@ -5,12 +5,15 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.UUID;
+import java.util.Optional;
+
 
 @Repository
-public interface ExpenseRepository extends JpaRepository<Expense, UUID> {
+public interface ExpenseRepository extends JpaRepository<Expense, Long> {
 
-    List<Expense> findByUserIdAndDeletedFalse(UUID userId);
+    List<Expense> findByUserIdAndDeletedFalse(Long userId);
 
-    List<Expense> findByUserId(UUID userId);
+    List<Expense> findByUserId(Long userId);
+
+    Optional<Expense> findByUrlId(String urlId);
 }

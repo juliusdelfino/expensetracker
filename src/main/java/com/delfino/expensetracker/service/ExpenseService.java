@@ -22,7 +22,6 @@ import java.math.BigDecimal;
 import java.nio.file.*;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 public class ExpenseService {
@@ -50,23 +49,22 @@ public class ExpenseService {
         this.userRepository = userRepository;
     }
 
-    public Expense createManualExpense(Expense expense, UUID userId) {
-        expense.setId(UUID.randomUUID());
+    public Expense createManualExpense(Expense expense, Long userId) {
         expense.setUserId(userId);
         expense.setType(ExpenseType.MANUAL);
         expense.setStatus(ExpenseStatus.COMPLETED);
         expense.setDeleted(false);
         expense.setCreatedAt(LocalDateTime.now());
         expense.setUpdatedAt(LocalDateTime.now());
+        expense.setUrlId(UUID.randomUUID().toString());
         if (expense.getAttachments() == null) expense.setAttachments(new ArrayList<>());
         if (expense.getTags() == null) expense.setTags(new ArrayList<>());
         computeCurrency(expense, userId);
         return expenseRepository.save(expense);
     }
 
-    public Expense createReceiptScanExpense(UUID userId, String imagePath) {
+    public Expense createReceiptScanExpense(Long userId, String imagePath) {
         Expense expense = new Expense();
-        expense.setId(UUID.randomUUID());
         expense.setUserId(userId);
         expense.setType(ExpenseType.RECEIPT_SCAN);
         expense.setStatus(ExpenseStatus.PROCESSING);
@@ -77,6 +75,7 @@ public class ExpenseService {
         expense.setScannedAt(LocalDateTime.now());
         expense.setCreatedAt(LocalDateTime.now());
         expense.setUpdatedAt(LocalDateTime.now());
+        expense.setUrlId(UUID.randomUUID().toString());
         expenseRepository.save(expense);
 
         String baseCurrency = userRepository.findById(userId).map(User::getBaseCurrency).orElse("USD");
@@ -84,10 +83,10 @@ public class ExpenseService {
         return expense;
     }
 
-    public Expense updateExpense(UUID expenseId, Expense updates, UUID userId) {
-        Expense expense = expenseRepository.findById(expenseId)
+    public Expense updateExpense(String urlId, Expense updates, long userId) {
+        Expense expense = expenseRepository.findByUrlId(urlId)
                 .orElseThrow(() -> new RuntimeException("Expense not found"));
-        if (!expense.getUserId().equals(userId)) throw new RuntimeException("Not authorized");
+        if (expense.getUserId() != userId) throw new RuntimeException("Not authorized");
 
         if (updates.getTransactionDatetime() != null) expense.setTransactionDatetime(updates.getTransactionDatetime());
         if (updates.getAmount() != null) expense.setAmount(updates.getAmount());
@@ -104,46 +103,46 @@ public class ExpenseService {
     }
 
     @Transactional
-    public void softDelete(UUID expenseId, UUID userId) {
-        Expense expense = expenseRepository.findById(expenseId)
+    public void softDelete(String urlId, long userId) {
+        Expense expense = expenseRepository.findByUrlId(urlId)
                 .orElseThrow(() -> new RuntimeException("Expense not found"));
-        if (!expense.getUserId().equals(userId)) throw new RuntimeException("Not authorized");
+        if (expense.getUserId() != userId) throw new RuntimeException("Not authorized");
         expense.setDeleted(true);
         expense.setUpdatedAt(LocalDateTime.now());
         expenseRepository.save(expense);
-        expenseItemRepository.softDeleteByExpenseId(expenseId);
+        expenseItemRepository.softDeleteByExpenseId(expense.getId());
     }
 
     @Transactional
-    public void restore(UUID expenseId, UUID userId) {
-        Expense expense = expenseRepository.findById(expenseId)
+    public void restore(String urlId, long userId) {
+        Expense expense = expenseRepository.findByUrlId(urlId)
                 .orElseThrow(() -> new RuntimeException("Expense not found"));
-        if (!expense.getUserId().equals(userId)) throw new RuntimeException("Not authorized");
+        if (expense.getUserId() != userId) throw new RuntimeException("Not authorized");
         expense.setDeleted(false);
         expense.setUpdatedAt(LocalDateTime.now());
         expenseRepository.save(expense);
-        expenseItemRepository.restoreByExpenseId(expenseId);
+        expenseItemRepository.restoreByExpenseId(expense.getId());
     }
 
-    public void retryOcr(UUID expenseId, UUID userId) {
-        Expense expense = expenseRepository.findById(expenseId)
+    public void retryOcr(String urlId, long userId) {
+        Expense expense = expenseRepository.findByUrlId(urlId)
                 .orElseThrow(() -> new RuntimeException("Expense not found"));
-        if (!expense.getUserId().equals(userId)) throw new RuntimeException("Not authorized");
+        if (expense.getUserId() != userId) throw new RuntimeException("Not authorized");
         expense.setStatus(ExpenseStatus.PROCESSING);
         expense.setUpdatedAt(LocalDateTime.now());
+        expense.setNotes("");
         expenseRepository.save(expense);
         String baseCurrency = userRepository.findById(userId).map(User::getBaseCurrency).orElse("USD");
-        ocrService.processReceipt(expenseId, expense.getImagePath(), baseCurrency);
+        ocrService.processReceipt(expense.getId(), expense.getImagePath(), baseCurrency);
     }
 
     @Transactional
-    public Expense duplicate(UUID expenseId, UUID userId) {
-        Expense original = expenseRepository.findById(expenseId)
+    public Expense duplicate(String urlId, long userId) {
+        Expense original = expenseRepository.findByUrlId(urlId)
                 .orElseThrow(() -> new RuntimeException("Expense not found"));
-        if (!original.getUserId().equals(userId)) throw new RuntimeException("Not authorized");
+        if (original.getUserId() != userId) throw new RuntimeException("Not authorized");
 
         Expense copy = new Expense();
-        copy.setId(UUID.randomUUID());
         copy.setUserId(userId);
         copy.setType(original.getType());
         copy.setTransactionDatetime(original.getTransactionDatetime());
@@ -162,14 +161,14 @@ public class ExpenseService {
         copy.setStoreId(original.getStoreId()); // reuse same store
         copy.setCreatedAt(LocalDateTime.now());
         copy.setUpdatedAt(LocalDateTime.now());
+        copy.setUrlId(UUID.randomUUID().toString());
         expenseRepository.save(copy);
 
         // Copy items
-        List<ExpenseItem> originalItems = expenseItemRepository.findByExpenseIdAndDeletedFalse(expenseId);
+        List<ExpenseItem> originalItems = expenseItemRepository.findByExpenseIdAndDeletedFalse(original.getId());
         List<ExpenseItem> copiedItems = new ArrayList<>();
         for (ExpenseItem oi : originalItems) {
             ExpenseItem ci = new ExpenseItem();
-            ci.setId(UUID.randomUUID());
             ci.setExpenseId(copy.getId());
             ci.setItemName(oi.getItemName());
             ci.setQuantity(oi.getQuantity());
@@ -183,19 +182,19 @@ public class ExpenseService {
         return copy;
     }
 
-    public void softDeleteItem(UUID expenseId, UUID itemId, UUID userId) {
-        Expense expense = expenseRepository.findById(expenseId)
+    public void softDeleteItem(String urlId, Long itemId, long userId) {
+        Expense expense = expenseRepository.findByUrlId(urlId)
                 .orElseThrow(() -> new RuntimeException("Expense not found"));
-        if (!expense.getUserId().equals(userId)) throw new RuntimeException("Not authorized");
+        if (expense.getUserId() != userId) throw new RuntimeException("Not authorized");
 
         ExpenseItem item = expenseItemRepository.findById(itemId)
                 .orElseThrow(() -> new RuntimeException("Item not found"));
         item.setDeleted(true);
         expenseItemRepository.save(item);
-        recomputeTotal(expenseId);
+        recomputeTotal(expense.getId());
     }
 
-    public void recomputeTotal(UUID expenseId) {
+    public void recomputeTotal(Long expenseId) {
         List<ExpenseItem> activeItems = expenseItemRepository.findByExpenseIdAndDeletedFalse(expenseId);
         BigDecimal total = activeItems.stream()
                 .map(ExpenseItem::getTotalPrice)
@@ -213,7 +212,7 @@ public class ExpenseService {
         }
     }
 
-    public List<Expense> search(UUID userId, String query, boolean includeDeleted) {
+    public List<Expense> search(Long userId, String query, boolean includeDeleted) {
         List<Expense> expenses = includeDeleted
                 ? expenseRepository.findByUserId(userId)
                 : expenseRepository.findByUserIdAndDeletedFalse(userId);
@@ -259,13 +258,13 @@ public class ExpenseService {
         return field != null && field.toLowerCase().contains(query);
     }
 
-    public String addAttachment(UUID expenseId, String originalFilename, byte[] fileBytes) throws IOException {
-        Path attachDir = Path.of(dataDir, "attachments", expenseId.toString());
+    public String addAttachment(String urlId, String originalFilename, byte[] fileBytes) throws IOException {
+        Path attachDir = Path.of(dataDir, "attachments", urlId);
         Files.createDirectories(attachDir);
         Path filePath = attachDir.resolve(originalFilename);
         Files.write(filePath, fileBytes);
 
-        Expense expense = expenseRepository.findById(expenseId).orElseThrow();
+        Expense expense = expenseRepository.findByUrlId(urlId).orElseThrow(() -> new RuntimeException("Expense not found"));
         if (expense.getAttachments() == null) expense.setAttachments(new ArrayList<>());
         expense.getAttachments().add(filePath.toString());
         expense.setUpdatedAt(LocalDateTime.now());
@@ -273,9 +272,9 @@ public class ExpenseService {
         return filePath.toString();
     }
 
-    public void removeAttachment(UUID expenseId, String filename) throws IOException {
-        Expense expense = expenseRepository.findById(expenseId).orElseThrow();
-        Path attachDir = Path.of(dataDir, "attachments", expenseId.toString());
+    public void removeAttachment(String urlId, String filename) throws IOException {
+        Expense expense = expenseRepository.findByUrlId(urlId).orElseThrow(() -> new RuntimeException("Expense not found"));
+        Path attachDir = Path.of(dataDir, "attachments", urlId);
         Path filePath = attachDir.resolve(filename);
         Files.deleteIfExists(filePath);
         if (expense.getAttachments() != null) {
@@ -285,7 +284,7 @@ public class ExpenseService {
         }
     }
 
-    private void computeCurrency(Expense expense, UUID userId) {
+    private void computeCurrency(Expense expense, Long userId) {
         if (expense.getCurrency() == null || expense.getAmount() == null) return;
         String baseCurrency = userRepository.findById(userId).map(User::getBaseCurrency).orElse("USD");
         if (expense.getCurrency().equalsIgnoreCase(baseCurrency)) {
@@ -308,15 +307,16 @@ public class ExpenseService {
     }
 
     // Item CRUD
-    public ExpenseItem saveItem(UUID expenseId, ExpenseItem item) {
-        if (item.getId() == null) item.setId(UUID.randomUUID());
-        item.setExpenseId(expenseId);
+    public ExpenseItem saveItem(String urlId, ExpenseItem item) {
+        Expense expense = expenseRepository.findByUrlId(urlId)
+                .orElseThrow(() -> new RuntimeException("Expense not found"));
+        item.setExpenseId(expense.getId());
         item.setDeleted(false);
         if (item.getQuantity() != null && item.getUnitPrice() != null) {
             item.setTotalPrice(item.getQuantity().multiply(item.getUnitPrice()));
         }
         expenseItemRepository.save(item);
-        recomputeTotal(expenseId);
+        recomputeTotal(expense.getId());
         return item;
     }
 
@@ -325,10 +325,9 @@ public class ExpenseService {
      * (name, address, city, country, postalCode) already exists for this user, reuse it.
      * Otherwise create a new store.
      */
-    public Store saveStore(UUID expenseId, Store store, UUID userId) {
-        Expense expense = expenseRepository.findById(expenseId).orElse(null);
-        if (expense == null) throw new RuntimeException("Expense not found");
-
+    public Store saveStore(String urlId, Store store, Long userId) {
+        Expense expense = expenseRepository.findByUrlId(urlId)
+                .orElseThrow(() -> new RuntimeException("Expense not found"));
         store.setUserId(userId);
 
         // Try to find an existing matching store for this user
@@ -348,7 +347,6 @@ public class ExpenseService {
         }
 
         // Create new store
-        if (store.getId() == null) store.setId(UUID.randomUUID());
         Store saved = storeRepository.save(store);
         expense.setStoreId(saved.getId());
         expense.setUpdatedAt(LocalDateTime.now());
@@ -368,10 +366,11 @@ public class ExpenseService {
     }
 
     /** Backward-compatible overload */
-    public Store saveStore(UUID expenseId, Store store) {
-        Expense expense = expenseRepository.findById(expenseId).orElse(null);
-        UUID userId = expense != null ? expense.getUserId() : null;
-        return saveStore(expenseId, store, userId);
+    public Store saveStore(String urlId, Store store) {
+        Expense expense = expenseRepository.findByUrlId(urlId)
+                .orElseThrow(() -> new RuntimeException("Expense not found"));
+        Long userId = expense != null ? expense.getUserId() : null;
+        return saveStore(urlId, store, userId);
     }
 
     /**
@@ -385,7 +384,7 @@ public class ExpenseService {
     /**
      * Get the store associated with an expense by expense ID.
      */
-    public Optional<Store> getStoreForExpense(UUID expenseId) {
+    public Optional<Store> getStoreForExpense(Long expenseId) {
         return expenseRepository.findById(expenseId)
                 .flatMap(e -> e.getStoreId() != null ? storeRepository.findById(e.getStoreId()) : Optional.empty());
     }
@@ -395,7 +394,7 @@ public class ExpenseService {
      * Only sets baseCity/baseCountry when they are currently null.
      * Returns the updated User, or the original if no change was needed.
      */
-    public User deriveAndSetBaseLocation(UUID userId) {
+    public User deriveAndSetBaseLocation(Long userId) {
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) return null;
 

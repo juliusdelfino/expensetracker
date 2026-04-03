@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.Map;
-import java.util.UUID;
+
 
 @RestController
 @RequestMapping("/api/user")
@@ -25,7 +25,7 @@ public class UserController {
 
     @PutMapping("/profile")
     public ResponseEntity<?> updateProfile(@RequestBody Map<String, String> body, HttpSession session) {
-        UUID userId = getUserId(session);
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
 
         User user = userRepository.findById(userId).orElse(null);
@@ -45,9 +45,8 @@ public class UserController {
         return ResponseEntity.ok(Map.of("message", "Profile updated"));
     }
 
-    private UUID getUserId(HttpSession session) {
-        String id = (String) session.getAttribute("userId");
-        return id != null ? UUID.fromString(id) : null;
+    private Long getUserId(HttpSession session) {
+        return (Long) session.getAttribute("userId");
     }
 }
 

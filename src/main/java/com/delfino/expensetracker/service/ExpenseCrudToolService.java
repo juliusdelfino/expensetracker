@@ -17,7 +17,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Provides @Tool-annotated methods for the LLM to perform CRUD operations
@@ -70,23 +69,23 @@ public class ExpenseCrudToolService {
     @Tool(description = "Update the notes or category of an existing expense. " +
             "Use this when the user wants to change the description or category of a specific expense.")
     public String updateExpense(
-            @ToolParam(description = "The UUID of the expense to update.") String expenseId,
+            @ToolParam(description = "The Long of the expense to update.") String expenseId,
             @ToolParam(description = "New category value. Pass empty string to skip.") String category,
             @ToolParam(description = "New notes value. Pass empty string to skip.") String notes) {
 
         log.info("Tool call: updateExpense(expenseId={}, userId={})", expenseId, userContext.getUserId());
-        UUID userId = userContext.getUserId();
+        long userId = userContext.getUserId();
 
         try {
-            Expense expense = expenseRepository.findById(UUID.fromString(expenseId)).orElse(null);
+            Expense expense = expenseRepository.findById(Long.valueOf(expenseId)).orElse(null);
             if (expense == null) return "Expense not found.";
-            if (!expense.getUserId().equals(userId)) return "Not authorized to modify this expense.";
+            if (expense.getUserId() != userId) return "Not authorized to modify this expense.";
 
             Expense updates = new Expense();
             if (category != null && !category.isBlank()) updates.setCategory(category);
             if (notes != null && !notes.isBlank()) updates.setNotes(notes);
 
-            Expense updated = expenseService.updateExpense(UUID.fromString(expenseId), updates, userId);
+            Expense updated = expenseService.updateExpense(expense.getUrlId(), updates, userId);
             return "Expense updated. Category: " + updated.getCategory() + ", Notes: " + updated.getNotes();
         } catch (Exception e) {
             return "Failed to update expense: " + e.getMessage();
@@ -96,13 +95,14 @@ public class ExpenseCrudToolService {
     @Tool(description = "Soft-delete an expense. The expense can be restored later. " +
             "Use this when the user wants to delete a specific expense.")
     public String deleteExpense(
-            @ToolParam(description = "The UUID of the expense to delete.") String expenseId) {
+            @ToolParam(description = "The Long of the expense to delete.") String expenseId) {
 
         log.info("Tool call: deleteExpense(expenseId={}, userId={})", expenseId, userContext.getUserId());
-        UUID userId = userContext.getUserId();
+        Long userId = userContext.getUserId();
 
         try {
-            expenseService.softDelete(UUID.fromString(expenseId), userId);
+            Expense expense = expenseRepository.findById(Long.valueOf(expenseId)).orElse(null);
+            expenseService.softDelete(expense.getUrlId(), userId);
             return "Expense deleted (soft-delete). It can be restored from the Expenses page.";
         } catch (Exception e) {
             return "Failed to delete expense: " + e.getMessage();
@@ -112,14 +112,14 @@ public class ExpenseCrudToolService {
     @Tool(description = "Get full details of a specific expense including its items and store information. " +
             "Use this when the user asks about a specific expense by ID.")
     public String getExpenseDetail(
-            @ToolParam(description = "The UUID of the expense.") String expenseId) {
+            @ToolParam(description = "The Long of the expense.") String expenseId) {
 
         log.info("Tool call: getExpenseDetail(expenseId={}, userId={})", expenseId, userContext.getUserId());
-        UUID userId = userContext.getUserId();
+        long userId = userContext.getUserId();
 
-        Expense expense = expenseRepository.findById(UUID.fromString(expenseId)).orElse(null);
+        Expense expense = expenseRepository.findById(Long.valueOf(expenseId)).orElse(null);
         if (expense == null) return "Expense not found.";
-        if (!expense.getUserId().equals(userId)) return "Not authorized to view this expense.";
+        if (expense.getUserId() != userId) return "Not authorized to view this expense.";
 
         StringBuilder sb = new StringBuilder();
         sb.append("Expense Details:\n");
@@ -148,7 +148,7 @@ public class ExpenseCrudToolService {
         // Store
         if (expense.getStoreId() != null) {
             storeRepository.findById(expense.getStoreId())
-                    .filter(store -> store.getUserId() != null && store.getUserId().equals(userId))
+                    .filter(store -> store.getUserId() == userId)
                     .ifPresent(store -> {
             sb.append("\nStore: ").append(store.getName());
             if (store.getCity() != null) sb.append(", ").append(store.getCity());
@@ -166,23 +166,23 @@ public class ExpenseCrudToolService {
 
     @Tool(description = "Add an item to an existing expense. Use this when the user wants to add a line item.")
     public String addExpenseItem(
-            @ToolParam(description = "The UUID of the expense to add the item to.") String expenseId,
+            @ToolParam(description = "The Long of the expense to add the item to.") String expenseId,
             @ToolParam(description = "Name of the item.") String itemName,
             @ToolParam(description = "Quantity of the item.") double quantity,
             @ToolParam(description = "Unit price of the item.") double unitPrice) {
 
         log.info("Tool call: addExpenseItem(expenseId={}, userId={})", expenseId, userContext.getUserId());
-        UUID userId = userContext.getUserId();
+        Long userId = userContext.getUserId();
 
-        Expense expense = expenseRepository.findById(UUID.fromString(expenseId)).orElse(null);
+        Expense expense = expenseRepository.findById(Long.valueOf(expenseId)).orElse(null);
         if (expense == null) return "Expense not found.";
-        if (!expense.getUserId().equals(userId)) return "Not authorized.";
+        if (expense.getUserId() != userId) return "Not authorized.";
 
         ExpenseItem item = new ExpenseItem();
         item.setItemName(itemName);
         item.setQuantity(BigDecimal.valueOf(quantity));
         item.setUnitPrice(BigDecimal.valueOf(unitPrice));
-        ExpenseItem saved = expenseService.saveItem(UUID.fromString(expenseId), item);
+        ExpenseItem saved = expenseService.saveItem(expense.getUrlId(), item);
 
         return "Item added: " + saved.getItemName() + " (qty: " + saved.getQuantity()
                 + ", unit: " + saved.getUnitPrice() + ", total: " + saved.getTotalPrice() + ")";
@@ -190,14 +190,15 @@ public class ExpenseCrudToolService {
 
     @Tool(description = "Delete an item from an expense. Use this when the user wants to remove a line item.")
     public String deleteExpenseItem(
-            @ToolParam(description = "The UUID of the expense.") String expenseId,
-            @ToolParam(description = "The UUID of the item to delete.") String itemId) {
+            @ToolParam(description = "The Long of the expense.") String expenseId,
+            @ToolParam(description = "The Long of the item to delete.") String itemId) {
 
         log.info("Tool call: deleteExpenseItem(expenseId={}, itemId={}, userId={})", expenseId, itemId, userContext.getUserId());
-        UUID userId = userContext.getUserId();
-
+        Long userId = userContext.getUserId();
+        Expense expense = expenseRepository.findById(Long.valueOf(expenseId))
+                .orElseThrow(() -> new RuntimeException("Expense not found"));
         try {
-            expenseService.softDeleteItem(UUID.fromString(expenseId), UUID.fromString(itemId), userId);
+            expenseService.softDeleteItem(expense.getUrlId(), Long.valueOf(itemId), userId);
             return "Item deleted.";
         } catch (Exception e) {
             return "Failed to delete item: " + e.getMessage();
@@ -219,7 +220,7 @@ public class ExpenseCrudToolService {
         log.info("Tool call: getStores(startDate={}, endDate={}, country={}, userId={})",
                 startDate, endDate, country, userContext.getUserId());
 
-        UUID userId = userContext.getUserId();
+        Long userId = userContext.getUserId();
         List<Expense> expenses = expenseRepository.findByUserIdAndDeletedFalse(userId);
 
         LocalDate start = (startDate != null && !startDate.isBlank()) ? LocalDate.parse(startDate) : null;
@@ -246,7 +247,7 @@ public class ExpenseCrudToolService {
         for (Expense e : filtered) {
             if (e.getStoreId() == null) continue;
             storeRepository.findById(e.getStoreId())
-                    .filter(store -> store.getUserId() != null && store.getUserId().equals(userId))
+                    .filter(store -> store.getUserId() == userId)
                     .ifPresent(store -> {
                 if (store.getName() == null || store.getName().isBlank()) return;
 

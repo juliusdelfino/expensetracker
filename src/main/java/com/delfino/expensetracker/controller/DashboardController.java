@@ -43,14 +43,14 @@ public class DashboardController {
                                        @RequestParam(required = false) String endDate,
                                        @RequestParam(required = false) String category,
                                        HttpSession session) {
-        UUID userId = getUserId(session);
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
 
         List<Expense> allExpenses = expenseRepository.findByUserIdAndDeletedFalse(userId);
         List<Expense> expenses = new ArrayList<>(allExpenses);
 
         // Preload all stores for this user into a map for efficient lookup
-        Map<UUID, Store> storeMap = new LinkedHashMap<>();
+        Map<Long, Store> storeMap = new LinkedHashMap<>();
         for (Store s : storeRepository.findByUserId(userId)) {
             storeMap.put(s.getId(), s);
         }
@@ -348,7 +348,7 @@ public class DashboardController {
      * Build random "discovery" cards from all-time expenses: e.g. "Expenses in Spain on July 2025"
      * Only includes places outside the user's base city and country.
      */
-    private List<Map<String, Object>> buildDiscoveryCards(List<Expense> allExpenses, User user, Map<UUID, Store> storeMap) {
+    private List<Map<String, Object>> buildDiscoveryCards(List<Expense> allExpenses, User user, Map<Long, Store> storeMap) {
         String baseCity = user != null ? user.getBaseCity() : null;
         String baseCountry = user != null ? user.getBaseCountry() : null;
 
@@ -479,9 +479,8 @@ public class DashboardController {
                 : (e.getAmount() != null ? e.getAmount() : BigDecimal.ZERO);
     }
 
-    private UUID getUserId(HttpSession session) {
-        String id = (String) session.getAttribute("userId");
-        return id != null ? UUID.fromString(id) : null;
+    private Long getUserId(HttpSession session) {
+        return (Long) session.getAttribute("userId");
     }
 }
 

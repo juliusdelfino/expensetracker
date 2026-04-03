@@ -1,19 +1,22 @@
 package com.delfino.expensetracker.model;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
-import java.util.UUID;
+
 
 @Entity
 @Table(name = "expense_items")
 public class ExpenseItem {
     @Id
-    private UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private long id;
 
-    private UUID expenseId;
+    private long expenseId;
     private String itemName;
     private BigDecimal quantity;
     private BigDecimal unitPrice;
@@ -22,11 +25,11 @@ public class ExpenseItem {
 
     public ExpenseItem() {}
 
-    public UUID getId() { return id; }
-    public void setId(UUID id) { this.id = id; }
+    public long getId() { return id; }
+    public void setId(long id) { this.id = id; }
 
-    public UUID getExpenseId() { return expenseId; }
-    public void setExpenseId(UUID expenseId) { this.expenseId = expenseId; }
+    public long getExpenseId() { return expenseId; }
+    public void setExpenseId(long expenseId) { this.expenseId = expenseId; }
 
     public String getItemName() { return itemName; }
     public void setItemName(String itemName) { this.itemName = itemName; }

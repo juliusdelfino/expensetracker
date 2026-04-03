@@ -19,7 +19,6 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Provides @Tool-annotated methods that the LLM can call via Spring AI
@@ -60,11 +59,11 @@ public class ExpenseToolService {
 
         log.info("Tool call: findItemPrice(itemName={}, storeName={}, userId={})", itemName, storeName, userContext.getUserId());
 
-        UUID userId = userContext.getUserId();
+        Long userId = userContext.getUserId();
         List<Expense> expenses = expenseRepository.findByUserIdAndDeletedFalse(userId);
 
         // Build a map of expenseId -> Store for filtering
-        Map<UUID, Store> storeMap = new HashMap<>();
+        Map<Long, Store> storeMap = new HashMap<>();
         if (storeName != null && !storeName.isBlank()) {
             for (Expense e : expenses) {
                 if (e.getStoreId() != null) {
@@ -148,7 +147,7 @@ public class ExpenseToolService {
         log.info("Tool call: totalExpenses(keyword={}, startDate={}, endDate={}, userId={})",
                 keyword, startDate, endDate, userContext.getUserId());
 
-        UUID userId = userContext.getUserId();
+        Long userId = userContext.getUserId();
         List<Expense> expenses = expenseRepository.findByUserIdAndDeletedFalse(userId);
 
         LocalDate start = (startDate != null && !startDate.isBlank()) ? LocalDate.parse(startDate) : null;
@@ -159,7 +158,7 @@ public class ExpenseToolService {
         String resolvedCountryCode = keyLower != null ? CountryConfig.findCodeByName(keyword) : null;
 
         // Build store lookup map for city/country keyword matching
-        Map<UUID, Store> storeMap = new HashMap<>();
+        Map<Long, Store> storeMap = new HashMap<>();
         if (keyLower != null) {
             for (Expense e : expenses) {
                 if (e.getStoreId() != null) {
@@ -267,7 +266,7 @@ public class ExpenseToolService {
         log.info("Tool call: listExpenses(category={}, startDate={}, endDate={}, limit={}, userId={})",
                 category, startDate, endDate, limit, userContext.getUserId());
 
-        UUID userId = userContext.getUserId();
+        Long userId = userContext.getUserId();
         List<Expense> expenses = expenseRepository.findByUserIdAndDeletedFalse(userId);
 
         LocalDate start = (startDate != null && !startDate.isBlank()) ? LocalDate.parse(startDate) : null;
@@ -321,7 +320,7 @@ public class ExpenseToolService {
         log.info("Tool call: getExpenseSummary(startDate={}, endDate={}, userId={})",
                 startDate, endDate, userContext.getUserId());
 
-        UUID userId = userContext.getUserId();
+        Long userId = userContext.getUserId();
         List<Expense> expenses = expenseRepository.findByUserIdAndDeletedFalse(userId);
 
         LocalDate start = (startDate != null && !startDate.isBlank()) ? LocalDate.parse(startDate) : null;

@@ -8,17 +8,16 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.UUID;
 
 @Repository
-public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> {
+public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
-    List<ChatMessage> findByUserIdOrderByCreatedAtAsc(UUID userId);
+    List<ChatMessage> findByUserIdOrderByCreatedAtAsc(Long userId);
 
-    List<ChatMessage> findTop50ByUserIdOrderByCreatedAtDesc(UUID userId);
+    List<ChatMessage> findTop50ByUserIdOrderByCreatedAtDesc(Long userId);
 
     @Query("SELECT m FROM ChatMessage m WHERE m.userId = :userId ORDER BY m.createdAt DESC")
-    List<ChatMessage> findByUserIdPageable(@Param("userId") UUID userId, Pageable pageable);
+    List<ChatMessage> findByUserIdPageable(@Param("userId") Long userId, Pageable pageable);
 
-    long countByUserId(UUID userId);
+    long countByUserId(Long userId);
 }

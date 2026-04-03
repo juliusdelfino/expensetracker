@@ -17,9 +17,10 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.*;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/expenses")
@@ -49,7 +50,7 @@ public class ExpenseController {
                                   @RequestParam(required = false) String category,
                                   @RequestParam(required = false) String country,
                                   HttpSession session) {
-        UUID userId = getUserId(session);
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
         List<Expense> expenses = expenseService.search(userId, search, includeDeleted);
 
@@ -97,6 +98,7 @@ public class ExpenseController {
         }
 
         // Sort by date descending
+        expenses = new ArrayList<>(expenses);
         expenses.sort((a, b) -> {
             if (a.getTransactionDatetime() == null && b.getTransactionDatetime() == null) return 0;
             if (a.getTransactionDatetime() == null) return 1;
@@ -127,6 +129,7 @@ public class ExpenseController {
             map.put("createdAt", e.getCreatedAt());
             map.put("updatedAt", e.getUpdatedAt());
             map.put("scannedAt", e.getScannedAt());
+            map.put("urlId", e.getUrlId());
             Store store = e.getStoreId() != null ? storeRepository.findById(e.getStoreId()).orElse(null) : null;
             String storeName = store != null ? store.getName() : null;
             map.put("storeName", storeName);
@@ -163,7 +166,7 @@ public class ExpenseController {
 
     @GetMapping("/categories")
     public ResponseEntity<?> categories(HttpSession session) {
-        UUID userId = getUserId(session);
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
         List<String> cats = expenseRepository.findByUserIdAndDeletedFalse(userId).stream()
                 .map(Expense::getCategory)
@@ -175,16 +178,16 @@ public class ExpenseController {
         return ResponseEntity.ok(cats);
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<?> get(@PathVariable UUID id, HttpSession session) {
-        UUID userId = getUserId(session);
-        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        return expenseRepository.findById(id)
-                .filter(e -> e.getUserId().equals(userId))
+    @GetMapping("/{expenseUrlId}")
+    public ResponseEntity<?> get(@PathVariable String expenseUrlId, HttpSession session) {
+        long userId = getUserId(session);
+        if (userId == 0) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+        return expenseRepository.findByUrlId(expenseUrlId)
+                .filter(e -> e.getUserId() == userId)
                 .map(expense -> {
                     Map<String, Object> result = new LinkedHashMap<>();
                     result.put("expense", expense);
-                    result.put("items", expenseItemRepository.findByExpenseId(id));
+                    result.put("items", expenseItemRepository.findByExpenseId(expense.getId()));
                     result.put("store", expense.getStoreId() != null ? storeRepository.findById(expense.getStoreId()).orElse(null) : null);
                     return ResponseEntity.ok(result);
                 })
@@ -193,7 +196,7 @@ public class ExpenseController {
 
     @PostMapping("/manual")
     public ResponseEntity<?> createManual(@RequestBody Expense expense, HttpSession session) {
-        UUID userId = getUserId(session);
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
         Expense saved = expenseService.createManualExpense(expense, userId);
         return ResponseEntity.ok(saved);
@@ -201,12 +204,12 @@ public class ExpenseController {
 
     @PostMapping("/scan")
     public ResponseEntity<?> uploadReceipt(@RequestParam("file") MultipartFile file, HttpSession session) throws IOException {
-        UUID userId = getUserId(session);
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
 
         Path uploadDir = Path.of(dataDir, "receipts");
         Files.createDirectories(uploadDir);
-        String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
+        String filename = getDateString() + "_" + userId + "_" + file.getOriginalFilename();
         Path filePath = uploadDir.resolve(filename);
         Files.write(filePath, file.getBytes());
 
@@ -214,98 +217,102 @@ public class ExpenseController {
         return ResponseEntity.ok(expense);
     }
 
-    @PutMapping("/{id}")
-    public ResponseEntity<?> update(@PathVariable UUID id, @RequestBody Expense updates, HttpSession session) {
-        UUID userId = getUserId(session);
+    private String getDateString() {
+        return ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS"));
+    }
+
+    @PutMapping("/{expenseUrlId}")
+    public ResponseEntity<?> update(@PathVariable String expenseUrlId, @RequestBody Expense updates, HttpSession session) {
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        Expense updated = expenseService.updateExpense(id, updates, userId);
+        Expense updated = expenseService.updateExpense(expenseUrlId, updates, userId);
         return ResponseEntity.ok(updated);
     }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<?> delete(@PathVariable UUID id, HttpSession session) {
-        UUID userId = getUserId(session);
+    @DeleteMapping("/{expenseUrlId}")
+    public ResponseEntity<?> delete(@PathVariable String expenseUrlId, HttpSession session) {
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        expenseService.softDelete(id, userId);
+        expenseService.softDelete(expenseUrlId, userId);
         return ResponseEntity.ok(Map.of("message", "Deleted"));
     }
 
-    @PatchMapping("/{id}/restore")
-    public ResponseEntity<?> restore(@PathVariable UUID id, HttpSession session) {
-        UUID userId = getUserId(session);
+    @PatchMapping("/{expenseUrlId}/restore")
+    public ResponseEntity<?> restore(@PathVariable String expenseUrlId, HttpSession session) {
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        expenseService.restore(id, userId);
+        expenseService.restore(expenseUrlId, userId);
         return ResponseEntity.ok(Map.of("message", "Restored"));
     }
 
-    @PostMapping("/{id}/retry")
-    public ResponseEntity<?> retry(@PathVariable UUID id, HttpSession session) {
-        UUID userId = getUserId(session);
+    @PostMapping("/{expenseUrlId}/retry")
+    public ResponseEntity<?> retry(@PathVariable String expenseUrlId, HttpSession session) {
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        expenseService.retryOcr(id, userId);
+        expenseService.retryOcr(expenseUrlId, userId);
         return ResponseEntity.ok(Map.of("message", "Retry initiated"));
     }
 
-    @PostMapping("/{id}/duplicate")
-    public ResponseEntity<?> duplicate(@PathVariable UUID id, HttpSession session) {
-        UUID userId = getUserId(session);
+    @PostMapping("/{expenseUrlId}/duplicate")
+    public ResponseEntity<?> duplicate(@PathVariable String expenseUrlId, HttpSession session) {
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        Expense copy = expenseService.duplicate(id, userId);
+        Expense copy = expenseService.duplicate(expenseUrlId, userId);
         return ResponseEntity.ok(copy);
     }
 
     // --- Items ---
-    @PostMapping("/{id}/items")
-    public ResponseEntity<?> addItem(@PathVariable UUID id, @RequestBody ExpenseItem item, HttpSession session) {
-        UUID userId = getUserId(session);
+    @PostMapping("/{expenseUrlId}/items")
+    public ResponseEntity<?> addItem(@PathVariable String expenseUrlId, @RequestBody ExpenseItem item, HttpSession session) {
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        ExpenseItem saved = expenseService.saveItem(id, item);
+        ExpenseItem saved = expenseService.saveItem(expenseUrlId, item);
         return ResponseEntity.ok(saved);
     }
 
-    @PutMapping("/{id}/items/{itemId}")
-    public ResponseEntity<?> updateItem(@PathVariable UUID id, @PathVariable UUID itemId,
+    @PutMapping("/{expenseUrlId}/items/{itemId}")
+    public ResponseEntity<?> updateItem(@PathVariable String expenseUrlId, @PathVariable Long itemId,
                                         @RequestBody ExpenseItem item, HttpSession session) {
-        UUID userId = getUserId(session);
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
         item.setId(itemId);
-        ExpenseItem saved = expenseService.saveItem(id, item);
+        ExpenseItem saved = expenseService.saveItem(expenseUrlId, item);
         return ResponseEntity.ok(saved);
     }
 
-    @DeleteMapping("/{id}/items/{itemId}")
-    public ResponseEntity<?> deleteItem(@PathVariable UUID id, @PathVariable UUID itemId, HttpSession session) {
-        UUID userId = getUserId(session);
+    @DeleteMapping("/{expenseUrlId}/items/{itemId}")
+    public ResponseEntity<?> deleteItem(@PathVariable String expenseUrlId, @PathVariable Long itemId, HttpSession session) {
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        expenseService.softDeleteItem(id, itemId, userId);
+        expenseService.softDeleteItem(expenseUrlId, itemId, userId);
         return ResponseEntity.ok(Map.of("message", "Item deleted"));
     }
 
     // --- Store ---
-    @PutMapping("/{id}/store")
-    public ResponseEntity<?> updateStore(@PathVariable UUID id, @RequestBody Store store, HttpSession session) {
-        UUID userId = getUserId(session);
+    @PutMapping("/{expenseUrlId}/store")
+    public ResponseEntity<?> updateStore(@PathVariable String expenseUrlId, @RequestBody Store store, HttpSession session) {
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        Store saved = expenseService.saveStore(id, store, userId);
+        Store saved = expenseService.saveStore(expenseUrlId, store, userId);
         return ResponseEntity.ok(saved);
     }
 
     // --- Attachments ---
-    @PostMapping("/{id}/attachments")
-    public ResponseEntity<?> addAttachment(@PathVariable UUID id, @RequestParam("file") MultipartFile file,
+    @PostMapping("/{expenseUrlId}/attachments")
+    public ResponseEntity<?> addAttachment(@PathVariable String expenseUrlId, @RequestParam("file") MultipartFile file,
                                            HttpSession session) throws IOException {
-        UUID userId = getUserId(session);
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        String path = expenseService.addAttachment(id, file.getOriginalFilename(), file.getBytes());
+        String path = expenseService.addAttachment(expenseUrlId, file.getOriginalFilename(), file.getBytes());
         return ResponseEntity.ok(Map.of("path", path));
     }
 
-    @DeleteMapping("/{id}/attachments/{filename}")
-    public ResponseEntity<?> removeAttachment(@PathVariable UUID id, @PathVariable String filename,
+    @DeleteMapping("/{expenseUrlId}/attachments/{filename}")
+    public ResponseEntity<?> removeAttachment(@PathVariable String expenseUrlId, @PathVariable String filename,
                                               HttpSession session) throws IOException {
-        UUID userId = getUserId(session);
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        expenseService.removeAttachment(id, filename);
+        expenseService.removeAttachment(expenseUrlId, filename);
         return ResponseEntity.ok(Map.of("message", "Attachment removed"));
     }
 
@@ -314,7 +321,7 @@ public class ExpenseController {
     public ResponseEntity<?> export(@RequestParam(defaultValue = "json") String format,
                                     @RequestParam(required = false) String search,
                                     HttpSession session) {
-        UUID userId = getUserId(session);
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
         List<Expense> expenses = expenseService.search(userId, search, false);
 
@@ -323,7 +330,7 @@ public class ExpenseController {
             csv.append("ID,Date,Amount,Currency,AmountInBase,Category,ReceiptNumber,Type,Status,Notes,Tags\n");
             for (Expense e : expenses) {
                 csv.append(String.join(",",
-                        e.getId().toString(),
+                        e.getUrlId(),
                         e.getTransactionDatetime() != null ? e.getTransactionDatetime().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) : "",
                         e.getAmount() != null ? e.getAmount().toPlainString() : "",
                         e.getCurrency() != null ? e.getCurrency() : "",
@@ -352,9 +359,8 @@ public class ExpenseController {
         return val;
     }
 
-    private UUID getUserId(HttpSession session) {
-        String id = (String) session.getAttribute("userId");
-        return id != null ? UUID.fromString(id) : null;
+    private Long getUserId(HttpSession session) {
+        return (Long) session.getAttribute("userId");
     }
 }
 

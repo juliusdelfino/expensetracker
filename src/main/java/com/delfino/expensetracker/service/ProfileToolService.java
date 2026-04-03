@@ -10,7 +10,7 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
+
 
 /**
  * Provides @Tool-annotated methods for the LLM to view and modify
@@ -34,7 +34,7 @@ public class ProfileToolService {
             "Use this when the user asks about their own profile settings.")
     public String getProfile() {
         log.info("Tool call: getProfile(userId={})", userContext.getUserId());
-        UUID userId = userContext.getUserId();
+        Long userId = userContext.getUserId();
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) return "User not found.";
 
@@ -57,7 +57,7 @@ public class ProfileToolService {
             @ToolParam(description = "New base country code, e.g. 'SG'. Pass empty string to skip.") String baseCountry) {
 
         log.info("Tool call: updateProfile(userId={})", userContext.getUserId());
-        UUID userId = userContext.getUserId();
+        Long userId = userContext.getUserId();
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) return "User not found.";
 

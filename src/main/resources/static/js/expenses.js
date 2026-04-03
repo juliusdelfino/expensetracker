@@ -167,7 +167,7 @@ function renderExpenseTable() {
         const failTitle = isFailed && e.notes ? esc(e.notes).replace(/"/g, '&quot;') : '';
         let rows = `
         <tr class="${e.deleted ? 'deleted' : ''} expense-row ${isFailed ? 'row-failed' : ''}"
-            onclick="navigate('#/expenses/${e.id}')"
+            onclick="navigate('#/expenses/${e.urlId}')"
             ${isFailed ? `title="${failTitle}"` : ''}>
             <td class="td-status">${statusBadge(e.status)}</td>
             <td>${e.transactionDatetime ? new Date(e.transactionDatetime).toLocaleDateString() : '-'}</td>
@@ -175,10 +175,10 @@ function renderExpenseTable() {
             <td class="amount-primary">${e.amount != null ? Number(e.amount).toFixed(2) : '-'} ${e.currency || ''}</td>
             <td class="amount-secondary">${e.amountInBase != null ? Number(e.amountInBase).toFixed(2) + ' ' + (currentUser?.baseCurrency||'') : '-'}</td>
             <td class="td-actions" onclick="event.stopPropagation()">
-                ${e.deleted ? `<button class="btn btn-success btn-sm btn-icon" onclick="restoreExpense('${e.id}')"><i class="fa-solid fa-rotate-left"></i></button>` : `
-                    <button class="btn btn-secondary btn-sm btn-icon" onclick="duplicateExpense('${e.id}')"><i class="fa-solid fa-copy"></i></button>
-                    ${isFailed ? `<button class="btn btn-secondary btn-sm btn-icon" onclick="retryExpense('${e.id}')"><i class="fa-solid fa-rotate"></i></button>` : ''}
-                    <button class="btn btn-danger btn-sm btn-icon" onclick="deleteExpense('${e.id}')"><i class="fa-solid fa-trash"></i></button>
+                ${e.deleted ? `<button class="btn btn-success btn-sm btn-icon" onclick="restoreExpense('${e.urlId}')"><i class="fa-solid fa-rotate-left"></i></button>` : `
+                    <button class="btn btn-secondary btn-sm btn-icon" onclick="duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i></button>
+                    ${isFailed ? `<button class="btn btn-secondary btn-sm btn-icon" onclick="retryExpense('${e.urlId}')"><i class="fa-solid fa-rotate"></i></button>` : ''}
+                    <button class="btn btn-danger btn-sm btn-icon" onclick="deleteExpense('${e.urlId}')"><i class="fa-solid fa-trash"></i></button>
                 `}
             </td>
         </tr>`;
@@ -186,7 +186,7 @@ function renderExpenseTable() {
         if (e.matchingItems && e.matchingItems.length > 0) {
             for (const item of e.matchingItems) {
                 rows += `
-                <tr class="item-child-row" onclick="navigate('#/expenses/${e.id}')">
+                <tr class="item-child-row" onclick="navigate('#/expenses/${e.urlId}')">
                     <td></td>
                     <td></td>
                     <td class="td-description item-child-name"><i class="fa-solid fa-arrow-turn-up fa-rotate-90" style="font-size:0.65rem; opacity:0.4; margin-right:0.3rem;"></i> ${esc(item.itemName)}</td>
@@ -268,7 +268,7 @@ async function restoreExpense(id) {
 }
 async function duplicateExpense(id) {
     const copy = await api(`/api/expenses/${id}/duplicate`, { method: 'POST' });
-    if (copy && copy.id) { toast('Expense duplicated', 'success'); navigate('#/expenses/' + copy.id); }
+    if (copy && copy.id) { toast('Expense duplicated', 'success'); navigate('#/expenses/' + copy.urlId); }
 }
 async function retryExpense(id) {
     await api(`/api/expenses/${id}/retry`, { method: 'POST' });
@@ -445,11 +445,11 @@ function renderNewExpense(app, embedded = false) {
                 const files = fileInput.files;
                 for (let f of files) {
                     const fd = new FormData(); fd.append('file', f);
-                    await api(`/api/expenses/${saved.id}/attachments`, { method: 'POST', body: fd });
+                    await api(`/api/expenses/${saved.urlId}/attachments`, { method: 'POST', body: fd });
                 }
             }
             toast('Expense created!', 'success');
-            navigate('#/expenses/' + saved.id);
+            navigate('#/expenses/' + saved.urlId);
         } else {
             toast('Failed to create expense', 'error');
         }
@@ -513,7 +513,7 @@ async function uploadReceipt() {
     const result = await api('/api/expenses/scan', { method: 'POST', body: fd });
     if (result && result.id) {
         toast('Receipt uploaded! Processing...', 'info');
-        navigate('#/expenses/' + result.id);
+        navigate('#/expenses/' + result.urlId);
     } else {
         statusEl.innerHTML = '<div class="badge badge-failed"><i class="fa-solid fa-xmark"></i> Upload failed</div>';
         toast('Upload failed', 'error');
@@ -619,7 +619,7 @@ function captureSubmit() {
         const result = await api('/api/expenses/scan', { method: 'POST', body: fd });
         if (result && result.id) {
             toast('Photo captured & uploaded! Processing...', 'info');
-            navigate('#/expenses/' + result.id);
+            navigate('#/expenses/' + result.urlId);
         } else {
             statusEl.innerHTML = '<div class="badge badge-failed"><i class="fa-solid fa-xmark"></i> Upload failed</div>';
             toast('Upload failed', 'error');
@@ -659,9 +659,9 @@ async function renderExpenseDetail(app, id) {
                 <span class="badge badge-${(e.status||'').toLowerCase()}">${statusIcon(e.status)} ${e.status}</span>
             </div>
             <div class="action-bar-right">
-                ${isFailed ? `<button class="btn btn-secondary btn-sm" onclick="retryExpense('${e.id}'); setTimeout(()=>location.reload(),500)"><i class="fa-solid fa-rotate"></i> Retry</button>` : ''}
-                <button class="btn btn-secondary btn-sm" onclick="duplicateExpense('${e.id}')"><i class="fa-solid fa-copy"></i> Duplicate</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteExpense('${e.id}'); navigate('#/expenses')"><i class="fa-solid fa-trash"></i> Delete</button>
+                ${isFailed ? `<button class="btn btn-secondary btn-sm" onclick="retryExpense('${e.urlId}'); setTimeout(()=>location.reload(),500)"><i class="fa-solid fa-rotate"></i> Retry</button>` : ''}
+                <button class="btn btn-secondary btn-sm" onclick="duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i> Duplicate</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteExpense('${e.urlId}'); navigate('#/expenses')"><i class="fa-solid fa-trash"></i> Delete</button>
             </div>
         </div>`;
 
@@ -669,7 +669,7 @@ async function renderExpenseDetail(app, id) {
         html += `<div class="card" style="text-align:center; padding:3rem">
             <i class="fa-solid fa-spinner fa-spin" style="font-size:3rem; color:var(--aegean-mid)"></i>
             <p style="margin-top:1rem; color:var(--text-light)">Processing receipt... This may take 2-3 minutes.</p>
-            <button class="btn btn-primary" style="margin-top:1rem" onclick="renderExpenseDetail(document.getElementById('app'),'${e.id}')">
+            <button class="btn btn-primary" style="margin-top:1rem" onclick="renderExpenseDetail(document.getElementById('app'),'${e.urlId}')">
                 <i class="fa-solid fa-rotate"></i> Refresh
             </button>
         </div></div>`;

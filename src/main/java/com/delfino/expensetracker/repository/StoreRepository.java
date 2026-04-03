@@ -8,12 +8,12 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
+
 
 @Repository
-public interface StoreRepository extends JpaRepository<Store, UUID> {
+public interface StoreRepository extends JpaRepository<Store, Long> {
 
-    List<Store> findByUserId(UUID userId);
+    List<Store> findByUserId(Long userId);
 
     @Query("SELECT s FROM Store s WHERE s.userId = :userId AND " +
            "LOWER(COALESCE(s.name,'')) = LOWER(COALESCE(:name,'')) AND " +
@@ -21,7 +21,7 @@ public interface StoreRepository extends JpaRepository<Store, UUID> {
            "LOWER(COALESCE(s.city,'')) = LOWER(COALESCE(:city,'')) AND " +
            "LOWER(COALESCE(s.country,'')) = LOWER(COALESCE(:country,'')) AND " +
            "LOWER(COALESCE(s.postalCode,'')) = LOWER(COALESCE(:postalCode,''))")
-    Optional<Store> findMatchingStore(@Param("userId") UUID userId,
+    Optional<Store> findMatchingStore(@Param("userId") Long userId,
                                       @Param("name") String name,
                                       @Param("address") String address,
                                       @Param("city") String city,

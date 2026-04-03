@@ -7,20 +7,20 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.UUID;
+
 
 @Repository
-public interface ExpenseItemRepository extends JpaRepository<ExpenseItem, UUID> {
+public interface ExpenseItemRepository extends JpaRepository<ExpenseItem, Long> {
 
-    List<ExpenseItem> findByExpenseIdAndDeletedFalse(UUID expenseId);
+    List<ExpenseItem> findByExpenseIdAndDeletedFalse(Long expenseId);
 
-    List<ExpenseItem> findByExpenseId(UUID expenseId);
+    List<ExpenseItem> findByExpenseId(Long expenseId);
 
     @Modifying
     @Query("UPDATE ExpenseItem i SET i.deleted = true WHERE i.expenseId = :expenseId")
-    void softDeleteByExpenseId(UUID expenseId);
+    void softDeleteByExpenseId(Long expenseId);
 
     @Modifying
     @Query("UPDATE ExpenseItem i SET i.deleted = false WHERE i.expenseId = :expenseId")
-    void restoreByExpenseId(UUID expenseId);
+    void restoreByExpenseId(Long expenseId);
 }

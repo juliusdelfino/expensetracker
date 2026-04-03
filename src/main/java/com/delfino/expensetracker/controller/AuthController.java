@@ -8,8 +8,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.UUID;
+
 
 @RestController
 @RequestMapping("/api/auth")
@@ -39,7 +40,6 @@ public class AuthController {
         }
 
         User user = new User();
-        user.setId(UUID.randomUUID());
         user.setUsername(username);
         user.setPasswordHash(passwordEncoder.encode(password));
         user.setEmail(email);
@@ -49,7 +49,7 @@ public class AuthController {
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
 
-        return ResponseEntity.ok(Map.of("message", "Registration successful", "userId", user.getId().toString()));
+        return ResponseEntity.ok(Map.of("message", "Registration successful", "userId", user.getId()));
     }
 
     @PostMapping("/login")
@@ -60,10 +60,10 @@ public class AuthController {
         return userRepository.findByUsernameIgnoreCase(username)
                 .filter(u -> passwordEncoder.matches(password, u.getPasswordHash()))
                 .map(u -> {
-                    session.setAttribute("userId", u.getId().toString());
+                    session.setAttribute("userId", u.getId());
                     return ResponseEntity.ok(Map.of(
                             "message", "Login successful",
-                            "userId", u.getId().toString(),
+                            "userId", u.getId(),
                             "username", u.getUsername(),
                             "baseCurrency", u.getBaseCurrency() != null ? u.getBaseCurrency() : "USD"
                     ));
@@ -79,12 +79,12 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<?> me(HttpSession session) {
-        String userId = (String) session.getAttribute("userId");
+        Long userId = (Long) session.getAttribute("userId");
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        return userRepository.findById(UUID.fromString(userId))
+        return userRepository.findById(userId)
                 .map(u -> {
-                    Map<String, Object> result = new java.util.LinkedHashMap<>();
-                    result.put("id", u.getId().toString());
+                    Map<String, Object> result = new LinkedHashMap<>();
+                    result.put("id", u.getId());
                     result.put("username", u.getUsername());
                     result.put("email", u.getEmail());
                     result.put("phoneNumber", u.getPhoneNumber());

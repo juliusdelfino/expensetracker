@@ -59,7 +59,7 @@ public class OcrService {
     }
 
     @Async
-    public void processReceipt(UUID expenseId, String imagePath, String userBaseCurrency) {
+    public void processReceipt(Long expenseId, String imagePath, String userBaseCurrency) {
         try {
             log.info("Processing receipt for expense {}: reading image from {}", expenseId, imagePath);
             byte[] imageBytes = Files.readAllBytes(Path.of(imagePath));
@@ -86,7 +86,7 @@ public class OcrService {
 
             if (response.statusCode() != 200) {
                 log.error("OCR API returned non-200 status {} for expense {}. Body: {}", response.statusCode(), expenseId, responseBody);
-                markFailed(expenseId);
+                markFailed(expenseId, new Exception(responseBody));
                 return;
             }
 
@@ -140,7 +140,6 @@ public class OcrService {
                 List<ExpenseItem> items = new ArrayList<>();
                 for (JsonNode itemNode : parsed.get("items")) {
                     ExpenseItem item = new ExpenseItem();
-                    item.setId(UUID.randomUUID());
                     item.setExpenseId(expenseId);
                     item.setItemName(itemNode.has("itemName") ? itemNode.get("itemName").asText() : "");
                     item.setQuantity(itemNode.has("quantity") ? itemNode.get("quantity").decimalValue() : BigDecimal.ONE);
@@ -175,7 +174,6 @@ public class OcrService {
                 } else {
                     // Create new store
                     Store store = new Store();
-                    store.setId(UUID.randomUUID());
                     store.setUserId(expense.getUserId());
                     store.setName(sName);
                     store.setAddress(sAddress);
@@ -197,14 +195,15 @@ public class OcrService {
 
         } catch (Exception e) {
             log.error("Failed to process receipt for expense {}", expenseId, e);
-            markFailed(expenseId);
+            markFailed(expenseId, e);
         }
     }
 
-    private void markFailed(UUID expenseId) {
+    private void markFailed(Long expenseId, Exception e) {
         expenseRepository.findById(expenseId).ifPresent(expense -> {
             expense.setStatus(ExpenseStatus.FAILED);
             expense.setUpdatedAt(LocalDateTime.now());
+            expense.setNotes(e.toString());
             expenseRepository.save(expense);
         });
     }
