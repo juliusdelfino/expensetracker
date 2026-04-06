@@ -34,22 +34,33 @@ public class ExpenseService {
     private final CurrencyService currencyService;
     private final OcrService ocrService;
     private final UserRepository userRepository;
+    private final SupportedCurrencyService supportedCurrencyService;
 
     @Value("${app.data.dir:data}")
     private String dataDir;
 
     public ExpenseService(ExpenseRepository expenseRepository, ExpenseItemRepository expenseItemRepository,
                           StoreRepository storeRepository, CurrencyService currencyService,
-                          OcrService ocrService, UserRepository userRepository) {
+                          OcrService ocrService, UserRepository userRepository, SupportedCurrencyService supportedCurrencyService) {
         this.expenseRepository = expenseRepository;
         this.expenseItemRepository = expenseItemRepository;
         this.storeRepository = storeRepository;
         this.currencyService = currencyService;
         this.ocrService = ocrService;
         this.userRepository = userRepository;
+        this.supportedCurrencyService = supportedCurrencyService;
     }
 
     public Expense createManualExpense(Expense expense, Long userId) {
+        // Validate currency if provided
+        if (expense.getCurrency() != null && !expense.getCurrency().isBlank()) {
+            String c = expense.getCurrency().toUpperCase();
+            if (!supportedCurrencyService.isSupported(c)) {
+                throw new IllegalArgumentException("Unsupported currency: " + expense.getCurrency());
+            }
+            expense.setCurrency(c);
+        }
+
         expense.setUserId(userId);
         expense.setType(ExpenseType.MANUAL);
         expense.setStatus(ExpenseStatus.COMPLETED);
@@ -90,7 +101,17 @@ public class ExpenseService {
 
         if (updates.getTransactionDatetime() != null) expense.setTransactionDatetime(updates.getTransactionDatetime());
         if (updates.getAmount() != null) expense.setAmount(updates.getAmount());
-        if (updates.getCurrency() != null) expense.setCurrency(updates.getCurrency());
+        if (updates.getCurrency() != null) {
+            String c = updates.getCurrency();
+            if (c != null && !c.isBlank()) {
+                if (!supportedCurrencyService.isSupported(c)) {
+                    throw new IllegalArgumentException("Unsupported currency: " + c);
+                }
+                expense.setCurrency(c.toUpperCase());
+            } else {
+                expense.setCurrency(null);
+            }
+        }
         if (updates.getReceiptNumber() != null) expense.setReceiptNumber(updates.getReceiptNumber());
         if (updates.getCategory() != null) expense.setCategory(updates.getCategory());
         if (updates.getTags() != null) expense.setTags(updates.getTags());
