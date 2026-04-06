@@ -738,6 +738,39 @@
     display: flex;
     justify-content: flex-start;
 }
+.receipt-items-count {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-light);
+    margin-bottom: 0.3rem;
+}
+.receipt-notes-in-items {
+    color: var(--text-light);
+    font-size: 0.85rem;
+    padding: 0.35rem 0;
+    font-style: italic;
+    word-break: break-word;
+}
+
+/* ===================== EDIT EXPENSE DETAILS DIALOG FIELD GRID ===================== */
+/* Desktop default: Date + Category on row 1, Amount + Currency + ExRate on row 2 */
+.exp-dlg-fields-grid {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-areas:
+        "date cat  cat"
+        "amt  curr exr";
+}
+.exp-dlg-fields-grid .form-group { margin-bottom: 0; }
+.exp-dlg-f-date { grid-area: date; }
+.exp-dlg-f-cat  { grid-area: cat; }
+.exp-dlg-f-amt  { grid-area: amt; }
+.exp-dlg-f-curr { grid-area: curr; }
+.exp-dlg-f-exr  { grid-area: exr; }
 
 /* ===================== SHARE MENU ===================== */
 .share-menu {

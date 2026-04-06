@@ -15,7 +15,7 @@ ocr:
   api:
     url: https://gpt.jdelfino.com/ollama/api/generate
     model: qwen3.5:cloud
-    api-key: ${OCR_API_KEY:}  # Set via OCR_API_KEY environment variable or override here
+    api-key: ${LLM_API_KEY:}  # Set via LLM_API_KEY environment variable or override here
     prompt: >
       Parse this receipt image/PDF and return a JSON object with these exact fields:
       {"transactionDatetime":"ISO 8601 yyyy-MM-ddTHH:mm:ss","amount":0,"currency":"ISO 4217 code",
@@ -27,7 +27,7 @@ ocr:
 
 chatbot:
   api:
-    api-key: ${CHATBOT_API_KEY:}  # Set via CHATBOT_API_KEY environment variable or override here
+    api-key: ${LLM_API_KEY:}  # Set via LLM_API_KEY environment variable or override here
     system-prompt: >
       You are an expense tracking assistant. Today's date is {today}. The user's base currency is {currency}.
 
@@ -62,7 +62,7 @@ spring:
   ai:
     ollama:
       base-url: https://gpt.jdelfino.com
-      api-key: ${CHATBOT_API_KEY:}  # Pass API key to Spring AI ChatClient
+      api-key: ${LLM_API_KEY:}  # Pass API key to Spring AI ChatClient
       chat:
         options:
           model: qwen3.5:cloud

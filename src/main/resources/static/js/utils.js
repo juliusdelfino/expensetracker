@@ -36,14 +36,15 @@ function isMobile() { return window.innerWidth < 900; }
 
 // --- API Helper ---
 async function api(url, options = {}) {
+    const { noAuthRedirect, ...fetchOptions } = options;
     const defaults = { headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
-    if (options.body && !(options.body instanceof FormData)) {
-        options.body = JSON.stringify(options.body);
-    } else if (options.body instanceof FormData) {
+    if (fetchOptions.body && !(fetchOptions.body instanceof FormData)) {
+        fetchOptions.body = JSON.stringify(fetchOptions.body);
+    } else if (fetchOptions.body instanceof FormData) {
         delete defaults.headers['Content-Type'];
     }
-    const res = await fetch(url, { ...defaults, ...options });
-    if (res.status === 401) { currentUser = null; navigate('#/login'); return null; }
+    const res = await fetch(url, { ...defaults, ...fetchOptions });
+    if (res.status === 401 && !noAuthRedirect) { currentUser = null; navigate('#/login'); return null; }
     const text = await res.text();
     try { return JSON.parse(text); } catch { return text; }
 }

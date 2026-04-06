@@ -215,6 +215,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+/* Stays 2-column on mobile — intended for compact dialog fields */
+.form-row-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.form-row-inline .form-group { margin-bottom: 0; }
 
 /* ===================== TABLES ===================== */
 .table-responsive { overflow-x: auto; }

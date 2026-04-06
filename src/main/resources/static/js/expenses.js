@@ -657,18 +657,30 @@ function captureCancel() {
 // EXPENSE DETAIL
 // ============================================
 async function renderExpenseDetail(app, id) {
-    const data = await api(`/api/expenses/${id}`);
-    if (!data || !data.expense) { toast('Expense not found', 'error'); navigate('#/expenses'); return; }
+    const data = await api(`/api/expenses/${id}`, { noAuthRedirect: true });
+    if (!data || !data.expense) {
+        app.innerHTML = `<div class="container"><div class="card" style="text-align:center; padding:2rem;">
+            <i class="fa-solid fa-receipt" style="font-size:2rem; color:var(--text-light)"></i>
+            <p style="margin-top:1rem">Expense not found.</p>
+            ${currentUser
+                ? `<a href="#/expenses" class="btn btn-outline" style="margin-top:1rem;"><i class="fa-solid fa-arrow-left"></i> Back to Expenses</a>`
+                : `<a href="#/login" class="btn btn-primary" style="margin-top:1rem;"><i class="fa-solid fa-right-to-bracket"></i> Login</a>`}
+        </div></div>`;
+        return;
+    }
     const e = data.expense;
     const items = data.items || [];
     const store = data.store;
+    const isOwner = !!data.isOwner;
+    window._expenseIsOwner = isOwner;
+
     const isReceiptScan = e.type === 'RECEIPT_SCAN';
     const isCompleted = e.status === 'COMPLETED';
     const isProcessing = e.status === 'PROCESSING';
     const isFailed = e.status === 'FAILED';
 
-    // Load categories for dropdown (always fresh from dedicated endpoint)
-    if (!window._allExpenseCategories || window._allExpenseCategories.length === 0) {
+    // Load categories for dropdown (only needed when editing as owner)
+    if (isOwner && (!window._allExpenseCategories || window._allExpenseCategories.length === 0)) {
         window._allExpenseCategories = (await api('/api/expenses/categories')) || [];
     }
 
@@ -679,10 +691,10 @@ async function renderExpenseDetail(app, id) {
                 <span class="badge badge-${(e.status||'').toLowerCase()}">${statusIcon(e.status)} ${e.status}</span>
             </div>
             <div class="action-bar-right">
-                ${isFailed ? `<button class="btn btn-secondary btn-sm" onclick="retryExpense('${e.urlId}'); setTimeout(()=>location.reload(),500)"><i class="fa-solid fa-rotate"></i> Retry</button>` : ''}
+                ${isOwner && isFailed ? `<button class="btn btn-secondary btn-sm" onclick="retryExpense('${e.urlId}'); setTimeout(()=>location.reload(),500)"><i class="fa-solid fa-rotate"></i> Retry</button>` : ''}
                 <button class="btn btn-outline btn-sm" onclick="openShareMenu('${e.urlId}', this)"><i class="fa-solid fa-share-nodes"></i> Share</button>
-                <button class="btn btn-secondary btn-sm" onclick="duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i> Duplicate</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteExpense('${e.urlId}'); navigate('#/expenses')"><i class="fa-solid fa-trash"></i> Delete</button>
+                ${isOwner ? `<button class="btn btn-secondary btn-sm" onclick="duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i> Duplicate</button>` : ''}
+                ${isOwner ? `<button class="btn btn-danger btn-sm" onclick="deleteExpense('${e.urlId}'); navigate('#/expenses')"><i class="fa-solid fa-trash"></i> Delete</button>` : ''}
             </div>
         </div>`;
 
@@ -706,7 +718,7 @@ async function renderExpenseDetail(app, id) {
             <div class="card">
                 <h3 class="card-title"><i class="fa-solid ${isPdf ? 'fa-file-pdf' : 'fa-image'}"></i> Scanned Receipt</h3>
                 ${isPdf ? `
-                    <iframe src="/pdfjs-5.6.205-dist/web/viewer.html?file=/api/attachments/receipts/${imgFilename}#zoom=fit" style="width:100%; height:600px; border:0;"></iframe>
+                    <iframe src="/pdfjs-5.6.205-dist/web/viewer.html?file=/api/attachments/receipts/${imgFilename}" style="width:100%; height:600px; border:0;"></iframe>
                 ` : `
                     <div class="receipt-zoom-container" id="receiptZoomContainer">
                         <img src="/api/attachments/receipts/${imgFilename}" class="receipt-image" id="receiptImg" alt="Receipt">
@@ -715,13 +727,14 @@ async function renderExpenseDetail(app, id) {
             </div>
             <div class="card">
                 <h3 class="card-title"><i class="fa-solid fa-receipt"></i> Parsed Data</h3>
-                ${renderReceiptView(e, items, store, id)}
+                ${renderReceiptView(e, items, store, id, isOwner)}
             </div>
         </div>`;
     } else {
+        // Manual entries and incomplete/failed scans: use receipt view (no scanned image card)
         html += `<div class="card">
-            <h3 class="card-title"><i class="fa-solid fa-edit"></i> Expense Details</h3>
-            ${expenseForm(e, id)}
+            <h3 class="card-title"><i class="fa-solid fa-receipt"></i> Parsed Data</h3>
+            ${renderReceiptView(e, items, store, id, isOwner)}
         </div>`;
     }
 
@@ -733,14 +746,14 @@ async function renderExpenseDetail(app, id) {
                 const fname = a.replace(/\\/g, '/').split('/').pop();
                 return `<li>
                     <a href="/api/attachments/${e.id}/${fname}" target="_blank"><i class="fa-solid fa-file"></i> ${fname}</a>
-                    <button class="btn btn-danger btn-sm btn-icon" onclick="removeAttachment('${e.id}','${fname}')"><i class="fa-solid fa-xmark"></i></button>
+                    ${isOwner ? `<button class="btn btn-danger btn-sm btn-icon" onclick="removeAttachment('${e.id}','${fname}')"><i class="fa-solid fa-xmark"></i></button>` : ''}
                 </li>`;
             }).join('')}
         </ul>
-        <div style="margin-top:0.75rem">
+        ${isOwner ? `<div style="margin-top:0.75rem">
             <input type="file" id="newAttachment" multiple>
             <button class="btn btn-outline btn-sm" onclick="uploadAttachments('${e.id}')"><i class="fa-solid fa-upload"></i> Upload</button>
-        </div>
+        </div>` : ''}
     </div>`;
 
     // Other Details collapsed section
@@ -850,6 +863,7 @@ let _changeStoreMarker = null;
 let _nominatimTimer = null;
 
 async function openChangeStoreDialog(expenseId) {
+    if (!window._expenseIsOwner) return;
     // Fetch current store
     const data = await api(`/api/expenses/${expenseId}`);
     const store = data?.store || {};
@@ -881,7 +895,7 @@ async function openChangeStoreDialog(expenseId) {
                 <label>Address</label>
                 <input type="text" class="form-control" id="csAddress" value="${esc(store.address || '')}">
             </div>
-            <div class="form-row">
+            <div class="form-row-inline">
                 <div class="form-group">
                     <label>City</label>
                     <input type="text" class="form-control" id="csCity" value="${esc(store.city || '')}">
@@ -891,7 +905,7 @@ async function openChangeStoreDialog(expenseId) {
                     <input type="text" class="form-control" id="csCountry" value="${esc(store.country || '')}" placeholder="e.g. AT">
                 </div>
             </div>
-            <div class="form-row">
+            <div class="form-row-inline">
                 <div class="form-group">
                     <label>Postal Code</label>
                     <input type="text" class="form-control" id="csPostal" value="${esc(store.postalCode || '')}">
@@ -1191,6 +1205,7 @@ function toggleOtherDetails() {
 
 // Item dialog (add / edit+delete)
 function openItemDialog(expenseId, itemId, itemName, quantity, unitPrice, totalPrice) {
+    if (!window._expenseIsOwner) return;
     const isEdit = !!itemId;
     const overlay = document.createElement('div');
     overlay.className = 'item-dialog-overlay';
@@ -1255,7 +1270,7 @@ async function deleteItemDialog(expenseId, itemId) {
     renderExpenseDetail(document.getElementById('app'), expenseId);
 }
 
-function renderReceiptView(e, items, store, id) {
+function renderReceiptView(e, items, store, id, isOwner) {
     const storeName = store?.name || '';
     const addressParts = [store?.address, store?.city, getCountryName(store?.country), store?.postalCode].filter(Boolean);
     const addressStr = addressParts.join(', ');
@@ -1281,8 +1296,9 @@ function renderReceiptView(e, items, store, id) {
 
     let html = `<div class="receipt-paper">`;
 
-    // Store header (clickable → opens store dialog)
-    html += `<div class="receipt-store-section receipt-clickable" onclick="openChangeStoreDialog('${id}')" title="Click to edit store details">`;
+    // Store header (clickable for owners → opens store dialog)
+    const storeClick = isOwner ? `onclick="openChangeStoreDialog('${id}')" title="Click to edit store details"` : '';
+    html += `<div class="receipt-store-section${isOwner ? ' receipt-clickable' : ''}" ${storeClick}>`;
     if (storeName) {
         html += `<div class="receipt-store-name">${esc(storeName)}</div>`;
         if (addressStr) html += `<div class="receipt-store-address">${esc(addressStr)}</div>`;
@@ -1294,14 +1310,15 @@ function renderReceiptView(e, items, store, id) {
             html += `</div>`;
         }
     } else {
-        html += `<div class="receipt-store-placeholder">No store info \u2014 tap to add</div>`;
+        html += `<div class="receipt-store-placeholder">${isOwner ? 'No store info \u2014 tap to add' : 'No store info'}</div>`;
     }
     html += `</div>`;
 
     html += `<div class="receipt-divider"></div>`;
 
-    // Receipt number + date/time (clickable → opens expense details dialog)
-    html += `<div class="receipt-meta-section receipt-clickable" onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details">
+    // Receipt number + date/time (clickable for owners → opens expense details dialog)
+    const metaClick = isOwner ? `onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details"` : '';
+    html += `<div class="receipt-meta-section${isOwner ? ' receipt-clickable' : ''}" ${metaClick}>
         <div class="receipt-meta-line">
             <span>${receiptNum ? '#' + esc(receiptNum) : '<span style="color:var(--text-light);font-style:italic">No receipt #</span>'}</span>
             <span>${dateStr}${timeStr ? ' ' + timeStr : ''}</span>
@@ -1310,15 +1327,19 @@ function renderReceiptView(e, items, store, id) {
 
     html += `<div class="receipt-divider"></div>`;
 
-    // Items (each clickable → opens item dialog)
+    // Items (each clickable for owners → opens item dialog)
     html += `<div class="receipt-items-section">`;
+    html += `<div class="receipt-items-count">${activeItems.length} item${activeItems.length !== 1 ? 's' : ''}</div>`;
     if (activeItems.length > 0) {
         activeItems.forEach(i => {
             const qty = Number(i.quantity);
             const qtyStr = qty % 1 === 0 ? qty.toFixed(0) : qty.toFixed(2);
             const unitPrice = Number(i.unitPrice).toFixed(2);
             const itemTotal = i.totalPrice != null ? Number(i.totalPrice).toFixed(2) : '\u2014';
-            html += `<div class="receipt-item-row receipt-clickable" onclick="openItemDialog('${id}','${i.id}','${esc(i.itemName).replace(/'/g, "\\'")}',${i.quantity},${i.unitPrice},${i.totalPrice != null ? i.totalPrice : 0})" title="Click to edit item">
+            const itemClick = isOwner
+                ? `onclick="openItemDialog('${id}','${i.id}','${esc(i.itemName).replace(/'/g, "\\'")}',${i.quantity},${i.unitPrice},${i.totalPrice != null ? i.totalPrice : 0})" title="Click to edit item"`
+                : '';
+            html += `<div class="receipt-item-row${isOwner ? ' receipt-clickable' : ''}" ${itemClick}>
                 <div class="receipt-item-name">${esc(i.itemName)}</div>
                 <div class="receipt-item-detail">
                     <span class="receipt-item-qty">${qtyStr} \u00d7 ${unitPrice}</span>
@@ -1326,20 +1347,25 @@ function renderReceiptView(e, items, store, id) {
                 </div>
             </div>`;
         });
+    } else if (e.notes) {
+        html += `<div class="receipt-notes-in-items">${esc(e.notes)}</div>`;
     } else {
         html += `<div class="receipt-no-items">No items</div>`;
     }
     html += `</div>`;
 
-    // Add Item button (inside receipt paper, below item list)
-    html += `<div class="receipt-add-item">
-        <button class="btn btn-outline btn-sm" onclick="openItemDialog('${id}')"><i class="fa-solid fa-plus"></i> Add Item</button>
-    </div>`;
+    // Add Item button — owners only
+    if (isOwner) {
+        html += `<div class="receipt-add-item">
+            <button class="btn btn-outline btn-sm" onclick="openItemDialog('${id}')"><i class="fa-solid fa-plus"></i> Add Item</button>
+        </div>`;
+    }
 
     html += `<div class="receipt-divider receipt-divider-thick"></div>`;
 
-    // Total (clickable → opens expense details dialog)
-    html += `<div class="receipt-total-section receipt-clickable" onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details">
+    // Total (clickable for owners → opens expense details dialog)
+    const totalClick = isOwner ? `onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details"` : '';
+    html += `<div class="receipt-total-section${isOwner ? ' receipt-clickable' : ''}" ${totalClick}>
         <div class="receipt-total-line">
             <span class="receipt-total-label">TOTAL</span>
             <span class="receipt-total-amount">${total} ${esc(currency)}</span>
@@ -1347,13 +1373,15 @@ function renderReceiptView(e, items, store, id) {
         ${showBase ? `<div class="receipt-base-amount"><i class="fa-solid fa-exchange-alt" style="font-size:0.7rem"></i> ${amountInBase.toFixed(2)} ${esc(baseCurr)}</div>` : ''}
     </div>`;
 
-    // Category / Tags / Notes footer (clickable → opens expense details dialog)
-    if (e.category || (e.tags && e.tags.length) || e.notes) {
+    // Category / Tags / Notes footer (clickable for owners → opens expense details dialog)
+    const notesShownInItems = activeItems.length === 0 && !!e.notes;
+    if (e.category || (e.tags && e.tags.length) || (e.notes && !notesShownInItems)) {
         html += `<div class="receipt-divider"></div>`;
-        html += `<div class="receipt-footer-section receipt-clickable" onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details">`;
+        const footerClick = isOwner ? `onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details"` : '';
+        html += `<div class="receipt-footer-section${isOwner ? ' receipt-clickable' : ''}" ${footerClick}>`;
         if (e.category) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Category:</span> ${esc(e.category)}</div>`;
         if (e.tags && e.tags.length) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Tags:</span> ${e.tags.map(t => esc(t)).join(', ')}</div>`;
-        if (e.notes) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Notes:</span> ${esc(e.notes)}</div>`;
+        if (e.notes && !notesShownInItems) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Notes:</span> ${esc(e.notes)}</div>`;
         html += `</div>`;
     }
 
@@ -1365,6 +1393,7 @@ function renderReceiptView(e, items, store, id) {
 // EXPENSE DETAILS DIALOG (for receipt view)
 // ============================================
 async function openExpenseDetailsDialog(expenseId) {
+    if (!window._expenseIsOwner) return;
     const data = await api(`/api/expenses/${expenseId}`);
     const e = data?.expense || {};
 
@@ -1382,31 +1411,30 @@ async function openExpenseDetailsDialog(expenseId) {
                 <h3 class="item-dialog-title" style="margin-bottom:0"><i class="fa-solid fa-pen-to-square"></i> Edit Expense Details</h3>
                 <button class="btn btn-outline btn-sm" onclick="closeExpenseDetailsDialog()"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="form-row" style="margin-top:0.75rem;">
-                <div class="form-group"><label>Date &amp; Time</label>
+            <div class="exp-dlg-fields-grid">
+                <div class="form-group exp-dlg-f-date"><label>Date &amp; Time</label>
                     <input type="datetime-local" class="form-control" id="dlgExpDate" value="${e.transactionDatetime ? e.transactionDatetime.substring(0, 16) : ''}">
                 </div>
-                <div class="form-group"><label>Category</label>
+                <div class="form-group exp-dlg-f-cat"><label>Category</label>
                     <input type="text" class="form-control" id="dlgExpCategory" value="${esc(e.category)}" list="dlgExpCategoryList" autocomplete="off">
                     <datalist id="dlgExpCategoryList">
                         ${allCats.map(c => `<option value="${esc(c)}">`).join('')}
                     </datalist>
                 </div>
-            </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.75rem;">
-                <div class="form-group"><label>Amount</label>
+                <div class="form-group exp-dlg-f-amt"><label>Amount</label>
                     <input type="number" step="0.01" class="form-control" id="dlgExpAmount" value="${e.amount || ''}">
                 </div>
-                <div class="form-group"><label>Currency</label>
-                    <select class="form-control" id="dlgExpCurrency">
-                        ${['USD', 'EUR', 'GBP', 'SGD', 'JPY', 'AUD', 'CAD', 'CHF'].map(c => `<option value="${c}" ${c === e.currency ? 'selected' : ''}>${c}</option>`).join('')}
-                    </select>
+                <div class="form-group exp-dlg-f-curr"><label>Currency</label>
+                    <input type="text" class="form-control" id="dlgExpCurrency" list="dlgExpCurrencyList" value="${esc(e.currency)}" placeholder="e.g. USD">
+                    <datalist id="dlgExpCurrencyList">
+                        ${['USD','EUR','GBP','SGD','JPY','AUD','CAD','CHF'].map(c => `<option value="${c}"></option>`).join('')}
+                    </datalist>
                 </div>
-                <div class="form-group"><label>Exchange Rate</label>
+                <div class="form-group exp-dlg-f-exr"><label>Exchange Rate</label>
                     <input type="number" step="0.000001" class="form-control" id="dlgExpExRate" value="${e.exchangeRate || ''}" placeholder="Auto">
                 </div>
             </div>
-            <div class="form-group">
+            <div class="form-group" style="margin-top:0.75rem;">
                 <label>Receipt Number</label>
                 <input type="text" class="form-control" id="dlgExpReceipt" value="${esc(e.receiptNumber)}">
             </div>
@@ -1466,7 +1494,7 @@ function openShareMenu(expenseId, btn) {
     menu.id = 'shareMenu';
     menu.className = 'share-menu';
 
-    const url = window.location.origin + window.location.pathname + '#/expenses/' + expenseId;
+    const url = window.location.origin + '/view/expenses/' + expenseId;
     const hasNativeShare = typeof navigator.share === 'function';
 
     menu.innerHTML = `
@@ -1521,15 +1549,16 @@ async function nativeShareExpense(url) {
     }
 }
 
-function expenseForm(e, id) {
+function expenseForm(e, id, isOwner = true) {
     const allCats = window._allExpenseCategories || [];
-    return `<form id="expenseEditForm">
+    const ro = isOwner ? '' : 'readonly disabled';
+    return `<form ${isOwner ? 'id="expenseEditForm"' : ''}>
         <div class="form-row">
             <div class="form-group"><label>Date & Time</label>
-                <input type="datetime-local" class="form-control detail-datetime" id="eDate" value="${e.transactionDatetime ? e.transactionDatetime.substring(0,16) : ''}">
+                <input type="datetime-local" class="form-control detail-datetime" id="eDate" value="${e.transactionDatetime ? e.transactionDatetime.substring(0,16) : ''}" ${ro}>
             </div>
             <div class="form-group"><label>Category</label>
-                <input type="text" class="form-control" id="eCategory" value="${esc(e.category)}" list="eCategoryList" autocomplete="off">
+                <input type="text" class="form-control" id="eCategory" value="${esc(e.category)}" list="eCategoryList" autocomplete="off" ${ro}>
                 <datalist id="eCategoryList">
                     ${allCats.map(c => `<option value="${esc(c)}">`).join('')}
                 </datalist>
@@ -1537,10 +1566,10 @@ function expenseForm(e, id) {
         </div>
         <div class="form-row detail-amount-row">
             <div class="form-group"><label>Amount</label>
-                <input type="number" step="0.01" class="form-control" id="eAmount" value="${e.amount||''}">
+                <input type="number" step="0.01" class="form-control" id="eAmount" value="${e.amount||''}" ${ro}>
             </div>
             <div class="form-group"><label>Currency</label>
-                <input type="text" class="form-control" id="eCurrency" value="${esc(e.currency)}" list="eCurrencyList" autocomplete="off">
+                <input type="text" class="form-control" id="eCurrency" value="${esc(e.currency)}" list="eCurrencyList" autocomplete="off" ${ro}>
                 <datalist id="eCurrencyList">
                     <option value="USD"></option><option value="EUR"></option>
                     <option value="GBP"></option><option value="SGD"></option>
@@ -1549,22 +1578,22 @@ function expenseForm(e, id) {
                 </datalist>
             </div>
             <div class="form-group"><label>Exchange Rate</label>
-                <input type="number" step="0.000001" class="form-control" id="eExRate" value="${e.exchangeRate||''}" placeholder="Auto-fetched">
+                <input type="number" step="0.000001" class="form-control" id="eExRate" value="${e.exchangeRate||''}" placeholder="Auto-fetched" ${ro}>
             </div>
         </div>
         ${e.amountInBase ? `<p class="amount-secondary" style="margin-bottom:1rem"><i class="fa-solid fa-exchange-alt"></i> ${Number(e.amountInBase).toFixed(2)} ${currentUser?.baseCurrency||''}</p>` : ''}
         <div class="form-group"><label>Receipt Number</label>
-            <input type="text" class="form-control" id="eReceipt" value="${esc(e.receiptNumber)}">
+            <input type="text" class="form-control" id="eReceipt" value="${esc(e.receiptNumber)}" ${ro}>
         </div>
         <div class="form-group"><label>Tags</label>
             <div class="tags-container" id="eTagsContainer">
-                <input type="text" class="tag-input" id="eTagInput" placeholder="Add tag...">
+                <input type="text" class="tag-input" id="eTagInput" placeholder="Add tag..." ${ro}>
             </div>
         </div>
         <div class="form-group"><label>Notes</label>
-            <textarea class="form-control" id="eNotes" rows="2">${esc(e.notes)}</textarea>
+            <textarea class="form-control" id="eNotes" rows="2" ${ro}>${esc(e.notes)}</textarea>
         </div>
-        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Save Changes</button>
+        ${isOwner ? `<button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Save Changes</button>` : ''}
     </form>`;
 }
 

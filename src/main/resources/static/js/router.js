@@ -21,12 +21,39 @@ async function checkAuth() {
     return false;
 }
 
+/** Try to authenticate silently — never redirects to login on failure. */
+async function tryCheckAuth() {
+    try {
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.id) {
+                currentUser = data;
+                document.getElementById('navbar').style.display = 'flex';
+                document.getElementById('nav-username').textContent = data.username;
+                return true;
+            }
+        }
+    } catch (e) { /* ignore */ }
+    currentUser = null;
+    document.getElementById('navbar').style.display = 'none';
+    return false;
+}
+
 async function router() {
     const hash = window.location.hash || '#/login';
     const app = document.getElementById('app');
 
     if (hash === '#/login') { hideMobileUI(); renderLogin(app); return; }
     if (hash === '#/register') { hideMobileUI(); renderRegister(app); return; }
+
+    // Expense detail pages are publicly accessible — try auth but never force redirect
+    if (hash.match(/^#\/expenses\/[a-f0-9-]+$/)) {
+        hideMobileUI();
+        await tryCheckAuth();
+        renderExpenseDetail(app, hash.split('/')[2]);
+        return;
+    }
 
     const authed = await checkAuth();
     if (!authed) { navigate('#/login'); return; }
@@ -52,7 +79,6 @@ async function router() {
     if (hash === '#/dashboard') renderDashboard(app);
     else if (hash === '#/expenses') renderExpenseList(app);
     else if (hash === '#/expenses/new' || hash.startsWith('#/expenses/new?')) renderNewExpense(app);
-    else if (hash.match(/^#\/expenses\/[a-f0-9-]+$/)) renderExpenseDetail(app, hash.split('/')[2]);
     else if (hash === '#/profile') renderProfile(app);
     else if (hash === '#/chat') { toggleDesktopChat(); navigate('#/dashboard'); }
     else renderDashboard(app);
