@@ -2,6 +2,7 @@ package com.delfino.expensetracker.controller;
 
 import com.delfino.expensetracker.model.User;
 import com.delfino.expensetracker.repository.UserRepository;
+import com.delfino.expensetracker.service.SupportedCurrencyService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,10 +19,12 @@ public class AuthController {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final SupportedCurrencyService supportedCurrencyService;
 
-    public AuthController(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public AuthController(UserRepository userRepository, PasswordEncoder passwordEncoder, SupportedCurrencyService supportedCurrencyService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.supportedCurrencyService = supportedCurrencyService;
     }
 
     @PostMapping("/register")
@@ -37,6 +40,11 @@ public class AuthController {
         }
         if (userRepository.findByUsernameIgnoreCase(username).isPresent()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Username already exists"));
+        }
+
+        // Validate currency
+        if (baseCurrency != null && !baseCurrency.isBlank() && !supportedCurrencyService.isSupported(baseCurrency)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Unsupported base currency: " + baseCurrency));
         }
 
         User user = new User();
@@ -96,4 +104,3 @@ public class AuthController {
                 .orElse(ResponseEntity.status(401).body(Map.of("error", "User not found")));
     }
 }
-

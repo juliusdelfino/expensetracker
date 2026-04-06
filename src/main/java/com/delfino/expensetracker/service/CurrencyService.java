@@ -14,6 +14,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -25,7 +26,7 @@ public class CurrencyService {
     private static final Logger log = LoggerFactory.getLogger(CurrencyService.class);
     private final ExchangeRateCacheRepository cacheRepository;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final HttpClient httpClient;
 
     @Value("${currency.api.url:https://api.frankfurter.app}")
     private String apiUrl;
@@ -33,6 +34,10 @@ public class CurrencyService {
     public CurrencyService(ExchangeRateCacheRepository cacheRepository, ObjectMapper objectMapper) {
         this.cacheRepository = cacheRepository;
         this.objectMapper = objectMapper;
+        this.httpClient = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.ALWAYS)
+                .connectTimeout(Duration.ofSeconds(10))
+                .build();
     }
 
     public BigDecimal getRate(String from, String to, LocalDate date) {
@@ -46,7 +51,11 @@ public class CurrencyService {
             String url = apiUrl + "/" + date.format(DateTimeFormatter.ISO_LOCAL_DATE)
                     + "?from=" + from + "&to=" + to;
             log.info("Calling Currency API: GET {}", url);
-            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
+            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url))
+                    .header("Accept", "application/json")
+                    // Some servers behave differently based on User-Agent; use a common browser UA
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+                    .GET().build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             log.info("Currency API response: status={}, bodyLength={}", response.statusCode(), response.body().length());
 

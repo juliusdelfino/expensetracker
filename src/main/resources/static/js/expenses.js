@@ -339,12 +339,13 @@ function renderNewExpense(app, embedded = false) {
                         <div class="form-row-3">
                             <div class="form-group">
                                 <label>Currency</label>
-                                <select class="form-control" id="mCurrency">
-                                    <option value="USD">USD</option><option value="EUR">EUR</option>
-                                    <option value="GBP">GBP</option><option value="SGD">SGD</option>
-                                    <option value="JPY">JPY</option><option value="AUD">AUD</option>
-                                    <option value="CAD">CAD</option><option value="CHF">CHF</option>
-                                </select>
+                                <input type="text" class="form-control" id="mCurrency" list="mCurrencyList" placeholder="e.g. USD">
+                                <datalist id="mCurrencyList">
+                                    <option value="USD"></option><option value="EUR"></option>
+                                    <option value="GBP"></option><option value="SGD"></option>
+                                    <option value="JPY"></option><option value="AUD"></option>
+                                    <option value="CAD"></option><option value="CHF"></option>
+                                </datalist>
                             </div>
                             <div class="form-group">
                                 <label>Exchange Rate</label>
@@ -412,6 +413,25 @@ function renderNewExpense(app, embedded = false) {
         const cats = (await api('/api/expenses/categories')) || [];
         const dl = document.getElementById('mCategoryList');
         if (dl) dl.innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
+    })();
+
+    // Populate currency datalists from server
+    (async () => {
+        try {
+            const map = await api('/api/currencies');
+            if (map) {
+                const codes = Object.keys(map).sort();
+                const mdl = document.getElementById('mCurrencyList');
+                if (mdl) mdl.innerHTML = codes.map(c => `<option value="${c}"></option>`).join('');
+                const edl = document.getElementById('eCurrencyList');
+                if (edl) edl.innerHTML = codes.map(c => `<option value="${c}"></option>`).join('');
+                // If currentUser has baseCurrency, ensure mCurrency default set earlier still works
+                const currSel = document.getElementById('mCurrency');
+                if (currSel && currentUser?.baseCurrency && !currSel.value) currSel.value = currentUser.baseCurrency;
+            }
+        } catch (err) {
+            // ignore
+        }
     })();
 
     let tags = [];
@@ -679,12 +699,43 @@ async function renderExpenseDetail(app, id) {
 
     if (isReceiptScan && isCompleted && e.imagePath) {
         const imgFilename = e.imagePath.replace(/\\/g, '/').split('/').pop();
+        const ext = (imgFilename.split('.').pop() || '').toLowerCase();
+        const isPdf = ext === 'pdf';
         html += `<div class="side-by-side">
             <div class="card">
-                <h3 class="card-title"><i class="fa-solid fa-image"></i> Scanned Receipt</h3>
-                <div class="receipt-zoom-container" id="receiptZoomContainer">
-                    <img src="/api/attachments/receipts/${imgFilename}" class="receipt-image" id="receiptImg" alt="Receipt">
-                </div>
+                <h3 class="card-title"><i class="fa-solid ${isPdf ? 'fa-file-pdf' : 'fa-image'}"></i> Scanned Receipt</h3>
+                ${isPdf ? `
+                    <div class="receipt-pdf-container" id="receiptZoomContainer">
+                        <canvas class="receipt-pdf" id="receiptPdf" style="width:100%; height:600px; border:0;"></canvas>
+                        <div style="text-align:center; margin-top:0.5rem; color:var(--text-light); font-size:0.9rem;">If the PDF does not display, <a href="/api/attachments/receipts/${imgFilename}" target="_blank">open in new tab</a>.</div>
+                    </div>
+
+                <script>
+                  pdfjsLib.GlobalWorkerOptions.workerSrc =
+                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+                  async function renderPDF(url) {
+                    const pdf = await pdfjsLib.getDocument(url).promise;
+                    const page = await pdf.getPage(1); // page 1
+
+                    const viewport = page.getViewport({ scale: 1.5 });
+                    const canvas = document.getElementById('receiptPdf');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+
+                    await page.render({
+                      canvasContext: canvas.getContext('2d'),
+                      viewport
+                    }).promise;
+                  }
+
+                  renderPDF('/api/attachments/receipts/${imgFilename}');
+                </script>
+                ` : `
+                    <div class="receipt-zoom-container" id="receiptZoomContainer">
+                        <img src="/api/attachments/receipts/${imgFilename}" class="receipt-image" id="receiptImg" alt="Receipt">
+                    </div>
+                `}
             </div>
             <div class="card">
                 <h3 class="card-title"><i class="fa-solid fa-edit"></i> Parsed Data</h3>
@@ -784,8 +835,9 @@ async function renderExpenseDetail(app, id) {
         };
         const exRate = document.getElementById('eExRate').value;
         if (exRate) updates.exchangeRate = parseFloat(exRate);
-        await api(`/api/expenses/${id}`, { method: 'PUT', body: updates });
-        toast('Expense updated!', 'success');
+        const data = await api(`/api/expenses/${id}`, { method: 'PUT', body: updates });
+        if (data && data.error) toast(data.error, 'error');
+        else { toast('Expense updated!', 'success'); return; }
         window._allExpenseCategories = null; // refresh category cache
         renderExpenseDetail(app, id);
     };
@@ -1292,9 +1344,13 @@ function expenseForm(e, id) {
                 <input type="number" step="0.01" class="form-control" id="eAmount" value="${e.amount||''}">
             </div>
             <div class="form-group"><label>Currency</label>
-                <select class="form-control" id="eCurrency">
-                    ${['USD','EUR','GBP','SGD','JPY','AUD','CAD','CHF'].map(c => `<option value="${c}" ${c===e.currency?'selected':''}>${c}</option>`).join('')}
-                </select>
+                <input type="text" class="form-control" id="eCurrency" value="${esc(e.currency)}" list="eCurrencyList" autocomplete="off">
+                <datalist id="eCurrencyList">
+                    <option value="USD"></option><option value="EUR"></option>
+                    <option value="GBP"></option><option value="SGD"></option>
+                    <option value="JPY"></option><option value="AUD"></option>
+                    <option value="CAD"></option><option value="CHF"></option>
+                </datalist>
             </div>
             <div class="form-group"><label>Exchange Rate</label>
                 <input type="number" step="0.000001" class="form-control" id="eExRate" value="${e.exchangeRate||''}" placeholder="Auto-fetched">

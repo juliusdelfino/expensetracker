@@ -15,6 +15,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -24,7 +27,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Collections;
+import javax.imageio.ImageIO;
+
+// PDFBox imports
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.PDFRenderer;
+import org.apache.pdfbox.rendering.ImageType;
 
 @Service
 public class OcrService {
@@ -58,22 +76,107 @@ public class OcrService {
         this.objectMapper = objectMapper;
     }
 
+    private static final Set<String> IMAGE_MEDIA_TYPES = new HashSet<>(Arrays.asList(
+            "image/jpeg", "image/png", "image/gif", "image/webp"
+    ));
+
+    public Map<String, Object> buildRequestBody(String ocrModel, String ocrPrompt,
+                                                byte[] fileBytes, String mediaType) {
+        // Single-image convenience wrapper
+        return buildRequestBody(ocrModel, ocrPrompt, Collections.singletonList(fileBytes), mediaType);
+    }
+
+    public Map<String, Object> buildRequestBody(String ocrModel, String ocrPrompt,
+                                                List<byte[]> imageBytesList, String mediaType) {
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("model", ocrModel);
+        requestBody.put("prompt", ocrPrompt);
+        requestBody.put("stream", false);
+
+        if (imageBytesList == null || imageBytesList.isEmpty()) {
+            throw new IllegalArgumentException("No image data provided");
+        }
+
+        if (!IMAGE_MEDIA_TYPES.contains(mediaType)) {
+            throw new IllegalArgumentException("Unsupported media type: " + mediaType);
+        }
+
+        List<String> base64Images = new ArrayList<>();
+        for (byte[] b : imageBytesList) {
+            base64Images.add(Base64.getEncoder().encodeToString(b));
+        }
+        requestBody.put("images", base64Images);
+        return requestBody;
+    }
+
+    private String detectMediaType(byte[] bytes) {
+        if (bytes.length >= 4
+                && bytes[0] == 0x25 && bytes[1] == 0x50   // %P
+                && bytes[2] == 0x44 && bytes[3] == 0x46) { // DF
+            return "application/pdf";
+        }
+        if (bytes.length >= 3
+                && bytes[0] == (byte) 0xFF && bytes[1] == (byte) 0xD8) {
+            return "image/jpeg";
+        }
+        if (bytes.length >= 8
+                && bytes[0] == (byte) 0x89 && bytes[1] == 0x50) { // .PNG
+            return "image/png";
+        }
+        // Add GIF (0x47 0x49) and WEBP (RIFF....WEBP) as needed
+        throw new IllegalArgumentException("Cannot detect media type from file bytes");
+    }
+
+    /**
+     * Convert the first page of a PDF to a JPEG image (returned as bytes).
+     */
+    private byte[] convertPdfFirstPageToImage(byte[] pdfBytes) throws IOException {
+        try (PDDocument doc = PDDocument.load(pdfBytes)) {
+            PDFRenderer renderer = new PDFRenderer(doc);
+            // render first page at 300 DPI
+            BufferedImage bim = renderer.renderImageWithDPI(0, 300, ImageType.RGB);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ImageIO.write(bim, "jpg", baos);
+            return baos.toByteArray();
+        }
+    }
+
+    private List<byte[]> convertPdfToImages(byte[] pdfBytes) throws IOException {
+        List<byte[]> pages = new ArrayList<>();
+        try (PDDocument doc = PDDocument.load(pdfBytes)) {
+            PDFRenderer renderer = new PDFRenderer(doc);
+            final int pageCount = doc.getNumberOfPages();
+            for (int p = 0; p < pageCount; p++) {
+                BufferedImage bim = renderer.renderImageWithDPI(p, 300, ImageType.RGB);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                ImageIO.write(bim, "jpg", baos);
+                pages.add(baos.toByteArray());
+            }
+        }
+        return pages;
+    }
+
     @Async
     public void processReceipt(Long expenseId, String imagePath, String userBaseCurrency) {
         try {
             log.info("Processing receipt for expense {}: reading image from {}", expenseId, imagePath);
             byte[] imageBytes = Files.readAllBytes(Path.of(imagePath));
-            String base64Image = Base64.getEncoder().encodeToString(imageBytes);
 
-            Map<String, Object> requestBody = new LinkedHashMap<>();
-            requestBody.put("model", ocrModel);
-            requestBody.put("prompt", ocrPrompt);
-            requestBody.put("images", List.of(base64Image));
-            requestBody.put("stream", false);
+            String mediaType = detectMediaType(imageBytes);
+
+            if (mediaType.equals("application/pdf")) {
+                log.info("PDF detected for expense {} - converting pages to images", expenseId);
+                List<byte[]> imgs = convertPdfToImages(imageBytes);
+                if (imgs.isEmpty()) throw new IOException("PDF contained no renderable pages");
+                imageBytes = imgs.get(0); // keep first for logging/fileSize
+                mediaType = "image/jpeg";
+            }
+
+            Map<String, Object> requestBody = buildRequestBody(ocrModel, ocrPrompt, imageBytes, mediaType);
 
             String jsonBody = objectMapper.writeValueAsString(requestBody);
-
-            log.info("Calling OCR API: POST {} with model={}, imageSize={}KB", ocrApiUrl, ocrModel, imageBytes.length / 1024);
+            log.info("Calling OCR API: POST {} with model={}, fileSize={}KB, mediaType={}",
+                    ocrApiUrl, ocrModel, imageBytes.length / 1024, mediaType);
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(ocrApiUrl))
                     .header("Content-Type", "application/json")

@@ -8,6 +8,7 @@ import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
 import com.delfino.expensetracker.service.ExpenseService;
+import com.delfino.expensetracker.service.SupportedCurrencyService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -30,16 +31,19 @@ public class ExpenseController {
     private final ExpenseRepository expenseRepository;
     private final ExpenseItemRepository expenseItemRepository;
     private final StoreRepository storeRepository;
+    private final SupportedCurrencyService supportedCurrencyService;
 
     @Value("${app.data.dir:data}")
     private String dataDir;
 
     public ExpenseController(ExpenseService expenseService, ExpenseRepository expenseRepository,
-                             ExpenseItemRepository expenseItemRepository, StoreRepository storeRepository) {
+                             ExpenseItemRepository expenseItemRepository, StoreRepository storeRepository,
+                             SupportedCurrencyService supportedCurrencyService) {
         this.expenseService = expenseService;
         this.expenseRepository = expenseRepository;
         this.expenseItemRepository = expenseItemRepository;
         this.storeRepository = storeRepository;
+        this.supportedCurrencyService = supportedCurrencyService;
     }
 
     @GetMapping
@@ -198,6 +202,13 @@ public class ExpenseController {
     public ResponseEntity<?> createManual(@RequestBody Expense expense, HttpSession session) {
         Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+        // Validate currency before creating
+        if (expense.getCurrency() != null && !expense.getCurrency().isBlank()) {
+            if (!supportedCurrencyService.isSupported(expense.getCurrency())) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Unsupported currency: " + expense.getCurrency()));
+            }
+            expense.setCurrency(expense.getCurrency().toUpperCase());
+        }
         Expense saved = expenseService.createManualExpense(expense, userId);
         return ResponseEntity.ok(saved);
     }
@@ -225,6 +236,12 @@ public class ExpenseController {
     public ResponseEntity<?> update(@PathVariable String expenseUrlId, @RequestBody Expense updates, HttpSession session) {
         Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+        if (updates.getCurrency() != null && !updates.getCurrency().isBlank()) {
+            if (!supportedCurrencyService.isSupported(updates.getCurrency())) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Unsupported currency: " + updates.getCurrency()));
+            }
+            updates.setCurrency(updates.getCurrency().toUpperCase());
+        }
         Expense updated = expenseService.updateExpense(expenseUrlId, updates, userId);
         return ResponseEntity.ok(updated);
     }

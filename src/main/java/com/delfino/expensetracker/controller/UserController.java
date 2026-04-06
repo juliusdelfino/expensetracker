@@ -2,6 +2,7 @@ package com.delfino.expensetracker.controller;
 
 import com.delfino.expensetracker.model.User;
 import com.delfino.expensetracker.repository.UserRepository;
+import com.delfino.expensetracker.service.SupportedCurrencyService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -17,10 +18,12 @@ public class UserController {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final SupportedCurrencyService supportedCurrencyService;
 
-    public UserController(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserController(UserRepository userRepository, PasswordEncoder passwordEncoder, SupportedCurrencyService supportedCurrencyService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.supportedCurrencyService = supportedCurrencyService;
     }
 
     @PutMapping("/profile")
@@ -33,7 +36,13 @@ public class UserController {
 
         if (body.containsKey("email")) user.setEmail(body.get("email"));
         if (body.containsKey("phoneNumber")) user.setPhoneNumber(body.get("phoneNumber"));
-        if (body.containsKey("baseCurrency")) user.setBaseCurrency(body.get("baseCurrency"));
+        if (body.containsKey("baseCurrency")) {
+            String bc = body.get("baseCurrency");
+            if (bc != null && !bc.isBlank() && !supportedCurrencyService.isSupported(bc)) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Unsupported base currency: " + bc));
+            }
+            user.setBaseCurrency(bc);
+        }
         if (body.containsKey("baseCity")) user.setBaseCity(body.get("baseCity"));
         if (body.containsKey("baseCountry")) user.setBaseCountry(body.get("baseCountry"));
         if (body.containsKey("password") && !body.get("password").isBlank()) {
@@ -49,4 +58,3 @@ public class UserController {
         return (Long) session.getAttribute("userId");
     }
 }
-
