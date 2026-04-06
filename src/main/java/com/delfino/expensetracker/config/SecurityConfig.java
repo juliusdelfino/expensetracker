@@ -6,6 +6,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -41,8 +43,12 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+            .headers(headers -> headers
+                .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin
+                )
+            )
             // Disable CSRF — we use session cookies on a same-origin SPA
-            .csrf(csrf -> csrf.disable())
+            .csrf(AbstractHttpConfigurer::disable)
 
             // All requests are allowed through the filter chain;
             // individual controllers return 401 when the HttpSession has no userId.
@@ -51,10 +57,10 @@ public class SecurityConfig {
             )
 
             // Disable Spring Security's built-in form login page — we have our own SPA login
-            .formLogin(form -> form.disable())
+            .formLogin(AbstractHttpConfigurer::disable)
 
             // Disable HTTP Basic — prevents the browser's native Basic-auth prompt
-            .httpBasic(basic -> basic.disable())
+            .httpBasic(AbstractHttpConfigurer::disable)
 
             // Return 401 JSON instead of redirecting to a login page for unauthenticated requests
             .exceptionHandling(ex -> ex

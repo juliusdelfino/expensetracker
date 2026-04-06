@@ -135,6 +135,11 @@
         touch-action: pinch-zoom;
     }
 
+    /* Expense details dialog: stack 3-col grid on mobile */
+    #expenseDetailsDialogInner [style*="grid-template-columns:1fr 1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+    }
+
     /* Hide lat/lon fields on mobile (map is shown instead) */
     .store-latlng-fields { display: none !important; }
 }

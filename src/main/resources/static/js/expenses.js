@@ -660,6 +660,7 @@ async function renderExpenseDetail(app, id) {
             </div>
             <div class="action-bar-right">
                 ${isFailed ? `<button class="btn btn-secondary btn-sm" onclick="retryExpense('${e.urlId}'); setTimeout(()=>location.reload(),500)"><i class="fa-solid fa-rotate"></i> Retry</button>` : ''}
+                <button class="btn btn-outline btn-sm" onclick="openShareMenu('${e.urlId}', this)"><i class="fa-solid fa-share-nodes"></i> Share</button>
                 <button class="btn btn-secondary btn-sm" onclick="duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i> Duplicate</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteExpense('${e.urlId}'); navigate('#/expenses')"><i class="fa-solid fa-trash"></i> Delete</button>
             </div>
@@ -683,42 +684,23 @@ async function renderExpenseDetail(app, id) {
             <div class="card">
                 <h3 class="card-title"><i class="fa-solid fa-image"></i> Scanned Receipt</h3>
                 <div class="receipt-zoom-container" id="receiptZoomContainer">
-                    <img src="/api/attachments/receipts/${imgFilename}" class="receipt-image" id="receiptImg" alt="Receipt">
+
+                <iframe src="/pdfjs-5.6.205-dist/web/viewer.html?file=/api/attachments/receipts/20260405_180526_771_1_invoice.pdf#zoom=fit" style="width:100%; height:600px; border:0;"></iframe>
+                <!--    <img src="/api/attachments/receipts/20260405_180526_771_1_invoice.pdf" class="receipt-image" id="receiptImg" alt="Receipt"> -->
                 </div>
             </div>
             <div class="card">
-                <h3 class="card-title"><i class="fa-solid fa-edit"></i> Parsed Data</h3>
-                ${expenseForm(e, id)}
+                <h3 class="card-title"><i class="fa-solid fa-receipt"></i> Parsed Data</h3>
+                ${renderReceiptView(e, items, store, id)}
             </div>
         </div>`;
+     //   tryLoadPdf("/api/attachments/receipts/20260405_180526_771_1_invoice.pdf");
     } else {
         html += `<div class="card">
             <h3 class="card-title"><i class="fa-solid fa-edit"></i> Expense Details</h3>
             ${expenseForm(e, id)}
         </div>`;
     }
-
-    // Items section: read-only clickable rows
-    const activeItems = items.filter(i => !i.deleted);
-    html += `<div class="card">
-        <h3 class="card-title"><i class="fa-solid fa-list"></i> Items</h3>
-        <div class="items-list" id="itemsList">
-            ${activeItems.length ? activeItems.map(i => `
-            <div class="item-row" onclick="openItemDialog('${id}','${i.id}','${esc(i.itemName).replace(/'/g,"\\'")}',${i.quantity},${i.unitPrice},${i.totalPrice != null ? i.totalPrice : 0})">
-                <div class="item-row-name">${esc(i.itemName)}</div>
-                <div class="item-row-detail">
-                    <span class="item-row-qty">\u00d7${Number(i.quantity).toFixed(i.quantity % 1 === 0 ? 0 : 2)}</span>
-                    <span class="item-row-unit">@ ${Number(i.unitPrice).toFixed(2)}</span>
-                    <span class="item-row-total amount-primary">${i.totalPrice != null ? Number(i.totalPrice).toFixed(2) : '-'}</span>
-                </div>
-            </div>`).join('') : '<p style="color:var(--text-light); text-align:center; padding:0.75rem 0;">No items</p>'}
-        </div>
-        <div style="margin-top:0.75rem">
-            <button class="btn btn-outline btn-sm" onclick="openItemDialog('${id}')"><i class="fa-solid fa-plus"></i> Add Item</button>
-        </div>
-    </div>`;
-
-    html += renderStoreReadOnly(store, id);
 
     const attachments = e.attachments || [];
     html += `<div class="card">
@@ -739,6 +721,7 @@ async function renderExpenseDetail(app, id) {
     </div>`;
 
     // Other Details collapsed section
+    const storeHasMap = (store?.latitude != null && store?.longitude != null) || store?.name;
     html += `<div class="card">
         <div class="expand-toggle" onclick="toggleOtherDetails()">
             <i class="fa-solid fa-chevron-down" id="otherDetailsIcon"></i>
@@ -764,6 +747,10 @@ async function renderExpenseDetail(app, id) {
                     <span class="other-detail-label">Updated</span>
                     <span>${new Date(e.updatedAt).toLocaleString()}</span>
                 </div>` : ''}
+                ${storeHasMap ? `<div class="other-detail-row">
+                    <span class="other-detail-label"><i class="fa-solid fa-map-location-dot" style="color:var(--aegean-mid); margin-right:0.25rem;"></i> Store location</span>
+                </div>
+                <div id="storeOtherDetailsMap" style="height:200px; border-radius:var(--radius); margin-top:0.4rem; border:1px solid var(--border-color);"></div>` : ''}
             </div>
         </div>
     </div>`;
@@ -771,79 +758,90 @@ async function renderExpenseDetail(app, id) {
     html += '</div>';
     app.innerHTML = html;
 
-    document.getElementById('expenseEditForm').onsubmit = async (ev) => {
-        ev.preventDefault();
-        const updates = {
-            transactionDatetime: document.getElementById('eDate').value + ':00',
-            amount: parseFloat(document.getElementById('eAmount').value),
-            currency: document.getElementById('eCurrency').value,
-            category: document.getElementById('eCategory').value,
-            receiptNumber: document.getElementById('eReceipt').value,
-            notes: document.getElementById('eNotes').value,
-            tags: window._editTags || []
+    const editForm = document.getElementById('expenseEditForm');
+    if (editForm) {
+        editForm.onsubmit = async (ev) => {
+            ev.preventDefault();
+            const updates = {
+                transactionDatetime: document.getElementById('eDate').value + ':00',
+                amount: parseFloat(document.getElementById('eAmount').value),
+                currency: document.getElementById('eCurrency').value,
+                category: document.getElementById('eCategory').value,
+                receiptNumber: document.getElementById('eReceipt').value,
+                notes: document.getElementById('eNotes').value,
+                tags: window._editTags || []
+            };
+            const exRate = document.getElementById('eExRate').value;
+            if (exRate) updates.exchangeRate = parseFloat(exRate);
+            await api(`/api/expenses/${id}`, { method: 'PUT', body: updates });
+            toast('Expense updated!', 'success');
+            window._allExpenseCategories = null; // refresh category cache
+            renderExpenseDetail(app, id);
         };
-        const exRate = document.getElementById('eExRate').value;
-        if (exRate) updates.exchangeRate = parseFloat(exRate);
-        await api(`/api/expenses/${id}`, { method: 'PUT', body: updates });
-        toast('Expense updated!', 'success');
-        window._allExpenseCategories = null; // refresh category cache
-        renderExpenseDetail(app, id);
-    };
 
-    window._editTags = [...(e.tags || [])];
-    renderTags('eTagsContainer', 'eTagInput', window._editTags);
+        window._editTags = [...(e.tags || [])];
+        renderTags('eTagsContainer', 'eTagInput', window._editTags);
+    }
 
-    // Initialize store location map (read-only with tooltip)
-    initStoreReadOnlyMap(store);
+    // Initialize store location map in Other Details (read-only with tooltip)
+    initStoreOtherDetailsMap(store);
 
     // Initialize receipt image pinch-zoom
     initReceiptZoom();
 }
 
-function renderStoreReadOnly(store, expenseId) {
-    const name = store?.name || '';
-    const countryDisplay = store?.country ? (getCountryName(store.country)) : null;
-    const addressParts = [store?.address, store?.city, countryDisplay, store?.postalCode].filter(Boolean);
-    const addressStr = addressParts.join(', ') || '—';
-    const phone = store?.phoneNumber || '';
-    const website = store?.website || '';
-    const hasCoords = store?.latitude != null && store?.longitude != null;
-    const showMap = hasCoords || name;
+function tryLoadPdf(imagePath) {
 
-    return `<div class="card">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
-            <h3 class="card-title" style="margin-bottom:0"><i class="fa-solid fa-store"></i> Store</h3>
-            <button class="btn btn-outline btn-sm" onclick="openChangeStoreDialog('${expenseId}')">
-                <i class="fa-solid fa-pen-to-square"></i> Change Store
-            </button>
-        </div>
-        <div class="store-readonly-layout">
-            <div class="store-readonly-details">
-                <div class="store-readonly-row">
-                    <span class="store-readonly-label"><i class="fa-solid fa-shop"></i> Name</span>
-                    <span class="store-readonly-value">${esc(name) || '<span style="color:var(--text-light)">—</span>'}</span>
-                </div>
-                <div class="store-readonly-row">
-                    <span class="store-readonly-label"><i class="fa-solid fa-location-dot"></i> Address</span>
-                    <span class="store-readonly-value">${esc(addressStr)}</span>
-                </div>
-                <div class="store-readonly-row">
-                    <span class="store-readonly-label"><i class="fa-solid fa-phone"></i> Phone</span>
-                    <span class="store-readonly-value">${phone ? `<a href="tel:${esc(phone)}">${esc(phone)}</a>` : '<span style="color:var(--text-light)">—</span>'}</span>
-                </div>
-                <div class="store-readonly-row">
-                    <span class="store-readonly-label"><i class="fa-solid fa-globe"></i> Website</span>
-                    <span class="store-readonly-value">${website ? `<a href="${esc(website)}" target="_blank" rel="noopener">${esc(website)}</a>` : '<span style="color:var(--text-light)">—</span>'}</span>
-                </div>
-            </div>
-            ${showMap ? `<div class="store-readonly-map-wrap"><div id="storeReadOnlyMap"></div></div>` : ''}
-        </div>
-    </div>`;
+                      // Loaded via <script> tag, create shortcut to access PDF.js exports.
+                      var { pdfjsLib } = globalThis;
+
+                      // The workerSrc property shall be specified.
+                      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://mozilla.github.io/pdf.js/build/pdf.worker.mjs';
+
+                      // Asynchronous download of PDF
+                      var loadingTask = pdfjsLib.getDocument(imagePath);
+                      loadingTask.promise.then(function(pdf) {
+                        console.log('PDF loaded');
+
+                        // Fetch the first page
+                        var pageNumber = 1;
+                        pdf.getPage(pageNumber).then(function(page) {
+                          console.log('Page loaded');
+
+                          var scale = 0.9;
+                          var viewport = page.getViewport({scale: scale});
+
+                          // Prepare canvas using PDF page dimensions
+                          var canvas = document.getElementById('the-canvas');
+                          var context = canvas.getContext('2d');
+                          canvas.height = viewport.height;
+                          canvas.width = viewport.width;
+
+
+                          // Render PDF page into canvas context
+                          var renderContext = {
+                            canvasContext: context,
+                            viewport: viewport
+                          };
+                          var renderTask = page.render(renderContext);
+                          renderTask.promise.then(function () {
+                            console.log('Page rendered');
+                          });
+                        });
+                      }, function (reason) {
+                        // PDF loading error
+                        console.error(reason);
+                      });
 }
 
-function initStoreReadOnlyMap(store) {
-    const mapEl = document.getElementById('storeReadOnlyMap');
+function initStoreOtherDetailsMap(store) {
+    const mapEl = document.getElementById('storeOtherDetailsMap');
     if (!mapEl) return;
+
+    if (window._storeOtherDetailsMap) {
+        try { window._storeOtherDetailsMap.remove(); } catch(e) {}
+        window._storeOtherDetailsMap = null;
+    }
 
     const lat = store?.latitude || 0;
     const lng = store?.longitude || 0;
@@ -851,17 +849,17 @@ function initStoreReadOnlyMap(store) {
     const zoom = hasCoords ? 15 : 2;
     const name = store?.name || 'Store';
 
-    const map = L.map('storeReadOnlyMap', { scrollWheelZoom: false, dragging: true, zoomControl: true }).setView([lat, lng], zoom);
+    window._storeOtherDetailsMap = L.map('storeOtherDetailsMap', { scrollWheelZoom: false, dragging: true, zoomControl: true }).setView([lat, lng], zoom);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '\u00a9 OpenStreetMap'
-    }).addTo(map);
+    }).addTo(window._storeOtherDetailsMap);
 
     if (hasCoords) {
-        const marker = L.marker([lat, lng]).addTo(map);
+        const marker = L.marker([lat, lng]).addTo(window._storeOtherDetailsMap);
         marker.bindTooltip(name, { permanent: true, direction: 'top', offset: [0, -10] });
         marker.bindPopup(`<b>${name}</b>`);
     }
-    setTimeout(() => map.invalidateSize(), 300);
+    setTimeout(() => window._storeOtherDetailsMap && window._storeOtherDetailsMap.invalidateSize(), 300);
 }
 
 // ============================================
@@ -1200,6 +1198,10 @@ function toggleOtherDetails() {
         section.style.display = 'block';
         icon.className = 'fa-solid fa-chevron-up';
         label.textContent = 'Hide details';
+        // Invalidate store location map size after reveal
+        setTimeout(() => {
+            if (window._storeOtherDetailsMap) window._storeOtherDetailsMap.invalidateSize();
+        }, 100);
     } else {
         section.style.display = 'none';
         icon.className = 'fa-solid fa-chevron-down';
@@ -1271,6 +1273,272 @@ async function deleteItemDialog(expenseId, itemId) {
     toast('Item deleted', 'success');
     document.getElementById('itemDialogOverlay')?.remove();
     renderExpenseDetail(document.getElementById('app'), expenseId);
+}
+
+function renderReceiptView(e, items, store, id) {
+    const storeName = store?.name || '';
+    const addressParts = [store?.address, store?.city, getCountryName(store?.country), store?.postalCode].filter(Boolean);
+    const addressStr = addressParts.join(', ');
+    const phone = store?.phoneNumber || '';
+    const website = store?.website || '';
+
+    const receiptDate = e.transactionDatetime ? new Date(e.transactionDatetime) : null;
+    const dateStr = receiptDate ? receiptDate.toLocaleDateString() : '\u2014';
+    const timeStr = receiptDate ? receiptDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const receiptNum = e.receiptNumber || '';
+
+    const activeItems = (items || []).filter(i => !i.deleted);
+    const currency = e.currency || '';
+    const total = e.amount != null ? Number(e.amount).toFixed(2) : '\u2014';
+
+    // Compute base currency amount: prefer amountInBase, fall back to amount * exchangeRate
+    const baseCurr = currentUser?.baseCurrency || '';
+    let amountInBase = e.amountInBase != null ? Number(e.amountInBase) : null;
+    if (amountInBase === null && e.amount != null && e.exchangeRate != null && baseCurr && baseCurr !== currency) {
+        amountInBase = Number(e.amount) * Number(e.exchangeRate);
+    }
+    const showBase = amountInBase != null && baseCurr && baseCurr !== currency;
+
+    let html = `<div class="receipt-paper">`;
+
+    // Store header (clickable → opens store dialog)
+    html += `<div class="receipt-store-section receipt-clickable" onclick="openChangeStoreDialog('${id}')" title="Click to edit store details">`;
+    if (storeName) {
+        html += `<div class="receipt-store-name">${esc(storeName)}</div>`;
+        if (addressStr) html += `<div class="receipt-store-address">${esc(addressStr)}</div>`;
+        if (phone || website) {
+            html += `<div class="receipt-store-contact">`;
+            if (phone) html += `<span>${esc(phone)}</span>`;
+            if (phone && website) html += ' \u00b7 ';
+            if (website) html += `<span>${esc(website)}</span>`;
+            html += `</div>`;
+        }
+    } else {
+        html += `<div class="receipt-store-placeholder">No store info \u2014 tap to add</div>`;
+    }
+    html += `</div>`;
+
+    html += `<div class="receipt-divider"></div>`;
+
+    // Receipt number + date/time (clickable → opens expense details dialog)
+    html += `<div class="receipt-meta-section receipt-clickable" onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details">
+        <div class="receipt-meta-line">
+            <span>${receiptNum ? '#' + esc(receiptNum) : '<span style="color:var(--text-light);font-style:italic">No receipt #</span>'}</span>
+            <span>${dateStr}${timeStr ? ' ' + timeStr : ''}</span>
+        </div>
+    </div>`;
+
+    html += `<div class="receipt-divider"></div>`;
+
+    // Items (each clickable → opens item dialog)
+    html += `<div class="receipt-items-section">`;
+    if (activeItems.length > 0) {
+        activeItems.forEach(i => {
+            const qty = Number(i.quantity);
+            const qtyStr = qty % 1 === 0 ? qty.toFixed(0) : qty.toFixed(2);
+            const unitPrice = Number(i.unitPrice).toFixed(2);
+            const itemTotal = i.totalPrice != null ? Number(i.totalPrice).toFixed(2) : '\u2014';
+            html += `<div class="receipt-item-row receipt-clickable" onclick="openItemDialog('${id}','${i.id}','${esc(i.itemName).replace(/'/g, "\\'")}',${i.quantity},${i.unitPrice},${i.totalPrice != null ? i.totalPrice : 0})" title="Click to edit item">
+                <div class="receipt-item-name">${esc(i.itemName)}</div>
+                <div class="receipt-item-detail">
+                    <span class="receipt-item-qty">${qtyStr} \u00d7 ${unitPrice}</span>
+                    <span class="receipt-item-total">${itemTotal}</span>
+                </div>
+            </div>`;
+        });
+    } else {
+        html += `<div class="receipt-no-items">No items</div>`;
+    }
+    html += `</div>`;
+
+    // Add Item button (inside receipt paper, below item list)
+    html += `<div class="receipt-add-item">
+        <button class="btn btn-outline btn-sm" onclick="openItemDialog('${id}')"><i class="fa-solid fa-plus"></i> Add Item</button>
+    </div>`;
+
+    html += `<div class="receipt-divider receipt-divider-thick"></div>`;
+
+    // Total (clickable → opens expense details dialog)
+    html += `<div class="receipt-total-section receipt-clickable" onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details">
+        <div class="receipt-total-line">
+            <span class="receipt-total-label">TOTAL</span>
+            <span class="receipt-total-amount">${total} ${esc(currency)}</span>
+        </div>
+        ${showBase ? `<div class="receipt-base-amount"><i class="fa-solid fa-exchange-alt" style="font-size:0.7rem"></i> ${amountInBase.toFixed(2)} ${esc(baseCurr)}</div>` : ''}
+    </div>`;
+
+    // Category / Tags / Notes footer (clickable → opens expense details dialog)
+    if (e.category || (e.tags && e.tags.length) || e.notes) {
+        html += `<div class="receipt-divider"></div>`;
+        html += `<div class="receipt-footer-section receipt-clickable" onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details">`;
+        if (e.category) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Category:</span> ${esc(e.category)}</div>`;
+        if (e.tags && e.tags.length) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Tags:</span> ${e.tags.map(t => esc(t)).join(', ')}</div>`;
+        if (e.notes) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Notes:</span> ${esc(e.notes)}</div>`;
+        html += `</div>`;
+    }
+
+    html += `</div>`;
+    return html;
+}
+
+// ============================================
+// EXPENSE DETAILS DIALOG (for receipt view)
+// ============================================
+async function openExpenseDetailsDialog(expenseId) {
+    const data = await api(`/api/expenses/${expenseId}`);
+    const e = data?.expense || {};
+
+    const allCats = window._allExpenseCategories || [];
+    window._dlgExpTags = [...(e.tags || [])];
+
+    const overlay = document.createElement('div');
+    overlay.className = 'item-dialog-overlay';
+    overlay.id = 'expenseDetailsOverlay';
+    overlay.onclick = (ev) => { if (ev.target === overlay) closeExpenseDetailsDialog(); };
+
+    overlay.innerHTML = `
+        <div class="change-store-dialog" id="expenseDetailsDialogInner">
+            <div class="change-store-header">
+                <h3 class="item-dialog-title" style="margin-bottom:0"><i class="fa-solid fa-pen-to-square"></i> Edit Expense Details</h3>
+                <button class="btn btn-outline btn-sm" onclick="closeExpenseDetailsDialog()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="form-row" style="margin-top:0.75rem;">
+                <div class="form-group"><label>Date &amp; Time</label>
+                    <input type="datetime-local" class="form-control" id="dlgExpDate" value="${e.transactionDatetime ? e.transactionDatetime.substring(0, 16) : ''}">
+                </div>
+                <div class="form-group"><label>Category</label>
+                    <input type="text" class="form-control" id="dlgExpCategory" value="${esc(e.category)}" list="dlgExpCategoryList" autocomplete="off">
+                    <datalist id="dlgExpCategoryList">
+                        ${allCats.map(c => `<option value="${esc(c)}">`).join('')}
+                    </datalist>
+                </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.75rem;">
+                <div class="form-group"><label>Amount</label>
+                    <input type="number" step="0.01" class="form-control" id="dlgExpAmount" value="${e.amount || ''}">
+                </div>
+                <div class="form-group"><label>Currency</label>
+                    <select class="form-control" id="dlgExpCurrency">
+                        ${['USD', 'EUR', 'GBP', 'SGD', 'JPY', 'AUD', 'CAD', 'CHF'].map(c => `<option value="${c}" ${c === e.currency ? 'selected' : ''}>${c}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group"><label>Exchange Rate</label>
+                    <input type="number" step="0.000001" class="form-control" id="dlgExpExRate" value="${e.exchangeRate || ''}" placeholder="Auto">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Receipt Number</label>
+                <input type="text" class="form-control" id="dlgExpReceipt" value="${esc(e.receiptNumber)}">
+            </div>
+            <div class="form-group"><label>Tags</label>
+                <div class="tags-container" id="dlgExpTagsContainer">
+                    <input type="text" class="tag-input" id="dlgExpTagInput" placeholder="Add tag...">
+                </div>
+            </div>
+            <div class="form-group"><label>Notes</label>
+                <textarea class="form-control" id="dlgExpNotes" rows="2">${esc(e.notes)}</textarea>
+            </div>
+            <div class="item-dialog-actions" style="margin-top:1rem;">
+                <button class="btn btn-primary" onclick="saveExpenseDetailsDialog('${expenseId}')">
+                    <i class="fa-solid fa-save"></i> Save
+                </button>
+                <button class="btn btn-outline" onclick="closeExpenseDetailsDialog()">
+                    <i class="fa-solid fa-xmark"></i> Cancel
+                </button>
+            </div>
+        </div>`;
+
+    document.body.appendChild(overlay);
+    renderTags('dlgExpTagsContainer', 'dlgExpTagInput', window._dlgExpTags);
+}
+
+async function saveExpenseDetailsDialog(expenseId) {
+    const updates = {
+        transactionDatetime: document.getElementById('dlgExpDate').value + ':00',
+        amount: parseFloat(document.getElementById('dlgExpAmount').value),
+        currency: document.getElementById('dlgExpCurrency').value,
+        category: document.getElementById('dlgExpCategory').value,
+        receiptNumber: document.getElementById('dlgExpReceipt').value,
+        notes: document.getElementById('dlgExpNotes').value,
+        tags: window._dlgExpTags || []
+    };
+    const exRate = document.getElementById('dlgExpExRate').value;
+    if (exRate) updates.exchangeRate = parseFloat(exRate);
+
+    await api(`/api/expenses/${expenseId}`, { method: 'PUT', body: updates });
+    toast('Expense updated!', 'success');
+    window._allExpenseCategories = null;
+    closeExpenseDetailsDialog();
+    renderExpenseDetail(document.getElementById('app'), expenseId);
+}
+
+function closeExpenseDetailsDialog() {
+    const overlay = document.getElementById('expenseDetailsOverlay');
+    if (overlay) overlay.remove();
+}
+
+// ============================================
+// SHARE MENU
+// ============================================
+function openShareMenu(expenseId, btn) {
+    closeShareMenu();
+    const menu = document.createElement('div');
+    menu.id = 'shareMenu';
+    menu.className = 'share-menu';
+
+    const url = window.location.origin + window.location.pathname + '#/expenses/' + expenseId;
+    const hasNativeShare = typeof navigator.share === 'function';
+
+    menu.innerHTML = `
+        <div class="share-menu-item" onclick="copyExpenseLink('${url}')">
+            <i class="fa-solid fa-link"></i> Copy link
+        </div>
+        ${hasNativeShare ? `<div class="share-menu-item" onclick="nativeShareExpense('${url}')">
+            <i class="fa-solid fa-share-nodes"></i> Share\u2026
+        </div>` : ''}
+    `;
+
+    document.body.appendChild(menu);
+
+    // Position below the button, aligned to its right edge
+    const rect = btn.getBoundingClientRect();
+    menu.style.top = (rect.bottom + window.scrollY + 6) + 'px';
+    menu.style.right = (document.documentElement.clientWidth - rect.right) + 'px';
+
+    // Close on outside click (defer so this click doesn't immediately close it)
+    setTimeout(() => document.addEventListener('click', _shareMenuOutsideClick), 0);
+}
+
+function _shareMenuOutsideClick(e) {
+    const menu = document.getElementById('shareMenu');
+    if (menu && !menu.contains(e.target)) {
+        closeShareMenu();
+    }
+}
+
+function closeShareMenu() {
+    document.removeEventListener('click', _shareMenuOutsideClick);
+    const menu = document.getElementById('shareMenu');
+    if (menu) menu.remove();
+}
+
+async function copyExpenseLink(url) {
+    closeShareMenu();
+    try {
+        await navigator.clipboard.writeText(url);
+        toast('Link copied!', 'success');
+    } catch {
+        toast('Could not copy link', 'error');
+    }
+}
+
+async function nativeShareExpense(url) {
+    closeShareMenu();
+    try {
+        await navigator.share({ title: 'Expense', url });
+    } catch (err) {
+        if (err.name !== 'AbortError') toast('Share failed', 'error');
+    }
 }
 
 function expenseForm(e, id) {
