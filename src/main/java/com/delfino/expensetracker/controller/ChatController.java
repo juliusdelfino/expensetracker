@@ -46,7 +46,7 @@ public class ChatController {
             for (Long expId : botReply.getLinkedExpenseIds()) {
                 expenseRepository.findById(expId).ifPresent(e -> {
                     Map<String, Object> card = new LinkedHashMap<>();
-                    card.put("id", e.getUrlId());
+                    card.put("id", e.getId());
                     card.put("urlId", e.getUrlId());
                     card.put("amount", e.getAmount());
                     card.put("currency", e.getCurrency());
