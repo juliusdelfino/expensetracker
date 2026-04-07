@@ -2,6 +2,7 @@ package com.delfino.expensetracker.controller;
 
 import com.delfino.expensetracker.model.User;
 import com.delfino.expensetracker.repository.UserRepository;
+import com.delfino.expensetracker.service.SupportedCurrencyService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -9,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.Map;
-import java.util.UUID;
+
 
 @RestController
 @RequestMapping("/api/user")
@@ -17,15 +18,17 @@ public class UserController {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final SupportedCurrencyService supportedCurrencyService;
 
-    public UserController(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserController(UserRepository userRepository, PasswordEncoder passwordEncoder, SupportedCurrencyService supportedCurrencyService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.supportedCurrencyService = supportedCurrencyService;
     }
 
     @PutMapping("/profile")
     public ResponseEntity<?> updateProfile(@RequestBody Map<String, String> body, HttpSession session) {
-        UUID userId = getUserId(session);
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
 
         User user = userRepository.findById(userId).orElse(null);
@@ -33,7 +36,13 @@ public class UserController {
 
         if (body.containsKey("email")) user.setEmail(body.get("email"));
         if (body.containsKey("phoneNumber")) user.setPhoneNumber(body.get("phoneNumber"));
-        if (body.containsKey("baseCurrency")) user.setBaseCurrency(body.get("baseCurrency"));
+        if (body.containsKey("baseCurrency")) {
+            String bc = body.get("baseCurrency");
+            if (bc != null && !bc.isBlank() && !supportedCurrencyService.isSupported(bc)) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Unsupported base currency: " + bc));
+            }
+            user.setBaseCurrency(bc);
+        }
         if (body.containsKey("baseCity")) user.setBaseCity(body.get("baseCity"));
         if (body.containsKey("baseCountry")) user.setBaseCountry(body.get("baseCountry"));
         if (body.containsKey("password") && !body.get("password").isBlank()) {
@@ -45,9 +54,7 @@ public class UserController {
         return ResponseEntity.ok(Map.of("message", "Profile updated"));
     }
 
-    private UUID getUserId(HttpSession session) {
-        String id = (String) session.getAttribute("userId");
-        return id != null ? UUID.fromString(id) : null;
+    private Long getUserId(HttpSession session) {
+        return (Long) session.getAttribute("userId");
     }
 }
-

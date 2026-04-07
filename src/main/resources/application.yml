@@ -13,8 +13,9 @@ app:
 
 ocr:
   api:
-    url: http://localhost:11434/api/generate
-    model: glm-ocr
+    url: https://gpt.jdelfino.com/ollama/api/generate
+    model: qwen3.5:cloud
+    api-key: ${LLM_API_KEY:}  # Set via LLM_API_KEY environment variable or override here
     prompt: >
       Parse this receipt image/PDF and return a JSON object with these exact fields:
       {"transactionDatetime":"ISO 8601 yyyy-MM-ddTHH:mm:ss","amount":0,"currency":"ISO 4217 code",
@@ -26,6 +27,7 @@ ocr:
 
 chatbot:
   api:
+    api-key: ${LLM_API_KEY:}  # Set via LLM_API_KEY environment variable or override here
     system-prompt: >
       You are an expense tracking assistant. Today's date is {today}. The user's base currency is {currency}.
 
@@ -59,7 +61,9 @@ spring:
       fail-on-unknown-properties: false
   ai:
     ollama:
-      base-url: http://localhost:11434
+      base-url: https://gpt.jdelfino.com/ollama
+      # api-key is not a real OllamaConnectionProperties field and would be silently ignored.
+      # The key is injected via the custom OllamaApi bean in AiConfig, sourced from chatbot.api.api-key.
       chat:
         options:
           model: qwen3.5:cloud
@@ -80,4 +84,36 @@ spring:
     multipart:
       max-file-size: 50MB
       max-request-size: 50MB
+
+currencies:
+  AUD: "Australian Dollar"
+  BRL: "Brazilian Real"
+  CAD: "Canadian Dollar"
+  CHF: "Swiss Franc"
+  CNY: "Chinese Renminbi Yuan"
+  CZK: "Czech Koruna"
+  DKK: "Danish Krone"
+  EUR: "Euro"
+  GBP: "British Pound"
+  HKD: "Hong Kong Dollar"
+  HUF: "Hungarian Forint"
+  IDR: "Indonesian Rupiah"
+  ILS: "Israeli New Shekel"
+  INR: "Indian Rupee"
+  ISK: "Icelandic Króna"
+  JPY: "Japanese Yen"
+  KRW: "South Korean Won"
+  MXN: "Mexican Peso"
+  MYR: "Malaysian Ringgit"
+  NOK: "Norwegian Krone"
+  NZD: "New Zealand Dollar"
+  PHP: "Philippine Peso"
+  PLN: "Polish Złoty"
+  RON: "Romanian Leu"
+  SEK: "Swedish Krona"
+  SGD: "Singapore Dollar"
+  THB: "Thai Baht"
+  TRY: "Turkish Lira"
+  USD: "United States Dollar"
+  ZAR: "South African Rand"
 

@@ -1,5 +1,6 @@
 package com.delfino.expensetracker.service;
 
+import com.delfino.expensetracker.config.ChatBotProperties;
 import com.delfino.expensetracker.model.ChatMessage;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.User;
@@ -12,7 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.tool.ToolCallbackProvider;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -32,19 +33,19 @@ public class ChatService {
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
     private final ChatClient chatClient;
-
-    @Value("${chatbot.api.system-prompt:You are an expense tracking assistant.}")
-    private String systemPrompt;
+    private final ChatBotProperties chatBotProperties;
 
     public ChatService(ChatMessageRepository chatMessageRepository, ExpenseService expenseService,
                        ExpenseRepository expenseRepository, UserRepository userRepository,
                        ObjectMapper objectMapper, ChatClient.Builder chatClientBuilder,
-                       ToolCallbackProvider toolCallbackProvider) {
+                       ToolCallbackProvider toolCallbackProvider,
+                       ChatBotProperties chatBotProperties) {
         this.chatMessageRepository = chatMessageRepository;
         this.expenseService = expenseService;
         this.expenseRepository = expenseRepository;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
+        this.chatBotProperties = chatBotProperties;
 
         // Build the ChatClient with all registered tool callbacks
         this.chatClient = chatClientBuilder
@@ -52,30 +53,22 @@ public class ChatService {
                 .build();
     }
 
-    public List<ChatMessage> getHistory(UUID userId, int limit) {
-        List<ChatMessage> recent = chatMessageRepository.findTop50ByUserIdOrderByCreatedAtDesc(userId);
-        List<ChatMessage> result = new ArrayList<>(recent);
-        Collections.reverse(result);
-        return result;
-    }
-
-    public List<ChatMessage> getHistoryPage(UUID userId, int limit, int offset) {
+    public List<ChatMessage> getHistoryPage(Long userId, int limit, int offset) {
         // Fetch newest-first with offset, then reverse to get chronological order
-        var pageable = org.springframework.data.domain.PageRequest.of(offset / limit, limit);
+        var pageable = PageRequest.of(offset / limit, limit);
         List<ChatMessage> page = chatMessageRepository.findByUserIdPageable(userId, pageable);
         List<ChatMessage> result = new ArrayList<>(page);
         Collections.reverse(result);
         return result;
     }
 
-    public long countHistory(UUID userId) {
+    public long countHistory(Long userId) {
         return chatMessageRepository.countByUserId(userId);
     }
 
-    public ChatMessage processUserMessage(UUID userId, String messageText) {
+    public ChatMessage processUserMessage(Long userId, String messageText) {
         // Save user message
         ChatMessage userMsg = new ChatMessage();
-        userMsg.setId(UUID.randomUUID());
         userMsg.setUserId(userId);
         userMsg.setRole("USER");
         userMsg.setText(messageText);
@@ -86,7 +79,7 @@ public class ChatService {
                 .map(User::getBaseCurrency).orElse("USD");
 
         try {
-            String resolvedSystemPrompt = systemPrompt
+            String resolvedSystemPrompt = chatBotProperties.getSystemPrompt()
                     .replace("{today}", LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE))
                     .replace("{currency}", baseCurrency);
 
@@ -105,7 +98,7 @@ public class ChatService {
 
             // Try to parse as JSON (expense-creation flow) — the LLM may still return
             // structured JSON when the user wants to log new expenses.
-            List<UUID> savedExpenseIds = new ArrayList<>();
+            List<Long> savedExpenseIds = new ArrayList<>();
             String botText = llmResponse;
 
             if (looksLikeExpenseJson(llmResponse)) {
@@ -200,9 +193,8 @@ public class ChatService {
         return cleaned;
     }
 
-    private ChatMessage saveBotMessage(UUID userId, String text, List<UUID> linkedExpenseIds) {
+    private ChatMessage saveBotMessage(Long userId, String text, List<Long> linkedExpenseIds) {
         ChatMessage botMsg = new ChatMessage();
-        botMsg.setId(UUID.randomUUID());
         botMsg.setUserId(userId);
         botMsg.setRole("BOT");
         botMsg.setText(text);

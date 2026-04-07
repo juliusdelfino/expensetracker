@@ -114,7 +114,7 @@ function buildChatBubble(role, text, linkedExpenseIds, timestamp) {
         const cardsHtml = linkedExpenseIds.map(id => {
             const exp = chatExpenseMap[id];
             if (!exp) return '';
-            return `<a href="#/expenses/${exp.id}" class="chat-expense-card" onclick="hideMobileUI()">
+            return `<a href="#/expenses/${exp.urlId}" class="chat-expense-card" onclick="hideMobileUI()">
                 <div class="chat-card-icon"><i class="fa-solid fa-${categoryIcon(exp.category)}"></i></div>
                 <div class="chat-card-info">
                     <div class="chat-card-cat">${exp.category || 'Expense'}</div>

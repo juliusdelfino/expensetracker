@@ -543,7 +543,7 @@ async function renderRecentExpenses(elementId, count) {
     if (allExpenses && Array.isArray(allExpenses)) {
         const recent = allExpenses.slice(0, count);
         el.innerHTML = recent.length ? recent.map(e => `
-            <a href="#/expenses/${e.id}" class="expense-mini-card">
+            <a href="#/expenses/${e.urlId}" class="expense-mini-card">
                 <div class="mini-card-icon"><i class="fa-solid fa-${categoryIcon(e.category)}"></i></div>
                 <div class="mini-card-info">
                     <div class="mini-card-category">${e.displayName || e.category || 'Uncategorized'}</div>
@@ -618,7 +618,7 @@ function renderTopExpenses(elementId, topExpenses) {
         const baseAmt = e.amountInBase != null ? Number(e.amountInBase).toFixed(2) : (e.amount != null ? Number(e.amount).toFixed(2) : '-');
         const origAmt = e.amount != null ? Number(e.amount).toFixed(2) : '-';
         const sameAsCur = e.currency === baseCur;
-        return `<a href="#/expenses/${e.id}" class="top-expense-card">
+        return `<a href="#/expenses/${e.urlId}" class="top-expense-card">
             <span class="rank-badge">${i + 1}</span>
             <div class="top-expense-info">
                 <div class="top-expense-name">${e.displayName || e.category || 'Uncategorized'}</div>
@@ -756,7 +756,7 @@ function appendDiscoveryBatch(containerId, cards, count) {
                     const base = e.amountInBase != null ? Number(e.amountInBase).toFixed(2) : (e.amount != null ? Number(e.amount).toFixed(2) : '-');
                     const orig = (e.currency && e.currency !== baseCur && e.amount != null)
                         ? ` <span class="discovery-exp-orig">(${Number(e.amount).toFixed(2)} ${e.currency})</span>` : '';
-                    return `<a href="#/expenses/${e.id}" class="discovery-exp-row">
+                    return `<a href="#/expenses/${e.urlId}" class="discovery-exp-row">
                         <span class="discovery-exp-name">${e.displayName || 'Expense'}</span>
                         <span class="discovery-exp-amount">${base} ${baseCur}${orig}</span>
                     </a>`;

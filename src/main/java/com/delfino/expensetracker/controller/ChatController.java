@@ -27,7 +27,7 @@ public class ChatController {
 
     @PostMapping
     public ResponseEntity<?> sendMessage(@RequestBody Map<String, String> body, HttpSession session) {
-        UUID userId = getUserId(session);
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
 
         // Set the user context so @Tool methods can access the authenticated userId
@@ -43,10 +43,11 @@ public class ChatController {
         // Enrich response with linked expense details
         List<Map<String, Object>> expenseCards = new ArrayList<>();
         if (botReply.getLinkedExpenseIds() != null) {
-            for (UUID expId : botReply.getLinkedExpenseIds()) {
+            for (Long expId : botReply.getLinkedExpenseIds()) {
                 expenseRepository.findById(expId).ifPresent(e -> {
                     Map<String, Object> card = new LinkedHashMap<>();
-                    card.put("id", e.getId().toString());
+                    card.put("id", e.getId());
+                    card.put("urlId", e.getUrlId());
                     card.put("amount", e.getAmount());
                     card.put("currency", e.getCurrency());
                     card.put("category", e.getCategory());
@@ -68,7 +69,7 @@ public class ChatController {
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(defaultValue = "0") int offset,
             HttpSession session) {
-        UUID userId = getUserId(session);
+        Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
 
         // Fetch newest-first with offset, then reverse to get chronological order
@@ -78,20 +79,21 @@ public class ChatController {
         boolean hasMore = (offset + limit) < total;
 
         // Collect all linked expense IDs and fetch them for card rendering
-        Set<UUID> allExpenseIds = page.stream()
+        Set<Long> allExpenseIds = page.stream()
                 .filter(m -> m.getLinkedExpenseIds() != null)
                 .flatMap(m -> m.getLinkedExpenseIds().stream())
                 .collect(Collectors.toSet());
 
         Map<String, Map<String, Object>> expenseMap = new LinkedHashMap<>();
-        for (UUID expId : allExpenseIds) {
+        for (Long expId : allExpenseIds) {
             expenseRepository.findById(expId).ifPresent(e -> {
                 Map<String, Object> card = new LinkedHashMap<>();
-                card.put("id", e.getId().toString());
+                card.put("id", e.getId());
                 card.put("amount", e.getAmount());
                 card.put("currency", e.getCurrency());
                 card.put("category", e.getCategory());
                 card.put("notes", e.getNotes());
+                card.put("urlId", e.getUrlId());
                 card.put("transactionDatetime", e.getTransactionDatetime());
                 expenseMap.put(expId.toString(), card);
             });
@@ -105,9 +107,8 @@ public class ChatController {
         return ResponseEntity.ok(result);
     }
 
-    private UUID getUserId(HttpSession session) {
-        String id = (String) session.getAttribute("userId");
-        return id != null ? UUID.fromString(id) : null;
+    private Long getUserId(HttpSession session) {
+        return (Long) session.getAttribute("userId");
     }
 }
 

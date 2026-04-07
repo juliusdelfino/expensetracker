@@ -135,7 +135,20 @@
         touch-action: pinch-zoom;
     }
 
+
     /* Hide lat/lon fields on mobile (map is shown instead) */
     .store-latlng-fields { display: none !important; }
+
+    /* Edit Expense Details dialog: compact mobile layout
+       Mobile: Date (full-width narrow), then Category|Amount, then Currency|ExRate */
+    .exp-dlg-fields-grid {
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas:
+            "date date"
+            "cat  amt"
+            "curr exr";
+        gap: 0.5rem;
+    }
+    .exp-dlg-f-date { max-width: 190px; }
 }
 

@@ -3,7 +3,7 @@ package com.delfino.expensetracker.config;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.annotation.RequestScope;
 
-import java.util.UUID;
+
 
 /**
  * Request-scoped bean that carries the authenticated userId
@@ -14,13 +14,13 @@ import java.util.UUID;
 @RequestScope
 public class UserContext {
 
-    private UUID userId;
+    private Long userId;
 
-    public UUID getUserId() {
+    public Long getUserId() {
         return userId;
     }
 
-    public void setUserId(UUID userId) {
+    public void setUserId(Long userId) {
         this.userId = userId;
     }
 }

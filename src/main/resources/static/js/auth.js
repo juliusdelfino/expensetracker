@@ -62,12 +62,13 @@ function renderRegister(app) {
                 </div>
                 <div class="form-group">
                     <label>Base Currency</label>
-                    <select class="form-control" id="regCurrency">
-                        <option value="USD">USD</option><option value="EUR">EUR</option>
-                        <option value="GBP">GBP</option><option value="SGD">SGD</option>
-                        <option value="JPY">JPY</option><option value="AUD">AUD</option>
-                        <option value="CAD">CAD</option><option value="CHF">CHF</option>
-                    </select>
+                    <input type="text" class="form-control" id="regCurrency" list="regCurrencyList" placeholder="e.g. USD">
+                    <datalist id="regCurrencyList">
+                        <option value="USD"></option><option value="EUR"></option>
+                        <option value="GBP"></option><option value="SGD"></option>
+                        <option value="JPY"></option><option value="AUD"></option>
+                        <option value="CAD"></option><option value="CHF"></option>
+                    </datalist>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%">
                     <i class="fa-solid fa-user-plus"></i> Register
@@ -88,6 +89,18 @@ function renderRegister(app) {
         if (data && data.userId) { toast('Registration successful! Please login.', 'success'); navigate('#/login'); }
         else toast(data?.error || 'Registration failed', 'error');
     };
+
+    // Populate currency datalist for register form
+    (async () => {
+        try {
+            const map = await api('/api/currencies');
+            if (map) {
+                const codes = Object.keys(map).sort();
+                const dl = document.getElementById('regCurrencyList');
+                if (dl) dl.innerHTML = codes.map(c => `<option value="${c}"></option>`).join('');
+            }
+        } catch (err) { /* ignore */ }
+    })();
 }
 
 async function renderProfile(app) {
@@ -115,9 +128,10 @@ async function renderProfile(app) {
                     <div class="form-row-3">
                         <div class="form-group">
                             <label>Base Currency</label>
-                            <select class="form-control" id="pCurrency">
-                                ${['USD','EUR','GBP','SGD','JPY','AUD','CAD','CHF'].map(c => `<option value="${c}" ${c===user.baseCurrency?'selected':''}>${c}</option>`).join('')}
-                            </select>
+                            <input type="text" class="form-control" id="pCurrency" list="pCurrencyList" value="${user.baseCurrency || ''}">
+                            <datalist id="pCurrencyList">
+                                ${['USD','EUR','GBP','SGD','JPY','AUD','CAD','CHF'].map(c => `<option value="${c}"></option>`).join('')}
+                            </datalist>
                         </div>
                         <div class="form-group">
                             <label>Base City</label>
@@ -170,6 +184,21 @@ async function renderProfile(app) {
         toast('Profile updated!', 'success');
         await checkAuth();
     };
+
+    // Populate currency datalist for profile (pCurrency)
+    (async () => {
+        try {
+            const map = await api('/api/currencies');
+            if (map) {
+                const codes = Object.keys(map).sort();
+                const dl = document.getElementById('pCurrencyList');
+                if (dl) dl.innerHTML = codes.map(c => `<option value="${c}"></option>`).join('');
+                // ensure input value shows user's current baseCurrency
+                const inp = document.getElementById('pCurrency');
+                if (inp && inp.value === '') inp.value = user.baseCurrency || '';
+            }
+        } catch (err) { /* ignore */ }
+    })();
 }
 
 function updateThemeBtns() {
@@ -186,4 +215,3 @@ function updateThemeBtns() {
         );
     });
 }
-

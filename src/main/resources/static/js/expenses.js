@@ -167,7 +167,7 @@ function renderExpenseTable() {
         const failTitle = isFailed && e.notes ? esc(e.notes).replace(/"/g, '&quot;') : '';
         let rows = `
         <tr class="${e.deleted ? 'deleted' : ''} expense-row ${isFailed ? 'row-failed' : ''}"
-            onclick="navigate('#/expenses/${e.id}')"
+            onclick="navigate('#/expenses/${e.urlId}')"
             ${isFailed ? `title="${failTitle}"` : ''}>
             <td class="td-status">${statusBadge(e.status)}</td>
             <td>${e.transactionDatetime ? new Date(e.transactionDatetime).toLocaleDateString() : '-'}</td>
@@ -175,10 +175,10 @@ function renderExpenseTable() {
             <td class="amount-primary">${e.amount != null ? Number(e.amount).toFixed(2) : '-'} ${e.currency || ''}</td>
             <td class="amount-secondary">${e.amountInBase != null ? Number(e.amountInBase).toFixed(2) + ' ' + (currentUser?.baseCurrency||'') : '-'}</td>
             <td class="td-actions" onclick="event.stopPropagation()">
-                ${e.deleted ? `<button class="btn btn-success btn-sm btn-icon" onclick="restoreExpense('${e.id}')"><i class="fa-solid fa-rotate-left"></i></button>` : `
-                    <button class="btn btn-secondary btn-sm btn-icon" onclick="duplicateExpense('${e.id}')"><i class="fa-solid fa-copy"></i></button>
-                    ${isFailed ? `<button class="btn btn-secondary btn-sm btn-icon" onclick="retryExpense('${e.id}')"><i class="fa-solid fa-rotate"></i></button>` : ''}
-                    <button class="btn btn-danger btn-sm btn-icon" onclick="deleteExpense('${e.id}')"><i class="fa-solid fa-trash"></i></button>
+                ${e.deleted ? `<button class="btn btn-success btn-sm btn-icon" onclick="restoreExpense('${e.urlId}')"><i class="fa-solid fa-rotate-left"></i></button>` : `
+                    <button class="btn btn-secondary btn-sm btn-icon" onclick="duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i></button>
+                    ${isFailed ? `<button class="btn btn-secondary btn-sm btn-icon" onclick="retryExpense('${e.urlId}')"><i class="fa-solid fa-rotate"></i></button>` : ''}
+                    <button class="btn btn-danger btn-sm btn-icon" onclick="deleteExpense('${e.urlId}')"><i class="fa-solid fa-trash"></i></button>
                 `}
             </td>
         </tr>`;
@@ -186,7 +186,7 @@ function renderExpenseTable() {
         if (e.matchingItems && e.matchingItems.length > 0) {
             for (const item of e.matchingItems) {
                 rows += `
-                <tr class="item-child-row" onclick="navigate('#/expenses/${e.id}')">
+                <tr class="item-child-row" onclick="navigate('#/expenses/${e.urlId}')">
                     <td></td>
                     <td></td>
                     <td class="td-description item-child-name"><i class="fa-solid fa-arrow-turn-up fa-rotate-90" style="font-size:0.65rem; opacity:0.4; margin-right:0.3rem;"></i> ${esc(item.itemName)}</td>
@@ -268,7 +268,7 @@ async function restoreExpense(id) {
 }
 async function duplicateExpense(id) {
     const copy = await api(`/api/expenses/${id}/duplicate`, { method: 'POST' });
-    if (copy && copy.id) { toast('Expense duplicated', 'success'); navigate('#/expenses/' + copy.id); }
+    if (copy && copy.id) { toast('Expense duplicated', 'success'); navigate('#/expenses/' + copy.urlId); }
 }
 async function retryExpense(id) {
     await api(`/api/expenses/${id}/retry`, { method: 'POST' });
@@ -339,12 +339,13 @@ function renderNewExpense(app, embedded = false) {
                         <div class="form-row-3">
                             <div class="form-group">
                                 <label>Currency</label>
-                                <select class="form-control" id="mCurrency">
-                                    <option value="USD">USD</option><option value="EUR">EUR</option>
-                                    <option value="GBP">GBP</option><option value="SGD">SGD</option>
-                                    <option value="JPY">JPY</option><option value="AUD">AUD</option>
-                                    <option value="CAD">CAD</option><option value="CHF">CHF</option>
-                                </select>
+                                <input type="text" class="form-control" id="mCurrency" list="mCurrencyList" placeholder="e.g. USD">
+                                <datalist id="mCurrencyList">
+                                    <option value="USD"></option><option value="EUR"></option>
+                                    <option value="GBP"></option><option value="SGD"></option>
+                                    <option value="JPY"></option><option value="AUD"></option>
+                                    <option value="CAD"></option><option value="CHF"></option>
+                                </datalist>
                             </div>
                             <div class="form-group">
                                 <label>Exchange Rate</label>
@@ -414,6 +415,25 @@ function renderNewExpense(app, embedded = false) {
         if (dl) dl.innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
     })();
 
+    // Populate currency datalists from server
+    (async () => {
+        try {
+            const map = await api('/api/currencies');
+            if (map) {
+                const codes = Object.keys(map).sort();
+                const mdl = document.getElementById('mCurrencyList');
+                if (mdl) mdl.innerHTML = codes.map(c => `<option value="${c}"></option>`).join('');
+                const edl = document.getElementById('eCurrencyList');
+                if (edl) edl.innerHTML = codes.map(c => `<option value="${c}"></option>`).join('');
+                // If currentUser has baseCurrency, ensure mCurrency default set earlier still works
+                const currSel = document.getElementById('mCurrency');
+                if (currSel && currentUser?.baseCurrency && !currSel.value) currSel.value = currentUser.baseCurrency;
+            }
+        } catch (err) {
+            // ignore
+        }
+    })();
+
     let tags = [];
     document.getElementById('mTagInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -445,11 +465,11 @@ function renderNewExpense(app, embedded = false) {
                 const files = fileInput.files;
                 for (let f of files) {
                     const fd = new FormData(); fd.append('file', f);
-                    await api(`/api/expenses/${saved.id}/attachments`, { method: 'POST', body: fd });
+                    await api(`/api/expenses/${saved.urlId}/attachments`, { method: 'POST', body: fd });
                 }
             }
             toast('Expense created!', 'success');
-            navigate('#/expenses/' + saved.id);
+            navigate('#/expenses/' + saved.urlId);
         } else {
             toast('Failed to create expense', 'error');
         }
@@ -513,7 +533,7 @@ async function uploadReceipt() {
     const result = await api('/api/expenses/scan', { method: 'POST', body: fd });
     if (result && result.id) {
         toast('Receipt uploaded! Processing...', 'info');
-        navigate('#/expenses/' + result.id);
+        navigate('#/expenses/' + result.urlId);
     } else {
         statusEl.innerHTML = '<div class="badge badge-failed"><i class="fa-solid fa-xmark"></i> Upload failed</div>';
         toast('Upload failed', 'error');
@@ -619,7 +639,7 @@ function captureSubmit() {
         const result = await api('/api/expenses/scan', { method: 'POST', body: fd });
         if (result && result.id) {
             toast('Photo captured & uploaded! Processing...', 'info');
-            navigate('#/expenses/' + result.id);
+            navigate('#/expenses/' + result.urlId);
         } else {
             statusEl.innerHTML = '<div class="badge badge-failed"><i class="fa-solid fa-xmark"></i> Upload failed</div>';
             toast('Upload failed', 'error');
@@ -637,18 +657,30 @@ function captureCancel() {
 // EXPENSE DETAIL
 // ============================================
 async function renderExpenseDetail(app, id) {
-    const data = await api(`/api/expenses/${id}`);
-    if (!data || !data.expense) { toast('Expense not found', 'error'); navigate('#/expenses'); return; }
+    const data = await api(`/api/expenses/${id}`, { noAuthRedirect: true });
+    if (!data || !data.expense) {
+        app.innerHTML = `<div class="container"><div class="card" style="text-align:center; padding:2rem;">
+            <i class="fa-solid fa-receipt" style="font-size:2rem; color:var(--text-light)"></i>
+            <p style="margin-top:1rem">Expense not found.</p>
+            ${currentUser
+                ? `<a href="#/expenses" class="btn btn-outline" style="margin-top:1rem;"><i class="fa-solid fa-arrow-left"></i> Back to Expenses</a>`
+                : `<a href="#/login" class="btn btn-primary" style="margin-top:1rem;"><i class="fa-solid fa-right-to-bracket"></i> Login</a>`}
+        </div></div>`;
+        return;
+    }
     const e = data.expense;
     const items = data.items || [];
     const store = data.store;
+    const isOwner = !!data.isOwner;
+    window._expenseIsOwner = isOwner;
+
     const isReceiptScan = e.type === 'RECEIPT_SCAN';
     const isCompleted = e.status === 'COMPLETED';
     const isProcessing = e.status === 'PROCESSING';
     const isFailed = e.status === 'FAILED';
 
-    // Load categories for dropdown (always fresh from dedicated endpoint)
-    if (!window._allExpenseCategories || window._allExpenseCategories.length === 0) {
+    // Load categories for dropdown (only needed when editing as owner)
+    if (isOwner && (!window._allExpenseCategories || window._allExpenseCategories.length === 0)) {
         window._allExpenseCategories = (await api('/api/expenses/categories')) || [];
     }
 
@@ -659,9 +691,10 @@ async function renderExpenseDetail(app, id) {
                 <span class="badge badge-${(e.status||'').toLowerCase()}">${statusIcon(e.status)} ${e.status}</span>
             </div>
             <div class="action-bar-right">
-                ${isFailed ? `<button class="btn btn-secondary btn-sm" onclick="retryExpense('${e.id}'); setTimeout(()=>location.reload(),500)"><i class="fa-solid fa-rotate"></i> Retry</button>` : ''}
-                <button class="btn btn-secondary btn-sm" onclick="duplicateExpense('${e.id}')"><i class="fa-solid fa-copy"></i> Duplicate</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteExpense('${e.id}'); navigate('#/expenses')"><i class="fa-solid fa-trash"></i> Delete</button>
+                ${isOwner && isFailed ? `<button class="btn btn-secondary btn-sm" onclick="retryExpense('${e.urlId}'); setTimeout(()=>location.reload(),500)"><i class="fa-solid fa-rotate"></i> Retry</button>` : ''}
+                <button class="btn btn-outline btn-sm" onclick="openShareMenu('${e.urlId}', this)"><i class="fa-solid fa-share-nodes"></i> Share</button>
+                ${isOwner ? `<button class="btn btn-secondary btn-sm" onclick="duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i> Duplicate</button>` : ''}
+                ${isOwner ? `<button class="btn btn-danger btn-sm" onclick="deleteExpense('${e.urlId}'); navigate('#/expenses')"><i class="fa-solid fa-trash"></i> Delete</button>` : ''}
             </div>
         </div>`;
 
@@ -669,7 +702,7 @@ async function renderExpenseDetail(app, id) {
         html += `<div class="card" style="text-align:center; padding:3rem">
             <i class="fa-solid fa-spinner fa-spin" style="font-size:3rem; color:var(--aegean-mid)"></i>
             <p style="margin-top:1rem; color:var(--text-light)">Processing receipt... This may take 2-3 minutes.</p>
-            <button class="btn btn-primary" style="margin-top:1rem" onclick="renderExpenseDetail(document.getElementById('app'),'${e.id}')">
+            <button class="btn btn-primary" style="margin-top:1rem" onclick="renderExpenseDetail(document.getElementById('app'),'${e.urlId}')">
                 <i class="fa-solid fa-rotate"></i> Refresh
             </button>
         </div></div>`;
@@ -679,46 +712,31 @@ async function renderExpenseDetail(app, id) {
 
     if (isReceiptScan && isCompleted && e.imagePath) {
         const imgFilename = e.imagePath.replace(/\\/g, '/').split('/').pop();
+        const ext = (imgFilename.split('.').pop() || '').toLowerCase();
+        const isPdf = ext === 'pdf';
         html += `<div class="side-by-side">
             <div class="card">
-                <h3 class="card-title"><i class="fa-solid fa-image"></i> Scanned Receipt</h3>
-                <div class="receipt-zoom-container" id="receiptZoomContainer">
-                    <img src="/api/attachments/receipts/${imgFilename}" class="receipt-image" id="receiptImg" alt="Receipt">
-                </div>
+                <h3 class="card-title"><i class="fa-solid ${isPdf ? 'fa-file-pdf' : 'fa-image'}"></i> Scanned Receipt</h3>
+                ${isPdf ? `
+                    <iframe src="/pdfjs-5.6.205-dist/web/viewer.html?file=/api/attachments/receipts/${imgFilename}" style="width:100%; height:600px; border:0;"></iframe>
+                ` : `
+                    <div class="receipt-zoom-container" id="receiptZoomContainer">
+                        <img src="/api/attachments/receipts/${imgFilename}" class="receipt-image" id="receiptImg" alt="Receipt">
+                    </div>
+                `}
             </div>
             <div class="card">
-                <h3 class="card-title"><i class="fa-solid fa-edit"></i> Parsed Data</h3>
-                ${expenseForm(e, id)}
+                <h3 class="card-title"><i class="fa-solid fa-receipt"></i> Parsed Data</h3>
+                ${renderReceiptView(e, items, store, id, isOwner)}
             </div>
         </div>`;
     } else {
+        // Manual entries and incomplete/failed scans: use receipt view (no scanned image card)
         html += `<div class="card">
-            <h3 class="card-title"><i class="fa-solid fa-edit"></i> Expense Details</h3>
-            ${expenseForm(e, id)}
+            <h3 class="card-title"><i class="fa-solid fa-receipt"></i> Parsed Data</h3>
+            ${renderReceiptView(e, items, store, id, isOwner)}
         </div>`;
     }
-
-    // Items section: read-only clickable rows
-    const activeItems = items.filter(i => !i.deleted);
-    html += `<div class="card">
-        <h3 class="card-title"><i class="fa-solid fa-list"></i> Items</h3>
-        <div class="items-list" id="itemsList">
-            ${activeItems.length ? activeItems.map(i => `
-            <div class="item-row" onclick="openItemDialog('${id}','${i.id}','${esc(i.itemName).replace(/'/g,"\\'")}',${i.quantity},${i.unitPrice},${i.totalPrice != null ? i.totalPrice : 0})">
-                <div class="item-row-name">${esc(i.itemName)}</div>
-                <div class="item-row-detail">
-                    <span class="item-row-qty">\u00d7${Number(i.quantity).toFixed(i.quantity % 1 === 0 ? 0 : 2)}</span>
-                    <span class="item-row-unit">@ ${Number(i.unitPrice).toFixed(2)}</span>
-                    <span class="item-row-total amount-primary">${i.totalPrice != null ? Number(i.totalPrice).toFixed(2) : '-'}</span>
-                </div>
-            </div>`).join('') : '<p style="color:var(--text-light); text-align:center; padding:0.75rem 0;">No items</p>'}
-        </div>
-        <div style="margin-top:0.75rem">
-            <button class="btn btn-outline btn-sm" onclick="openItemDialog('${id}')"><i class="fa-solid fa-plus"></i> Add Item</button>
-        </div>
-    </div>`;
-
-    html += renderStoreReadOnly(store, id);
 
     const attachments = e.attachments || [];
     html += `<div class="card">
@@ -728,17 +746,18 @@ async function renderExpenseDetail(app, id) {
                 const fname = a.replace(/\\/g, '/').split('/').pop();
                 return `<li>
                     <a href="/api/attachments/${e.id}/${fname}" target="_blank"><i class="fa-solid fa-file"></i> ${fname}</a>
-                    <button class="btn btn-danger btn-sm btn-icon" onclick="removeAttachment('${e.id}','${fname}')"><i class="fa-solid fa-xmark"></i></button>
+                    ${isOwner ? `<button class="btn btn-danger btn-sm btn-icon" onclick="removeAttachment('${e.id}','${fname}')"><i class="fa-solid fa-xmark"></i></button>` : ''}
                 </li>`;
             }).join('')}
         </ul>
-        <div style="margin-top:0.75rem">
+        ${isOwner ? `<div style="margin-top:0.75rem">
             <input type="file" id="newAttachment" multiple>
             <button class="btn btn-outline btn-sm" onclick="uploadAttachments('${e.id}')"><i class="fa-solid fa-upload"></i> Upload</button>
-        </div>
+        </div>` : ''}
     </div>`;
 
     // Other Details collapsed section
+    const storeHasMap = (store?.latitude != null && store?.longitude != null) || store?.name;
     html += `<div class="card">
         <div class="expand-toggle" onclick="toggleOtherDetails()">
             <i class="fa-solid fa-chevron-down" id="otherDetailsIcon"></i>
@@ -764,6 +783,10 @@ async function renderExpenseDetail(app, id) {
                     <span class="other-detail-label">Updated</span>
                     <span>${new Date(e.updatedAt).toLocaleString()}</span>
                 </div>` : ''}
+                ${storeHasMap ? `<div class="other-detail-row">
+                    <span class="other-detail-label"><i class="fa-solid fa-map-location-dot" style="color:var(--aegean-mid); margin-right:0.25rem;"></i> Store location</span>
+                </div>
+                <div id="storeOtherDetailsMap" style="height:200px; border-radius:var(--radius); margin-top:0.4rem; border:1px solid var(--border-color);"></div>` : ''}
             </div>
         </div>
     </div>`;
@@ -771,79 +794,47 @@ async function renderExpenseDetail(app, id) {
     html += '</div>';
     app.innerHTML = html;
 
-    document.getElementById('expenseEditForm').onsubmit = async (ev) => {
-        ev.preventDefault();
-        const updates = {
-            transactionDatetime: document.getElementById('eDate').value + ':00',
-            amount: parseFloat(document.getElementById('eAmount').value),
-            currency: document.getElementById('eCurrency').value,
-            category: document.getElementById('eCategory').value,
-            receiptNumber: document.getElementById('eReceipt').value,
-            notes: document.getElementById('eNotes').value,
-            tags: window._editTags || []
+    const editForm = document.getElementById('expenseEditForm');
+    if (editForm) {
+        editForm.onsubmit = async (ev) => {
+            ev.preventDefault();
+            const updates = {
+                transactionDatetime: document.getElementById('eDate').value + ':00',
+                amount: parseFloat(document.getElementById('eAmount').value),
+                currency: document.getElementById('eCurrency').value,
+                category: document.getElementById('eCategory').value,
+                receiptNumber: document.getElementById('eReceipt').value,
+                notes: document.getElementById('eNotes').value,
+                tags: window._editTags || []
+            };
+            const exRate = document.getElementById('eExRate').value;
+            if (exRate) updates.exchangeRate = parseFloat(exRate);
+            const data = await api(`/api/expenses/${id}`, { method: 'PUT', body: updates });
+            if (data && data.error) toast(data.error, 'error');
+            else { toast('Expense updated!', 'success'); return; }
+            window._allExpenseCategories = null; // refresh category cache
+            renderExpenseDetail(app, id);
         };
-        const exRate = document.getElementById('eExRate').value;
-        if (exRate) updates.exchangeRate = parseFloat(exRate);
-        await api(`/api/expenses/${id}`, { method: 'PUT', body: updates });
-        toast('Expense updated!', 'success');
-        window._allExpenseCategories = null; // refresh category cache
-        renderExpenseDetail(app, id);
-    };
 
-    window._editTags = [...(e.tags || [])];
-    renderTags('eTagsContainer', 'eTagInput', window._editTags);
+        window._editTags = [...(e.tags || [])];
+        renderTags('eTagsContainer', 'eTagInput', window._editTags);
+    }
 
-    // Initialize store location map (read-only with tooltip)
-    initStoreReadOnlyMap(store);
+    // Initialize store location map in Other Details (read-only with tooltip)
+    initStoreOtherDetailsMap(store);
 
     // Initialize receipt image pinch-zoom
     initReceiptZoom();
 }
 
-function renderStoreReadOnly(store, expenseId) {
-    const name = store?.name || '';
-    const countryDisplay = store?.country ? (getCountryName(store.country)) : null;
-    const addressParts = [store?.address, store?.city, countryDisplay, store?.postalCode].filter(Boolean);
-    const addressStr = addressParts.join(', ') || '—';
-    const phone = store?.phoneNumber || '';
-    const website = store?.website || '';
-    const hasCoords = store?.latitude != null && store?.longitude != null;
-    const showMap = hasCoords || name;
-
-    return `<div class="card">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
-            <h3 class="card-title" style="margin-bottom:0"><i class="fa-solid fa-store"></i> Store</h3>
-            <button class="btn btn-outline btn-sm" onclick="openChangeStoreDialog('${expenseId}')">
-                <i class="fa-solid fa-pen-to-square"></i> Change Store
-            </button>
-        </div>
-        <div class="store-readonly-layout">
-            <div class="store-readonly-details">
-                <div class="store-readonly-row">
-                    <span class="store-readonly-label"><i class="fa-solid fa-shop"></i> Name</span>
-                    <span class="store-readonly-value">${esc(name) || '<span style="color:var(--text-light)">—</span>'}</span>
-                </div>
-                <div class="store-readonly-row">
-                    <span class="store-readonly-label"><i class="fa-solid fa-location-dot"></i> Address</span>
-                    <span class="store-readonly-value">${esc(addressStr)}</span>
-                </div>
-                <div class="store-readonly-row">
-                    <span class="store-readonly-label"><i class="fa-solid fa-phone"></i> Phone</span>
-                    <span class="store-readonly-value">${phone ? `<a href="tel:${esc(phone)}">${esc(phone)}</a>` : '<span style="color:var(--text-light)">—</span>'}</span>
-                </div>
-                <div class="store-readonly-row">
-                    <span class="store-readonly-label"><i class="fa-solid fa-globe"></i> Website</span>
-                    <span class="store-readonly-value">${website ? `<a href="${esc(website)}" target="_blank" rel="noopener">${esc(website)}</a>` : '<span style="color:var(--text-light)">—</span>'}</span>
-                </div>
-            </div>
-            ${showMap ? `<div class="store-readonly-map-wrap"><div id="storeReadOnlyMap"></div></div>` : ''}
-        </div>
-    </div>`;
-}
-
-function initStoreReadOnlyMap(store) {
-    const mapEl = document.getElementById('storeReadOnlyMap');
+function initStoreOtherDetailsMap(store) {
+    const mapEl = document.getElementById('storeOtherDetailsMap');
     if (!mapEl) return;
+
+    if (window._storeOtherDetailsMap) {
+        try { window._storeOtherDetailsMap.remove(); } catch(e) {}
+        window._storeOtherDetailsMap = null;
+    }
 
     const lat = store?.latitude || 0;
     const lng = store?.longitude || 0;
@@ -851,17 +842,17 @@ function initStoreReadOnlyMap(store) {
     const zoom = hasCoords ? 15 : 2;
     const name = store?.name || 'Store';
 
-    const map = L.map('storeReadOnlyMap', { scrollWheelZoom: false, dragging: true, zoomControl: true }).setView([lat, lng], zoom);
+    window._storeOtherDetailsMap = L.map('storeOtherDetailsMap', { scrollWheelZoom: false, dragging: true, zoomControl: true }).setView([lat, lng], zoom);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '\u00a9 OpenStreetMap'
-    }).addTo(map);
+    }).addTo(window._storeOtherDetailsMap);
 
     if (hasCoords) {
-        const marker = L.marker([lat, lng]).addTo(map);
+        const marker = L.marker([lat, lng]).addTo(window._storeOtherDetailsMap);
         marker.bindTooltip(name, { permanent: true, direction: 'top', offset: [0, -10] });
         marker.bindPopup(`<b>${name}</b>`);
     }
-    setTimeout(() => map.invalidateSize(), 300);
+    setTimeout(() => window._storeOtherDetailsMap && window._storeOtherDetailsMap.invalidateSize(), 300);
 }
 
 // ============================================
@@ -872,6 +863,7 @@ let _changeStoreMarker = null;
 let _nominatimTimer = null;
 
 async function openChangeStoreDialog(expenseId) {
+    if (!window._expenseIsOwner) return;
     // Fetch current store
     const data = await api(`/api/expenses/${expenseId}`);
     const store = data?.store || {};
@@ -903,7 +895,7 @@ async function openChangeStoreDialog(expenseId) {
                 <label>Address</label>
                 <input type="text" class="form-control" id="csAddress" value="${esc(store.address || '')}">
             </div>
-            <div class="form-row">
+            <div class="form-row-inline">
                 <div class="form-group">
                     <label>City</label>
                     <input type="text" class="form-control" id="csCity" value="${esc(store.city || '')}">
@@ -913,7 +905,7 @@ async function openChangeStoreDialog(expenseId) {
                     <input type="text" class="form-control" id="csCountry" value="${esc(store.country || '')}" placeholder="e.g. AT">
                 </div>
             </div>
-            <div class="form-row">
+            <div class="form-row-inline">
                 <div class="form-group">
                     <label>Postal Code</label>
                     <input type="text" class="form-control" id="csPostal" value="${esc(store.postalCode || '')}">
@@ -1200,6 +1192,10 @@ function toggleOtherDetails() {
         section.style.display = 'block';
         icon.className = 'fa-solid fa-chevron-up';
         label.textContent = 'Hide details';
+        // Invalidate store location map size after reveal
+        setTimeout(() => {
+            if (window._storeOtherDetailsMap) window._storeOtherDetailsMap.invalidateSize();
+        }, 100);
     } else {
         section.style.display = 'none';
         icon.className = 'fa-solid fa-chevron-down';
@@ -1209,6 +1205,7 @@ function toggleOtherDetails() {
 
 // Item dialog (add / edit+delete)
 function openItemDialog(expenseId, itemId, itemName, quantity, unitPrice, totalPrice) {
+    if (!window._expenseIsOwner) return;
     const isEdit = !!itemId;
     const overlay = document.createElement('div');
     overlay.className = 'item-dialog-overlay';
@@ -1273,15 +1270,295 @@ async function deleteItemDialog(expenseId, itemId) {
     renderExpenseDetail(document.getElementById('app'), expenseId);
 }
 
-function expenseForm(e, id) {
+function renderReceiptView(e, items, store, id, isOwner) {
+    const storeName = store?.name || '';
+    const addressParts = [store?.address, store?.city, getCountryName(store?.country), store?.postalCode].filter(Boolean);
+    const addressStr = addressParts.join(', ');
+    const phone = store?.phoneNumber || '';
+    const website = store?.website || '';
+
+    const receiptDate = e.transactionDatetime ? new Date(e.transactionDatetime) : null;
+    const dateStr = receiptDate ? receiptDate.toLocaleDateString() : '\u2014';
+    const timeStr = receiptDate ? receiptDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const receiptNum = e.receiptNumber || '';
+
+    const activeItems = (items || []).filter(i => !i.deleted);
+    const currency = e.currency || '';
+    const total = e.amount != null ? Number(e.amount).toFixed(2) : '\u2014';
+
+    // Compute base currency amount: prefer amountInBase, fall back to amount * exchangeRate
+    const baseCurr = currentUser?.baseCurrency || '';
+    let amountInBase = e.amountInBase != null ? Number(e.amountInBase) : null;
+    if (amountInBase === null && e.amount != null && e.exchangeRate != null && baseCurr && baseCurr !== currency) {
+        amountInBase = Number(e.amount) * Number(e.exchangeRate);
+    }
+    const showBase = amountInBase != null && baseCurr && baseCurr !== currency;
+
+    let html = `<div class="receipt-paper">`;
+
+    // Store header (clickable for owners → opens store dialog)
+    const storeClick = isOwner ? `onclick="openChangeStoreDialog('${id}')" title="Click to edit store details"` : '';
+    html += `<div class="receipt-store-section${isOwner ? ' receipt-clickable' : ''}" ${storeClick}>`;
+    if (storeName) {
+        html += `<div class="receipt-store-name">${esc(storeName)}</div>`;
+        if (addressStr) html += `<div class="receipt-store-address">${esc(addressStr)}</div>`;
+        if (phone || website) {
+            html += `<div class="receipt-store-contact">`;
+            if (phone) html += `<span>${esc(phone)}</span>`;
+            if (phone && website) html += ' \u00b7 ';
+            if (website) html += `<span>${esc(website)}</span>`;
+            html += `</div>`;
+        }
+    } else {
+        html += `<div class="receipt-store-placeholder">${isOwner ? 'No store info \u2014 tap to add' : 'No store info'}</div>`;
+    }
+    html += `</div>`;
+
+    html += `<div class="receipt-divider"></div>`;
+
+    // Receipt number + date/time (clickable for owners → opens expense details dialog)
+    const metaClick = isOwner ? `onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details"` : '';
+    html += `<div class="receipt-meta-section${isOwner ? ' receipt-clickable' : ''}" ${metaClick}>
+        <div class="receipt-meta-line">
+            <span>${receiptNum ? '#' + esc(receiptNum) : '<span style="color:var(--text-light);font-style:italic">No receipt #</span>'}</span>
+            <span>${dateStr}${timeStr ? ' ' + timeStr : ''}</span>
+        </div>
+    </div>`;
+
+    html += `<div class="receipt-divider"></div>`;
+
+    // Items (each clickable for owners → opens item dialog)
+    html += `<div class="receipt-items-section">`;
+    html += `<div class="receipt-items-count">${activeItems.length} item${activeItems.length !== 1 ? 's' : ''}</div>`;
+    if (activeItems.length > 0) {
+        activeItems.forEach(i => {
+            const qty = Number(i.quantity);
+            const qtyStr = qty % 1 === 0 ? qty.toFixed(0) : qty.toFixed(2);
+            const unitPrice = Number(i.unitPrice).toFixed(2);
+            const itemTotal = i.totalPrice != null ? Number(i.totalPrice).toFixed(2) : '\u2014';
+            const itemClick = isOwner
+                ? `onclick="openItemDialog('${id}','${i.id}','${esc(i.itemName).replace(/'/g, "\\'")}',${i.quantity},${i.unitPrice},${i.totalPrice != null ? i.totalPrice : 0})" title="Click to edit item"`
+                : '';
+            html += `<div class="receipt-item-row${isOwner ? ' receipt-clickable' : ''}" ${itemClick}>
+                <div class="receipt-item-name">${esc(i.itemName)}</div>
+                <div class="receipt-item-detail">
+                    <span class="receipt-item-qty">${qtyStr} \u00d7 ${unitPrice}</span>
+                    <span class="receipt-item-total">${itemTotal}</span>
+                </div>
+            </div>`;
+        });
+    } else if (e.notes) {
+        html += `<div class="receipt-notes-in-items">${esc(e.notes)}</div>`;
+    } else {
+        html += `<div class="receipt-no-items">No items</div>`;
+    }
+    html += `</div>`;
+
+    // Add Item button — owners only
+    if (isOwner) {
+        html += `<div class="receipt-add-item">
+            <button class="btn btn-outline btn-sm" onclick="openItemDialog('${id}')"><i class="fa-solid fa-plus"></i> Add Item</button>
+        </div>`;
+    }
+
+    html += `<div class="receipt-divider receipt-divider-thick"></div>`;
+
+    // Total (clickable for owners → opens expense details dialog)
+    const totalClick = isOwner ? `onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details"` : '';
+    html += `<div class="receipt-total-section${isOwner ? ' receipt-clickable' : ''}" ${totalClick}>
+        <div class="receipt-total-line">
+            <span class="receipt-total-label">TOTAL</span>
+            <span class="receipt-total-amount">${total} ${esc(currency)}</span>
+        </div>
+        ${showBase ? `<div class="receipt-base-amount"><i class="fa-solid fa-exchange-alt" style="font-size:0.7rem"></i> ${amountInBase.toFixed(2)} ${esc(baseCurr)}</div>` : ''}
+    </div>`;
+
+    // Category / Tags / Notes footer (clickable for owners → opens expense details dialog)
+    const notesShownInItems = activeItems.length === 0 && !!e.notes;
+    if (e.category || (e.tags && e.tags.length) || (e.notes && !notesShownInItems)) {
+        html += `<div class="receipt-divider"></div>`;
+        const footerClick = isOwner ? `onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details"` : '';
+        html += `<div class="receipt-footer-section${isOwner ? ' receipt-clickable' : ''}" ${footerClick}>`;
+        if (e.category) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Category:</span> ${esc(e.category)}</div>`;
+        if (e.tags && e.tags.length) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Tags:</span> ${e.tags.map(t => esc(t)).join(', ')}</div>`;
+        if (e.notes && !notesShownInItems) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Notes:</span> ${esc(e.notes)}</div>`;
+        html += `</div>`;
+    }
+
+    html += `</div>`;
+    return html;
+}
+
+// ============================================
+// EXPENSE DETAILS DIALOG (for receipt view)
+// ============================================
+async function openExpenseDetailsDialog(expenseId) {
+    if (!window._expenseIsOwner) return;
+    const data = await api(`/api/expenses/${expenseId}`);
+    const e = data?.expense || {};
+
     const allCats = window._allExpenseCategories || [];
-    return `<form id="expenseEditForm">
+    window._dlgExpTags = [...(e.tags || [])];
+
+    const overlay = document.createElement('div');
+    overlay.className = 'item-dialog-overlay';
+    overlay.id = 'expenseDetailsOverlay';
+    overlay.onclick = (ev) => { if (ev.target === overlay) closeExpenseDetailsDialog(); };
+
+    overlay.innerHTML = `
+        <div class="change-store-dialog" id="expenseDetailsDialogInner">
+            <div class="change-store-header">
+                <h3 class="item-dialog-title" style="margin-bottom:0"><i class="fa-solid fa-pen-to-square"></i> Edit Expense Details</h3>
+                <button class="btn btn-outline btn-sm" onclick="closeExpenseDetailsDialog()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="exp-dlg-fields-grid">
+                <div class="form-group exp-dlg-f-date"><label>Date &amp; Time</label>
+                    <input type="datetime-local" class="form-control" id="dlgExpDate" value="${e.transactionDatetime ? e.transactionDatetime.substring(0, 16) : ''}">
+                </div>
+                <div class="form-group exp-dlg-f-cat"><label>Category</label>
+                    <input type="text" class="form-control" id="dlgExpCategory" value="${esc(e.category)}" list="dlgExpCategoryList" autocomplete="off">
+                    <datalist id="dlgExpCategoryList">
+                        ${allCats.map(c => `<option value="${esc(c)}">`).join('')}
+                    </datalist>
+                </div>
+                <div class="form-group exp-dlg-f-amt"><label>Amount</label>
+                    <input type="number" step="0.01" class="form-control" id="dlgExpAmount" value="${e.amount || ''}">
+                </div>
+                <div class="form-group exp-dlg-f-curr"><label>Currency</label>
+                    <input type="text" class="form-control" id="dlgExpCurrency" list="dlgExpCurrencyList" value="${esc(e.currency)}" placeholder="e.g. USD">
+                    <datalist id="dlgExpCurrencyList">
+                        ${['USD','EUR','GBP','SGD','JPY','AUD','CAD','CHF'].map(c => `<option value="${c}"></option>`).join('')}
+                    </datalist>
+                </div>
+                <div class="form-group exp-dlg-f-exr"><label>Exchange Rate</label>
+                    <input type="number" step="0.000001" class="form-control" id="dlgExpExRate" value="${e.exchangeRate || ''}" placeholder="Auto">
+                </div>
+            </div>
+            <div class="form-group" style="margin-top:0.75rem;">
+                <label>Receipt Number</label>
+                <input type="text" class="form-control" id="dlgExpReceipt" value="${esc(e.receiptNumber)}">
+            </div>
+            <div class="form-group"><label>Tags</label>
+                <div class="tags-container" id="dlgExpTagsContainer">
+                    <input type="text" class="tag-input" id="dlgExpTagInput" placeholder="Add tag...">
+                </div>
+            </div>
+            <div class="form-group"><label>Notes</label>
+                <textarea class="form-control" id="dlgExpNotes" rows="2">${esc(e.notes)}</textarea>
+            </div>
+            <div class="item-dialog-actions" style="margin-top:1rem;">
+                <button class="btn btn-primary" onclick="saveExpenseDetailsDialog('${expenseId}')">
+                    <i class="fa-solid fa-save"></i> Save
+                </button>
+                <button class="btn btn-outline" onclick="closeExpenseDetailsDialog()">
+                    <i class="fa-solid fa-xmark"></i> Cancel
+                </button>
+            </div>
+        </div>`;
+
+    document.body.appendChild(overlay);
+    renderTags('dlgExpTagsContainer', 'dlgExpTagInput', window._dlgExpTags);
+}
+
+async function saveExpenseDetailsDialog(expenseId) {
+    const updates = {
+        transactionDatetime: document.getElementById('dlgExpDate').value + ':00',
+        amount: parseFloat(document.getElementById('dlgExpAmount').value),
+        currency: document.getElementById('dlgExpCurrency').value,
+        category: document.getElementById('dlgExpCategory').value,
+        receiptNumber: document.getElementById('dlgExpReceipt').value,
+        notes: document.getElementById('dlgExpNotes').value,
+        tags: window._dlgExpTags || []
+    };
+    const exRate = document.getElementById('dlgExpExRate').value;
+    if (exRate) updates.exchangeRate = parseFloat(exRate);
+
+    await api(`/api/expenses/${expenseId}`, { method: 'PUT', body: updates });
+    toast('Expense updated!', 'success');
+    window._allExpenseCategories = null;
+    closeExpenseDetailsDialog();
+    renderExpenseDetail(document.getElementById('app'), expenseId);
+}
+
+function closeExpenseDetailsDialog() {
+    const overlay = document.getElementById('expenseDetailsOverlay');
+    if (overlay) overlay.remove();
+}
+
+// ============================================
+// SHARE MENU
+// ============================================
+function openShareMenu(expenseId, btn) {
+    closeShareMenu();
+    const menu = document.createElement('div');
+    menu.id = 'shareMenu';
+    menu.className = 'share-menu';
+
+    const url = window.location.origin + '/view/expenses/' + expenseId;
+    const hasNativeShare = typeof navigator.share === 'function';
+
+    menu.innerHTML = `
+        <div class="share-menu-item" onclick="copyExpenseLink('${url}')">
+            <i class="fa-solid fa-link"></i> Copy link
+        </div>
+        ${hasNativeShare ? `<div class="share-menu-item" onclick="nativeShareExpense('${url}')">
+            <i class="fa-solid fa-share-nodes"></i> Share\u2026
+        </div>` : ''}
+    `;
+
+    document.body.appendChild(menu);
+
+    // Position below the button, aligned to its right edge
+    const rect = btn.getBoundingClientRect();
+    menu.style.top = (rect.bottom + window.scrollY + 6) + 'px';
+    menu.style.right = (document.documentElement.clientWidth - rect.right) + 'px';
+
+    // Close on outside click (defer so this click doesn't immediately close it)
+    setTimeout(() => document.addEventListener('click', _shareMenuOutsideClick), 0);
+}
+
+function _shareMenuOutsideClick(e) {
+    const menu = document.getElementById('shareMenu');
+    if (menu && !menu.contains(e.target)) {
+        closeShareMenu();
+    }
+}
+
+function closeShareMenu() {
+    document.removeEventListener('click', _shareMenuOutsideClick);
+    const menu = document.getElementById('shareMenu');
+    if (menu) menu.remove();
+}
+
+async function copyExpenseLink(url) {
+    closeShareMenu();
+    try {
+        await navigator.clipboard.writeText(url);
+        toast('Link copied!', 'success');
+    } catch {
+        toast('Could not copy link', 'error');
+    }
+}
+
+async function nativeShareExpense(url) {
+    closeShareMenu();
+    try {
+        await navigator.share({ title: 'Expense', url });
+    } catch (err) {
+        if (err.name !== 'AbortError') toast('Share failed', 'error');
+    }
+}
+
+function expenseForm(e, id, isOwner = true) {
+    const allCats = window._allExpenseCategories || [];
+    const ro = isOwner ? '' : 'readonly disabled';
+    return `<form ${isOwner ? 'id="expenseEditForm"' : ''}>
         <div class="form-row">
             <div class="form-group"><label>Date & Time</label>
-                <input type="datetime-local" class="form-control detail-datetime" id="eDate" value="${e.transactionDatetime ? e.transactionDatetime.substring(0,16) : ''}">
+                <input type="datetime-local" class="form-control detail-datetime" id="eDate" value="${e.transactionDatetime ? e.transactionDatetime.substring(0,16) : ''}" ${ro}>
             </div>
             <div class="form-group"><label>Category</label>
-                <input type="text" class="form-control" id="eCategory" value="${esc(e.category)}" list="eCategoryList" autocomplete="off">
+                <input type="text" class="form-control" id="eCategory" value="${esc(e.category)}" list="eCategoryList" autocomplete="off" ${ro}>
                 <datalist id="eCategoryList">
                     ${allCats.map(c => `<option value="${esc(c)}">`).join('')}
                 </datalist>
@@ -1289,30 +1566,34 @@ function expenseForm(e, id) {
         </div>
         <div class="form-row detail-amount-row">
             <div class="form-group"><label>Amount</label>
-                <input type="number" step="0.01" class="form-control" id="eAmount" value="${e.amount||''}">
+                <input type="number" step="0.01" class="form-control" id="eAmount" value="${e.amount||''}" ${ro}>
             </div>
             <div class="form-group"><label>Currency</label>
-                <select class="form-control" id="eCurrency">
-                    ${['USD','EUR','GBP','SGD','JPY','AUD','CAD','CHF'].map(c => `<option value="${c}" ${c===e.currency?'selected':''}>${c}</option>`).join('')}
-                </select>
+                <input type="text" class="form-control" id="eCurrency" value="${esc(e.currency)}" list="eCurrencyList" autocomplete="off" ${ro}>
+                <datalist id="eCurrencyList">
+                    <option value="USD"></option><option value="EUR"></option>
+                    <option value="GBP"></option><option value="SGD"></option>
+                    <option value="JPY"></option><option value="AUD"></option>
+                    <option value="CAD"></option><option value="CHF"></option>
+                </datalist>
             </div>
             <div class="form-group"><label>Exchange Rate</label>
-                <input type="number" step="0.000001" class="form-control" id="eExRate" value="${e.exchangeRate||''}" placeholder="Auto-fetched">
+                <input type="number" step="0.000001" class="form-control" id="eExRate" value="${e.exchangeRate||''}" placeholder="Auto-fetched" ${ro}>
             </div>
         </div>
         ${e.amountInBase ? `<p class="amount-secondary" style="margin-bottom:1rem"><i class="fa-solid fa-exchange-alt"></i> ${Number(e.amountInBase).toFixed(2)} ${currentUser?.baseCurrency||''}</p>` : ''}
         <div class="form-group"><label>Receipt Number</label>
-            <input type="text" class="form-control" id="eReceipt" value="${esc(e.receiptNumber)}">
+            <input type="text" class="form-control" id="eReceipt" value="${esc(e.receiptNumber)}" ${ro}>
         </div>
         <div class="form-group"><label>Tags</label>
             <div class="tags-container" id="eTagsContainer">
-                <input type="text" class="tag-input" id="eTagInput" placeholder="Add tag...">
+                <input type="text" class="tag-input" id="eTagInput" placeholder="Add tag..." ${ro}>
             </div>
         </div>
         <div class="form-group"><label>Notes</label>
-            <textarea class="form-control" id="eNotes" rows="2">${esc(e.notes)}</textarea>
+            <textarea class="form-control" id="eNotes" rows="2" ${ro}>${esc(e.notes)}</textarea>
         </div>
-        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Save Changes</button>
+        ${isOwner ? `<button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Save Changes</button>` : ''}
     </form>`;
 }
 

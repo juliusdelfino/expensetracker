@@ -6,15 +6,15 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 @Entity
 @Table(name = "expenses")
 public class Expense {
     @Id
-    private UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private long id;
 
-    private UUID userId;
+    private long userId;
 
     @Enumerated(EnumType.STRING)
     private ExpenseType type;
@@ -50,15 +50,17 @@ public class Expense {
     private LocalDateTime updatedAt;
     private LocalDateTime scannedAt;
 
-    private UUID storeId;
+    private Long storeId;
+
+    private String urlId;
 
     public Expense() {}
 
-    public UUID getId() { return id; }
-    public void setId(UUID id) { this.id = id; }
+    public long getId() { return id; }
+    public void setId(long id) { this.id = id; }
 
-    public UUID getUserId() { return userId; }
-    public void setUserId(UUID userId) { this.userId = userId; }
+    public long getUserId() { return userId; }
+    public void setUserId(long userId) { this.userId = userId; }
 
     public ExpenseType getType() { return type; }
     public void setType(ExpenseType type) { this.type = type; }
@@ -111,6 +113,9 @@ public class Expense {
     public LocalDateTime getScannedAt() { return scannedAt; }
     public void setScannedAt(LocalDateTime scannedAt) { this.scannedAt = scannedAt; }
 
-    public UUID getStoreId() { return storeId; }
-    public void setStoreId(UUID storeId) { this.storeId = storeId; }
+    public Long getStoreId() { return storeId; }
+    public void setStoreId(Long storeId) { this.storeId = storeId; }
+
+    public String getUrlId() { return urlId; }
+    public void setUrlId(String urlId) { this.urlId = urlId; }
 }
