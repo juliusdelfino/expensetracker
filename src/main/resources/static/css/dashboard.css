@@ -619,3 +619,186 @@
     white-space: nowrap;
 }
 
+/* ===================== RECEIPT-STYLE PARSED DATA ===================== */
+.receipt-paper {
+    background: var(--bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 1.25rem 1rem;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+}
+.receipt-store-section {
+    text-align: center;
+    padding: 0.5rem 0;
+}
+.receipt-store-name {
+    font-weight: 700;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text);
+}
+.receipt-store-address,
+.receipt-store-contact {
+    font-size: 0.78rem;
+    color: var(--text-light);
+    margin-top: 0.25rem;
+}
+.receipt-store-contact { margin-top: 0.15rem; }
+.receipt-store-placeholder {
+    color: var(--text-light);
+    font-style: italic;
+    font-size: 0.85rem;
+}
+.receipt-divider {
+    border: none;
+    border-top: 1px dashed var(--border-color);
+    margin: 0.5rem 0;
+}
+.receipt-divider-thick {
+    border-top-width: 2px;
+}
+.receipt-meta-section { padding: 0.25rem 0; }
+.receipt-meta-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--text-light);
+}
+.receipt-items-section { padding: 0.25rem 0; }
+.receipt-item-row {
+    padding: 0.35rem 0;
+    border-bottom: 1px dotted var(--border-color);
+}
+.receipt-item-row:last-child { border-bottom: none; }
+.receipt-item-name {
+    font-weight: 500;
+    font-size: 0.85rem;
+    color: var(--text);
+}
+.receipt-item-detail {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--text-light);
+    margin-top: 0.1rem;
+}
+.receipt-item-total {
+    font-weight: 600;
+    color: var(--text);
+}
+.receipt-no-items {
+    text-align: center;
+    color: var(--text-light);
+    padding: 0.5rem 0;
+    font-style: italic;
+}
+.receipt-total-section { padding: 0.5rem 0; }
+.receipt-total-line {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+.receipt-total-label { color: var(--text); }
+.receipt-total-amount { color: var(--aegean-dark); }
+.receipt-base-amount {
+    text-align: right;
+    font-size: 0.78rem;
+    color: var(--text-light);
+    margin-top: 0.15rem;
+}
+.receipt-footer-section {
+    padding: 0.25rem 0;
+    font-size: 0.78rem;
+}
+.receipt-footer-line {
+    padding: 0.15rem 0;
+    color: var(--text-light);
+    word-break: break-word;
+}
+.receipt-footer-label {
+    font-weight: 600;
+    color: var(--text);
+}
+.receipt-clickable {
+    cursor: pointer;
+    border-radius: 4px;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    transition: background 0.15s ease;
+}
+.receipt-clickable:hover {
+    background: rgba(74, 135, 196, 0.08);
+}
+.receipt-add-item {
+    padding: 0.5rem 0 0.25rem;
+    display: flex;
+    justify-content: flex-start;
+}
+.receipt-items-count {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-light);
+    margin-bottom: 0.3rem;
+}
+.receipt-notes-in-items {
+    color: var(--text-light);
+    font-size: 0.85rem;
+    padding: 0.35rem 0;
+    font-style: italic;
+    word-break: break-word;
+}
+
+/* ===================== EDIT EXPENSE DETAILS DIALOG FIELD GRID ===================== */
+/* Desktop default: Date + Category on row 1, Amount + Currency + ExRate on row 2 */
+.exp-dlg-fields-grid {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-areas:
+        "date cat  cat"
+        "amt  curr exr";
+}
+.exp-dlg-fields-grid .form-group { margin-bottom: 0; }
+.exp-dlg-f-date { grid-area: date; }
+.exp-dlg-f-cat  { grid-area: cat; }
+.exp-dlg-f-amt  { grid-area: amt; }
+.exp-dlg-f-curr { grid-area: curr; }
+.exp-dlg-f-exr  { grid-area: exr; }
+
+/* ===================== SHARE MENU ===================== */
+.share-menu {
+    position: absolute;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+    z-index: 3000;
+    min-width: 160px;
+    overflow: hidden;
+}
+.share-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 1rem;
+    font-size: 0.88rem;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+.share-menu-item:hover {
+    background: var(--table-stripe);
+}
+.share-menu-item i {
+    color: var(--aegean-mid);
+    width: 16px;
+    text-align: center;
+}
+

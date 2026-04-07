@@ -184,15 +184,15 @@ public class ExpenseController {
 
     @GetMapping("/{expenseUrlId}")
     public ResponseEntity<?> get(@PathVariable String expenseUrlId, HttpSession session) {
-        long userId = getUserId(session);
-        if (userId == 0) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+        Long userId = getUserId(session); // null for anonymous visitors
         return expenseRepository.findByUrlId(expenseUrlId)
-                .filter(e -> e.getUserId() == userId)
                 .map(expense -> {
+                    boolean isOwner = userId != null && expense.getUserId() == userId;
                     Map<String, Object> result = new LinkedHashMap<>();
                     result.put("expense", expense);
                     result.put("items", expenseItemRepository.findByExpenseId(expense.getId()));
                     result.put("store", expense.getStoreId() != null ? storeRepository.findById(expense.getStoreId()).orElse(null) : null);
+                    result.put("isOwner", isOwner);
                     return ResponseEntity.ok(result);
                 })
                 .orElse(ResponseEntity.notFound().build());

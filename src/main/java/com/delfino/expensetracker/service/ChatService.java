@@ -1,5 +1,6 @@
 package com.delfino.expensetracker.service;
 
+import com.delfino.expensetracker.config.ChatBotProperties;
 import com.delfino.expensetracker.model.ChatMessage;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.User;
@@ -12,7 +13,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.tool.ToolCallbackProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
@@ -33,19 +33,19 @@ public class ChatService {
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
     private final ChatClient chatClient;
-
-    @Value("${chatbot.api.system-prompt:You are an expense tracking assistant.}")
-    private String systemPrompt;
+    private final ChatBotProperties chatBotProperties;
 
     public ChatService(ChatMessageRepository chatMessageRepository, ExpenseService expenseService,
                        ExpenseRepository expenseRepository, UserRepository userRepository,
                        ObjectMapper objectMapper, ChatClient.Builder chatClientBuilder,
-                       ToolCallbackProvider toolCallbackProvider) {
+                       ToolCallbackProvider toolCallbackProvider,
+                       ChatBotProperties chatBotProperties) {
         this.chatMessageRepository = chatMessageRepository;
         this.expenseService = expenseService;
         this.expenseRepository = expenseRepository;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
+        this.chatBotProperties = chatBotProperties;
 
         // Build the ChatClient with all registered tool callbacks
         this.chatClient = chatClientBuilder
@@ -79,7 +79,7 @@ public class ChatService {
                 .map(User::getBaseCurrency).orElse("USD");
 
         try {
-            String resolvedSystemPrompt = systemPrompt
+            String resolvedSystemPrompt = chatBotProperties.getSystemPrompt()
                     .replace("{today}", LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE))
                     .replace("{currency}", baseCurrency);
 

@@ -447,6 +447,7 @@ public class DashboardController {
                         em.put("displayName", sName != null && !sName.isBlank() ? cat + " — " + sName : cat);
                         em.put("amount", exp.getAmount());
                         em.put("currency", exp.getCurrency());
+                        em.put("urlId", exp.getUrlId());
                         em.put("amountInBase", getBaseAmount(exp));
                         return em;
                     })

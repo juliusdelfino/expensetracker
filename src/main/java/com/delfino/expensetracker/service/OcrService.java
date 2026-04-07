@@ -62,6 +62,9 @@ public class OcrService {
     @Value("${ocr.api.model:llava}")
     private String ocrModel;
 
+    @Value("${ocr.api.api-key:}")
+    private String ocrApiKey;
+
     @Value("${ocr.api.prompt:Parse this receipt image and return a JSON object with these fields: {\"transactionDatetime\":\"ISO 8601\",\"amount\":0,\"currency\":\"USD\",\"receiptNumber\":\"\",\"category\":\"\",\"items\":[{\"itemName\":\"\",\"quantity\":1,\"unitPrice\":0,\"totalPrice\":0}],\"store\":{\"name\":\"\",\"address\":\"\",\"city\":\"\",\"country\":\"\",\"postalCode\":\"\",\"phoneNumber\":\"\",\"website\":\"\"}} Return ONLY valid JSON.}")
     private String ocrPrompt;
 
@@ -177,11 +180,17 @@ public class OcrService {
             String jsonBody = objectMapper.writeValueAsString(requestBody);
             log.info("Calling OCR API: POST {} with model={}, fileSize={}KB, mediaType={}",
                     ocrApiUrl, ocrModel, imageBytes.length / 1024, mediaType);
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(ocrApiUrl))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody));
+
+            // Add API key if configured
+            if (ocrApiKey != null && !ocrApiKey.isBlank()) {
+                requestBuilder.header("Authorization", "Bearer " + ocrApiKey);
+            }
+
+            HttpRequest request = requestBuilder.build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             String responseBody = response.body();
