@@ -134,3 +134,24 @@ function renderTags(containerId, inputId, tags) {
     document.getElementById(inputId).focus();
 }
 
+/**
+ * Populate a currency <datalist> from the server.
+ * @param {string} datalistId  - the id of the <datalist> element
+ * @param {string} [inputId]   - optional: input id whose value should be preserved
+ * @param {string} [fallback]  - optional: fallback value to set if input is empty
+ */
+async function populateCurrencyDatalist(datalistId, inputId, fallback) {
+    try {
+        const map = await api('/api/currencies');
+        if (map) {
+            const codes = Object.keys(map).sort();
+            const dl = document.getElementById(datalistId);
+            if (dl) dl.innerHTML = codes.map(c => `<option value="${c}"></option>`).join('');
+            if (inputId && fallback) {
+                const inp = document.getElementById(inputId);
+                if (inp && !inp.value) inp.value = fallback;
+            }
+        }
+    } catch (err) { /* ignore */ }
+}
+

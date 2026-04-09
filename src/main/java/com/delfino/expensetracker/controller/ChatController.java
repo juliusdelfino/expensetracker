@@ -1,6 +1,11 @@
 package com.delfino.expensetracker.controller;
 
 import com.delfino.expensetracker.config.UserContext;
+import com.delfino.expensetracker.dto.chat.ChatHistoryResponse;
+import com.delfino.expensetracker.dto.chat.ChatMessageRequest;
+import com.delfino.expensetracker.dto.chat.ChatResponse;
+import com.delfino.expensetracker.dto.chat.ExpenseCard;
+import com.delfino.expensetracker.dto.common.ErrorResponse;
 import com.delfino.expensetracker.model.ChatMessage;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.service.ChatService;
@@ -26,42 +31,35 @@ public class ChatController {
     }
 
     @PostMapping
-    public ResponseEntity<?> sendMessage(@RequestBody Map<String, String> body, HttpSession session) {
+    public ResponseEntity<?> sendMessage(@RequestBody ChatMessageRequest body, HttpSession session) {
         Long userId = getUserId(session);
-        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+        if (userId == null) return ResponseEntity.status(401).body(new ErrorResponse("Not authenticated"));
 
-        // Set the user context so @Tool methods can access the authenticated userId
         userContext.setUserId(userId);
 
-        String message = body.get("message");
+        String message = body.message();
         if (message == null || message.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Message is required"));
+            return ResponseEntity.badRequest().body(new ErrorResponse("Message is required"));
         }
 
         ChatMessage botReply = chatService.processUserMessage(userId, message);
 
-        // Enrich response with linked expense details
-        List<Map<String, Object>> expenseCards = new ArrayList<>();
+        List<ExpenseCard> expenseCards = new ArrayList<>();
         if (botReply.getLinkedExpenseIds() != null) {
             for (Long expId : botReply.getLinkedExpenseIds()) {
-                expenseRepository.findById(expId).ifPresent(e -> {
-                    Map<String, Object> card = new LinkedHashMap<>();
-                    card.put("id", e.getId());
-                    card.put("urlId", e.getUrlId());
-                    card.put("amount", e.getAmount());
-                    card.put("currency", e.getCurrency());
-                    card.put("category", e.getCategory());
-                    card.put("notes", e.getNotes());
-                    card.put("transactionDatetime", e.getTransactionDatetime());
-                    expenseCards.add(card);
-                });
+                expenseRepository.findById(expId).ifPresent(e -> expenseCards.add(new ExpenseCard(
+                        e.getId(),
+                        e.getUrlId(),
+                        e.getAmount(),
+                        e.getCurrency(),
+                        e.getCategory(),
+                        e.getNotes(),
+                        e.getTransactionDatetime()
+                )));
             }
         }
 
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("message", botReply);
-        result.put("expenseCards", expenseCards);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(new ChatResponse(botReply, expenseCards));
     }
 
     @GetMapping("/history")
@@ -70,46 +68,37 @@ public class ChatController {
             @RequestParam(defaultValue = "0") int offset,
             HttpSession session) {
         Long userId = getUserId(session);
-        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+        if (userId == null) return ResponseEntity.status(401).body(new ErrorResponse("Not authenticated"));
 
-        // Fetch newest-first with offset, then reverse to get chronological order
         List<ChatMessage> page = chatService.getHistoryPage(userId, limit, offset);
-
         long total = chatService.countHistory(userId);
         boolean hasMore = (offset + limit) < total;
 
-        // Collect all linked expense IDs and fetch them for card rendering
         Set<Long> allExpenseIds = page.stream()
                 .filter(m -> m.getLinkedExpenseIds() != null)
                 .flatMap(m -> m.getLinkedExpenseIds().stream())
                 .collect(Collectors.toSet());
 
-        Map<String, Map<String, Object>> expenseMap = new LinkedHashMap<>();
+        Map<String, ExpenseCard> expenseMap = new LinkedHashMap<>();
         for (Long expId : allExpenseIds) {
-            expenseRepository.findById(expId).ifPresent(e -> {
-                Map<String, Object> card = new LinkedHashMap<>();
-                card.put("id", e.getId());
-                card.put("amount", e.getAmount());
-                card.put("currency", e.getCurrency());
-                card.put("category", e.getCategory());
-                card.put("notes", e.getNotes());
-                card.put("urlId", e.getUrlId());
-                card.put("transactionDatetime", e.getTransactionDatetime());
-                expenseMap.put(expId.toString(), card);
-            });
+            expenseRepository.findById(expId).ifPresent(e -> expenseMap.put(
+                    expId.toString(),
+                    new ExpenseCard(
+                            e.getId(),
+                            e.getUrlId(),
+                            e.getAmount(),
+                            e.getCurrency(),
+                            e.getCategory(),
+                            e.getNotes(),
+                            e.getTransactionDatetime()
+                    )
+            ));
         }
 
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("messages", page);
-        result.put("expenses", expenseMap);
-        result.put("hasMore", hasMore);
-        result.put("total", total);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(new ChatHistoryResponse(page, expenseMap, hasMore, total));
     }
 
     private Long getUserId(HttpSession session) {
         return (Long) session.getAttribute("userId");
     }
 }
-
-

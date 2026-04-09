@@ -1,7 +1,8 @@
-package com.delfino.expensetracker.config;
+package com.delfino.expensetracker.service;
 
+import com.delfino.expensetracker.config.CountryProperties;
 import jakarta.annotation.PostConstruct;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -11,8 +12,8 @@ import java.util.Map;
  * Data is loaded from country-mapping.yml via CountryProperties.
  * Used for geo map display and searching expenses by country name.
  */
-@Component
-public class CountryConfig {
+@Service
+public class CountryService {
 
     public record CountryInfo(String name, double lat, double lng) {}
 
@@ -20,7 +21,7 @@ public class CountryConfig {
 
     private final CountryProperties countryProperties;
 
-    public CountryConfig(CountryProperties countryProperties) {
+    public CountryService(CountryProperties countryProperties) {
         this.countryProperties = countryProperties;
     }
 
@@ -35,24 +36,24 @@ public class CountryConfig {
         });
     }
 
-    private static double toDouble(Object val) {
+    private double toDouble(Object val) {
         if (val instanceof Number n) return n.doubleValue();
         try { return Double.parseDouble(String.valueOf(val)); } catch (NumberFormatException e) { return 0.0; }
     }
 
-    public static Map<String, CountryInfo> getAll() { return COUNTRIES; }
+    public Map<String, CountryInfo> getAll() { return COUNTRIES; }
 
-    public static CountryInfo get(String code) {
+    public CountryInfo get(String code) {
         if (code == null) return null;
         return COUNTRIES.get(code.toUpperCase());
     }
 
-    public static String getName(String code) {
+    public String getName(String code) {
         CountryInfo info = get(code);
         return info != null ? info.name() : code;
     }
 
-    public static double[] getLatLng(String code) {
+    public double[] getLatLng(String code) {
         CountryInfo info = get(code);
         return info != null ? new double[]{info.lat(), info.lng()} : null;
     }
@@ -60,7 +61,7 @@ public class CountryConfig {
     /**
      * Find country code by name (case-insensitive partial match).
      */
-    public static String findCodeByName(String name) {
+    public String findCodeByName(String name) {
         if (name == null || name.isBlank()) return null;
         String lower = name.toLowerCase();
         if (COUNTRIES.containsKey(name.toUpperCase())) return name.toUpperCase();

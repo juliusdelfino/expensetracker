@@ -118,4 +118,13 @@ public class Expense {
 
     public String getUrlId() { return urlId; }
     public void setUrlId(String urlId) { this.urlId = urlId; }
+
+    /**
+     * Returns the base-currency amount, falling back to the original amount, then ZERO.
+     * Eliminates the duplicate getBaseAmount(Expense) helper across controllers and services.
+     */
+    public BigDecimal getBaseAmountOrAmount() {
+        return amountInBase != null ? amountInBase
+                : (amount != null ? amount : BigDecimal.ZERO);
+    }
 }

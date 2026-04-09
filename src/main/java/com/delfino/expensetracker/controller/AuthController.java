@@ -1,17 +1,23 @@
 package com.delfino.expensetracker.controller;
 
+import com.delfino.expensetracker.config.UserContext;
+import com.delfino.expensetracker.dto.auth.LoginRequest;
+import com.delfino.expensetracker.dto.auth.LoginResponse;
+import com.delfino.expensetracker.dto.auth.RegisterRequest;
+import com.delfino.expensetracker.dto.auth.RegisterResponse;
+import com.delfino.expensetracker.dto.auth.UserProfileResponse;
+import com.delfino.expensetracker.dto.common.ErrorResponse;
+import com.delfino.expensetracker.dto.common.MessageResponse;
 import com.delfino.expensetracker.model.User;
 import com.delfino.expensetracker.repository.UserRepository;
 import com.delfino.expensetracker.service.SupportedCurrencyService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 
 @RestController
 @RequestMapping("/api/auth")
@@ -28,23 +34,22 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody Map<String, String> body) {
-        String username = body.get("username");
-        String password = body.get("password");
-        String email = body.get("email");
-        String phone = body.get("phoneNumber");
-        String baseCurrency = body.getOrDefault("baseCurrency", "USD");
+    public ResponseEntity<?> register(@RequestBody RegisterRequest body) {
+        String username = body.username();
+        String password = body.password();
+        String email = body.email();
+        String phone = body.phoneNumber();
+        String baseCurrency = body.baseCurrency() != null ? body.baseCurrency() : "USD";
 
         if (username == null || password == null || username.isBlank() || password.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Username and password required"));
+            return ResponseEntity.badRequest().body(new ErrorResponse("Username and password required"));
         }
         if (userRepository.findByUsernameIgnoreCase(username).isPresent()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Username already exists"));
+            return ResponseEntity.badRequest().body(new ErrorResponse("Username already exists"));
         }
 
-        // Validate currency
-        if (baseCurrency != null && !baseCurrency.isBlank() && !supportedCurrencyService.isSupported(baseCurrency)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Unsupported base currency: " + baseCurrency));
+        if (!baseCurrency.isBlank() && !supportedCurrencyService.isSupported(baseCurrency)) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("Unsupported base currency: " + baseCurrency));
         }
 
         User user = new User();
@@ -57,50 +62,48 @@ public class AuthController {
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
 
-        return ResponseEntity.ok(Map.of("message", "Registration successful", "userId", user.getId()));
+        return ResponseEntity.ok(new RegisterResponse("Registration successful", user.getId()));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Map<String, String> body, HttpSession session) {
-        String username = body.get("username");
-        String password = body.get("password");
+    public ResponseEntity<?> login(@RequestBody LoginRequest body, HttpSession session) {
+        String username = body.username();
+        String password = body.password();
 
         return userRepository.findByUsernameIgnoreCase(username)
                 .filter(u -> passwordEncoder.matches(password, u.getPasswordHash()))
                 .map(u -> {
                     session.setAttribute("userId", u.getId());
-                    return ResponseEntity.ok(Map.of(
-                            "message", "Login successful",
-                            "userId", u.getId(),
-                            "username", u.getUsername(),
-                            "baseCurrency", u.getBaseCurrency() != null ? u.getBaseCurrency() : "USD"
+                    return ResponseEntity.ok((Object) new LoginResponse(
+                            "Login successful",
+                            u.getId(),
+                            u.getUsername(),
+                            u.getBaseCurrency() != null ? u.getBaseCurrency() : "USD"
                     ));
                 })
-                .orElse(ResponseEntity.status(401).body(Map.of("error", "Invalid credentials")));
+                .orElse(ResponseEntity.status(401).body(new ErrorResponse("Invalid credentials")));
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(HttpSession session) {
+    public ResponseEntity<MessageResponse> logout(HttpSession session) {
         session.invalidate();
-        return ResponseEntity.ok(Map.of("message", "Logged out"));
+        return ResponseEntity.ok(new MessageResponse("Logged out"));
     }
 
     @GetMapping("/me")
-    public ResponseEntity<?> me(HttpSession session) {
-        Long userId = (Long) session.getAttribute("userId");
-        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> me() {
+        Long userId = UserContext.currentUserId();
         return userRepository.findById(userId)
-                .map(u -> {
-                    Map<String, Object> result = new LinkedHashMap<>();
-                    result.put("id", u.getId());
-                    result.put("username", u.getUsername());
-                    result.put("email", u.getEmail());
-                    result.put("phoneNumber", u.getPhoneNumber());
-                    result.put("baseCurrency", u.getBaseCurrency());
-                    result.put("baseCity", u.getBaseCity());
-                    result.put("baseCountry", u.getBaseCountry());
-                    return ResponseEntity.ok(result);
-                })
-                .orElse(ResponseEntity.status(401).body(Map.of("error", "User not found")));
+                .map(u -> ResponseEntity.ok((Object) new UserProfileResponse(
+                        u.getId(),
+                        u.getUsername(),
+                        u.getEmail(),
+                        u.getPhoneNumber(),
+                        u.getBaseCurrency(),
+                        u.getBaseCity(),
+                        u.getBaseCountry()
+                )))
+                .orElse(ResponseEntity.status(401).body(new ErrorResponse("User not found")));
     }
 }

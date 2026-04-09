@@ -4,6 +4,7 @@ import com.delfino.expensetracker.repository.UserRepository;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -14,15 +15,19 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private final UserRepository userRepository;
+    private final SessionAuthenticationFilter sessionAuthenticationFilter;
 
-    public SecurityConfig(UserRepository userRepository) {
+    public SecurityConfig(UserRepository userRepository, SessionAuthenticationFilter sessionAuthenticationFilter) {
         this.userRepository = userRepository;
+        this.sessionAuthenticationFilter = sessionAuthenticationFilter;
     }
 
     /**
@@ -44,30 +49,32 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .headers(headers -> headers
-                .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin
-                )
+                .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)
             )
-            // Disable CSRF — we use session cookies on a same-origin SPA
             .csrf(AbstractHttpConfigurer::disable)
 
-            // All requests are allowed through the filter chain;
-            // individual controllers return 401 when the HttpSession has no userId.
+            // Register session-based auth filter before UsernamePasswordAuthenticationFilter
+            .addFilterBefore(sessionAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+
+            // All requests are allowed through; @PreAuthorize on individual methods enforces auth.
             .authorizeHttpRequests(auth -> auth
                 .anyRequest().permitAll()
             )
 
-            // Disable Spring Security's built-in form login page — we have our own SPA login
             .formLogin(AbstractHttpConfigurer::disable)
-
-            // Disable HTTP Basic — prevents the browser's native Basic-auth prompt
             .httpBasic(AbstractHttpConfigurer::disable)
 
-            // Return 401 JSON instead of redirecting to a login page for unauthenticated requests
+            // Return 401 JSON for unauthenticated requests blocked by @PreAuthorize
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint((request, response, authException) -> {
                     response.setContentType("application/json");
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     response.getWriter().write("{\"error\":\"Not authenticated\"}");
+                })
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    response.setContentType("application/json");
+                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    response.getWriter().write("{\"error\":\"Access denied\"}");
                 })
             );
 
