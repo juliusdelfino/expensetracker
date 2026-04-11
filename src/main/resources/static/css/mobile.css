@@ -137,6 +137,23 @@
     justify-content: center;
 }
 
+/* Camera overlay buttons (float over video) */
+.camera-overlay-btn {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+.camera-cancel-btn {
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    border-color: rgba(255,255,255,0.4);
+}
+.camera-cancel-btn:hover {
+    background: rgba(0,0,0,0.75);
+    border-color: rgba(255,255,255,0.6);
+}
+
 /* ===================== HOME FEED (social-scroll) ===================== */
 .home-feed {
     padding: 0.75rem;

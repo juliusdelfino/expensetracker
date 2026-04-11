@@ -88,12 +88,12 @@ function renderNewExpense(app, embedded = false) {
                         <i class="fa-solid fa-camera"></i> Use Camera
                     </button>
                 </div>
-                <div id="desktopCameraContainer" style="display:none; margin-top:1rem;">
-                    <video id="desktopCameraPreview" autoplay playsinline muted style="width:100%; border-radius:var(--radius); background:#000;"></video>
+                <div id="desktopCameraContainer" style="display:none; margin-top:1rem; position:relative;">
+                    <video id="desktopCameraPreview" autoplay playsinline muted style="width:100%; border-radius:var(--radius); background:#000; display:block;"></video>
                     <canvas id="desktopCameraCanvas" style="display:none;"></canvas>
-                    <div style="display:flex; gap:0.5rem; margin-top:0.75rem; justify-content:center;">
-                        <button class="btn btn-primary" onclick="desktopCapturePhoto()"><i class="fa-solid fa-circle-dot"></i> Capture</button>
-                        <button class="btn btn-outline" onclick="closeDesktopCamera()"><i class="fa-solid fa-xmark"></i> Cancel</button>
+                    <div style="position:absolute; bottom:1rem; left:0; right:0; display:flex; gap:0.75rem; justify-content:center; z-index:10;">
+                        <button class="btn btn-primary camera-overlay-btn" onclick="desktopCapturePhoto()"><i class="fa-solid fa-circle-dot"></i> Capture</button>
+                        <button class="btn camera-overlay-btn camera-cancel-btn" onclick="closeDesktopCamera()"><i class="fa-solid fa-xmark"></i> Cancel</button>
                     </div>
                 </div>
                 <div id="uploadStatus" style="margin-top:1rem; display:none"></div>
