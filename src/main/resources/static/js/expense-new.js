@@ -248,6 +248,31 @@ async function openDesktopCamera() {
         await video.play();
         container.style.display = 'block';
         document.getElementById('desktopCameraBtn').style.display = 'none';
+
+        // Hide drag & drop area and "or" divider, reduce padding for mobile
+        const uploadZone = document.getElementById('uploadZone');
+        if (uploadZone) uploadZone.style.display = 'none';
+        const orDivider = uploadZone?.nextElementSibling;
+        if (orDivider) orDivider.style.display = 'none';
+        const scanCard = container.closest('.card');
+        if (scanCard && isMobile()) {
+            scanCard.style.padding = '0';
+            scanCard.style.boxShadow = 'none';
+            scanCard.style.background = 'transparent';
+            // Also reduce padding on parent wrappers
+            const tabContent = scanCard.closest('.tab-content');
+            if (tabContent) tabContent.style.padding = '0';
+            const heading = scanCard.closest('.tab-content')?.previousElementSibling;
+            // Hide the heading and tabs bar
+            const parentContainer = scanCard.closest('#mobileNewExpenseContent') || scanCard.closest('.container');
+            if (parentContainer) {
+                parentContainer.style.padding = '0';
+                const h2 = parentContainer.querySelector('h2');
+                if (h2) h2.style.display = 'none';
+                const tabs = parentContainer.querySelector('.tabs');
+                if (tabs) tabs.style.display = 'none';
+            }
+        }
     } catch (err) {
         let msg = 'Camera access denied or not available';
         if (err.name === 'NotAllowedError') msg = 'Camera permission denied. Allow access in browser settings.';
@@ -262,7 +287,24 @@ function closeDesktopCamera() {
         desktopCameraStream = null;
     }
     const container = document.getElementById('desktopCameraContainer');
-    if (container) container.style.display = 'none';
+    if (container) {
+        // Restore card padding and hidden elements
+        const scanCard = container.closest('.card');
+        if (scanCard) {
+            scanCard.style.padding = '';
+            scanCard.style.boxShadow = '';
+            scanCard.style.background = '';
+        }
+        const parentContainer = container.closest('#mobileNewExpenseContent') || container.closest('.container');
+        if (parentContainer) {
+            parentContainer.style.padding = '';
+            const h2 = parentContainer.querySelector('h2');
+            if (h2) h2.style.display = '';
+            const tabs = parentContainer.querySelector('.tabs');
+            if (tabs) tabs.style.display = '';
+        }
+        container.style.display = 'none';
+    }
     const btn = document.getElementById('desktopCameraBtn');
     if (btn) btn.style.display = '';
     const uploadZone = document.getElementById('uploadZone');

@@ -6,6 +6,7 @@
 @media (min-width: 900px) {
     .swipe-wrapper { display: none !important; }
     .bottom-tab-bar { display: none !important; }
+    .quick-actions-card { display: none !important; }
 
     .dashboard-grid { grid-template-columns: 1fr 1fr; }
 

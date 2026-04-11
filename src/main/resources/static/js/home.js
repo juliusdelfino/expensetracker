@@ -21,6 +21,30 @@ function renderHomePanel() {
         <div class="feed-card hero-card" id="heroCard">
             <div class="hero-loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div>
         </div>
+        <div class="feed-card quick-actions-card">
+            <div class="quick-actions-grid">
+                <a href="#/expenses/new" class="quick-action-btn" onclick="closeNavDrawer()">
+                    <div class="quick-action-icon"><i class="fa-solid fa-plus"></i></div>
+                    <span>Add Expense</span>
+                </a>
+                <a href="#/expenses/new?tab=scan&camera=1" class="quick-action-btn" onclick="closeNavDrawer()">
+                    <div class="quick-action-icon"><i class="fa-solid fa-camera"></i></div>
+                    <span>Scan Receipt</span>
+                </a>
+                <a href="#/expenses" class="quick-action-btn" onclick="closeNavDrawer()">
+                    <div class="quick-action-icon"><i class="fa-solid fa-receipt"></i></div>
+                    <span>Expenses</span>
+                </a>
+                <a href="#/profile" class="quick-action-btn" onclick="closeNavDrawer()">
+                    <div class="quick-action-icon"><i class="fa-solid fa-user-gear"></i></div>
+                    <span>Profile</span>
+                </a>
+                <a href="#/chat" class="quick-action-btn" onclick="openChat(event); closeNavDrawer()">
+                    <div class="quick-action-icon"><i class="fa-solid fa-comment"></i></div>
+                    <span>Chat</span>
+                </a>
+            </div>
+        </div>
         <div class="feed-card">
             <div class="card-title-row">
                 <h3 class="card-title"><i class="fa-solid fa-chart-column"></i> Totals</h3>

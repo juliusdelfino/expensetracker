@@ -37,7 +37,7 @@ async function renderExpenseDetail(app, id) {
             </div>
             <div class="action-bar-right">
                 ${isOwner && isFailed ? `<button class="btn btn-secondary btn-sm" onclick="retryExpense('${e.urlId}'); setTimeout(()=>location.reload(),500)"><i class="fa-solid fa-rotate"></i> Retry</button>` : ''}
-                <button class="btn btn-outline btn-sm" onclick="openShareMenu('${e.urlId}', this)"><i class="fa-solid fa-share-nodes"></i> Share</button>
+                ${!isProcessing && !isFailed ? `<button class="btn btn-outline btn-sm" onclick="openShareMenu('${e.urlId}', this)"><i class="fa-solid fa-share-nodes"></i> Share</button>` : ''}
                 ${isOwner ? `<button class="btn btn-secondary btn-sm" onclick="duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i> Duplicate</button>` : ''}
                 ${isOwner ? `<button class="btn btn-danger btn-sm" onclick="deleteExpense('${e.urlId}'); navigate('#/expenses')"><i class="fa-solid fa-trash"></i> Delete</button>` : ''}
             </div>
