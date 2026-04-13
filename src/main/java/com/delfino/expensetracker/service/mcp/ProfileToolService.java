@@ -1,4 +1,4 @@
-package com.delfino.expensetracker.service;
+package com.delfino.expensetracker.service.mcp;
 
 import com.delfino.expensetracker.config.UserContext;
 import com.delfino.expensetracker.model.User;
@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 
@@ -34,16 +35,16 @@ public class ProfileToolService {
             "Use this when the user asks about their own profile settings.")
     public String getProfile() {
         log.info("Tool call: getProfile(userId={})", userContext.getUserId());
-        Long userId = userContext.getUserId();
-        User user = userRepository.findById(userId).orElse(null);
+        User user = userRepository.findById(userContext.getUserId()).orElse(null);
         if (user == null) return "User not found.";
 
-        return "Your profile:\n" + "- Username: " + user.getUsername() + "\n" +
-                "- Email: " + (user.getEmail() != null ? user.getEmail() : "not set") + "\n" +
-                "- Phone: " + (user.getPhoneNumber() != null ? user.getPhoneNumber() : "not set") + "\n" +
-                "- Base Currency: " + (user.getBaseCurrency() != null ? user.getBaseCurrency() : "not set") + "\n" +
-                "- Base City: " + (user.getBaseCity() != null ? user.getBaseCity() : "not set") + "\n" +
-                "- Base Country: " + (user.getBaseCountry() != null ? user.getBaseCountry() : "not set") + "\n";
+        return "Your profile:\n"
+                + "- Username: " + user.getUsername() + "\n"
+                + "- Email: " + orNotSet(user.getEmail()) + "\n"
+                + "- Phone: " + orNotSet(user.getPhoneNumber()) + "\n"
+                + "- Base Currency: " + orNotSet(user.getBaseCurrency()) + "\n"
+                + "- Base City: " + orNotSet(user.getBaseCity()) + "\n"
+                + "- Base Country: " + orNotSet(user.getBaseCountry()) + "\n";
     }
 
     @Tool(description = "Update the current user's profile. Only updates fields that are provided (non-empty). " +
@@ -57,40 +58,24 @@ public class ProfileToolService {
             @ToolParam(description = "New base country code, e.g. 'SG'. Pass empty string to skip.") String baseCountry) {
 
         log.info("Tool call: updateProfile(userId={})", userContext.getUserId());
-        Long userId = userContext.getUserId();
-        User user = userRepository.findById(userId).orElse(null);
+        User user = userRepository.findById(userContext.getUserId()).orElse(null);
         if (user == null) return "User not found.";
 
         StringBuilder changes = new StringBuilder();
-        if (email != null && !email.isBlank()) {
-            user.setEmail(email);
-            changes.append("- Email → ").append(email).append("\n");
-        }
-        if (phoneNumber != null && !phoneNumber.isBlank()) {
-            user.setPhoneNumber(phoneNumber);
-            changes.append("- Phone → ").append(phoneNumber).append("\n");
-        }
-        if (baseCurrency != null && !baseCurrency.isBlank()) {
-            user.setBaseCurrency(baseCurrency.toUpperCase());
-            changes.append("- Base Currency → ").append(baseCurrency.toUpperCase()).append("\n");
-        }
-        if (baseCity != null && !baseCity.isBlank()) {
-            user.setBaseCity(baseCity);
-            changes.append("- Base City → ").append(baseCity).append("\n");
-        }
-        if (baseCountry != null && !baseCountry.isBlank()) {
-            user.setBaseCountry(baseCountry.toUpperCase());
-            changes.append("- Base Country → ").append(baseCountry.toUpperCase()).append("\n");
-        }
+        if (StringUtils.hasText(email)) { user.setEmail(email); changes.append("- Email → ").append(email).append("\n"); }
+        if (StringUtils.hasText(phoneNumber)) { user.setPhoneNumber(phoneNumber); changes.append("- Phone → ").append(phoneNumber).append("\n"); }
+        if (StringUtils.hasText(baseCurrency)) { user.setBaseCurrency(baseCurrency.toUpperCase()); changes.append("- Base Currency → ").append(baseCurrency.toUpperCase()).append("\n"); }
+        if (StringUtils.hasText(baseCity)) { user.setBaseCity(baseCity); changes.append("- Base City → ").append(baseCity).append("\n"); }
+        if (StringUtils.hasText(baseCountry)) { user.setBaseCountry(baseCountry.toUpperCase()); changes.append("- Base Country → ").append(baseCountry.toUpperCase()).append("\n"); }
 
-        if (changes.isEmpty()) {
-            return "No changes specified.";
-        }
+        if (changes.isEmpty()) return "No changes specified.";
 
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
-
         return "Profile updated:\n" + changes;
     }
-}
 
+    private static String orNotSet(String value) {
+        return StringUtils.hasText(value) ? value : "not set";
+    }
+}

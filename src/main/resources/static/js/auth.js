@@ -91,16 +91,7 @@ function renderRegister(app) {
     };
 
     // Populate currency datalist for register form
-    (async () => {
-        try {
-            const map = await api('/api/currencies');
-            if (map) {
-                const codes = Object.keys(map).sort();
-                const dl = document.getElementById('regCurrencyList');
-                if (dl) dl.innerHTML = codes.map(c => `<option value="${c}"></option>`).join('');
-            }
-        } catch (err) { /* ignore */ }
-    })();
+    populateCurrencyDatalist('regCurrencyList');
 }
 
 async function renderProfile(app) {
@@ -185,20 +176,8 @@ async function renderProfile(app) {
         await checkAuth();
     };
 
-    // Populate currency datalist for profile (pCurrency)
-    (async () => {
-        try {
-            const map = await api('/api/currencies');
-            if (map) {
-                const codes = Object.keys(map).sort();
-                const dl = document.getElementById('pCurrencyList');
-                if (dl) dl.innerHTML = codes.map(c => `<option value="${c}"></option>`).join('');
-                // ensure input value shows user's current baseCurrency
-                const inp = document.getElementById('pCurrency');
-                if (inp && inp.value === '') inp.value = user.baseCurrency || '';
-            }
-        } catch (err) { /* ignore */ }
-    })();
+    // Populate currency datalist for profile
+    populateCurrencyDatalist('pCurrencyList', 'pCurrency', user.baseCurrency);
 }
 
 function updateThemeBtns() {

@@ -1,8 +1,8 @@
 package com.delfino.expensetracker.config;
 
-import com.delfino.expensetracker.service.ExpenseCrudToolService;
-import com.delfino.expensetracker.service.ExpenseToolService;
-import com.delfino.expensetracker.service.ProfileToolService;
+import com.delfino.expensetracker.service.mcp.ExpenseCrudToolService;
+import com.delfino.expensetracker.service.mcp.ExpenseToolService;
+import com.delfino.expensetracker.service.mcp.ProfileToolService;
 import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
@@ -17,7 +17,6 @@ import org.springframework.web.reactive.function.client.WebClient;
  * Registers @Tool-annotated beans with Spring AI so that:
  * 1) The ChatClient can invoke them during tool-calling conversations
  * 2) The MCP server exposes them for external MCP clients (e.g. Ollama directly)
- *
  * Tool services are split by concern:
  * - ExpenseToolService: read-only queries (item price, totals, list, summary)
  * - ExpenseCrudToolService: CRUD on expenses, items, stores
@@ -29,7 +28,6 @@ public class AiConfig {
     /**
      * Override the auto-configured OllamaApi bean to inject the API key as an
      * Authorization: Bearer header on every request.
-     *
      * OllamaConnectionProperties only exposes baseUrl — there is no apiKey field —
      * so spring.ai.ollama.api-key in application.yml is silently ignored by the
      * framework. Providing our own OllamaApi bean (which is @ConditionalOnMissingBean

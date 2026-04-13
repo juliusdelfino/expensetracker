@@ -1,0 +1,74 @@
+spring:
+  config:
+    import: "optional:classpath:country-mapping.yml"
+  datasource:
+    url: jdbc:sqlite:./target/test-expensetracker.db
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 1
+      minimum-idle: 1
+  jpa:
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: false
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+  ai:
+    ollama:
+      base-url: http://127.0.0.1:1
+    mcp:
+      server:
+        name: expense-tracker-mcp-test
+        version: 1.0.0
+    # Disable Spring AI retry backoff so WireMock connection errors fail fast
+    retry:
+      max-attempts: 1
+
+server:
+  servlet:
+    session:
+      timeout: 1h
+
+app:
+  migration:
+    enabled: false
+  data:
+    dir: target/test-data
+
+# Fast-fail invalid URL to prevent real HTTP currency calls
+currency:
+  api:
+    url: http://127.0.0.1:1
+
+ocr:
+  api:
+    url: http://127.0.0.1:1
+    model: test-model
+    api-key: test-key
+    prompt: "test prompt"
+
+chatbot:
+  api:
+    api-key: test-key
+    system-prompt: "You are a test assistant. Today is {today}. Currency: {currency}."
+
+
+# Currencies fallback (used when remote API is unavailable)
+currencies:
+  USD: "United States Dollar"
+  EUR: "Euro"
+  GBP: "British Pound"
+  SGD: "Singapore Dollar"
+  JPY: "Japanese Yen"
+  AUD: "Australian Dollar"
+  CHF: "Swiss Franc"
+  CNY: "Chinese Renminbi Yuan"
+  CAD: "Canadian Dollar"
+  HKD: "Hong Kong Dollar"
+

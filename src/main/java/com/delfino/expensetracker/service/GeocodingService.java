@@ -1,11 +1,14 @@
 package com.delfino.expensetracker.service;
 
+import com.delfino.expensetracker.businesslogic.StoreCountryMatcher;
 import com.delfino.expensetracker.model.Store;
 import com.delfino.expensetracker.repository.StoreRepository;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -28,7 +31,9 @@ import java.util.stream.Stream;
 public class GeocodingService {
 
     private static final Logger log = LoggerFactory.getLogger(GeocodingService.class);
-    private static final String NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
+
+    @Value("${geocoding.api.url:https://nominatim.openstreetmap.org}")
+    private String geocodingApiUrl;
 
     private final StoreRepository storeRepository;
     private final ObjectMapper objectMapper;
@@ -82,8 +87,12 @@ public class GeocodingService {
         if (result != null) {
             store.setLatitude(result.lat);
             store.setLongitude(result.lon);
-            if (result.placeId != null && store.getSourceId() == null) {
-                store.setSourceId("nominatim-" + result.placeId);
+            if (result.place_id != null && store.getSourceId() == null) {
+                store.setSourceId("nominatim-" + result.place_id);
+            }
+            if (result.address != null && StoreCountryMatcher.countryMatches(store.getCountry(), result.address.country_code)
+                    && result.address.city != null) {
+                store.setCity(result.address.city);
             }
             storeRepository.save(store);
             log.info("Geocoded store {} ({}) -> lat={}, lon={}, sourceId={}", store.getId(), store.getName(), result.lat, result.lon, store.getSourceId());
@@ -154,7 +163,11 @@ public class GeocodingService {
     /**
      * Result from a Nominatim API call.
      */
-    record NominatimResult(double lat, double lon, String placeId) {}
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record NominatimResult(double lat, double lon, String place_id, NominatimAddress address) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record NominatimAddress(String city, String country, String country_code) {}
 
     /**
      * Call Nominatim API. Enforces 1 request/second rate limit.
@@ -170,7 +183,7 @@ public class GeocodingService {
             }
 
             String encoded = URLEncoder.encode(query, StandardCharsets.UTF_8);
-            String url = NOMINATIM_URL + "?q=" + encoded + "&format=json&addressdetails=1&limit=1";
+            String url = geocodingApiUrl + "/search?q=" + encoded + "&format=json&addressdetails=1&limit=1";
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
@@ -186,16 +199,10 @@ public class GeocodingService {
                 return null;
             }
 
-            JsonNode results = objectMapper.readTree(response.body());
-            if (results.isArray() && !results.isEmpty()) {
-                JsonNode first = results.get(0);
-                double lat = first.get("lat").asDouble();
-                double lon = first.get("lon").asDouble();
-                String placeId = first.has("place_id") ? String.valueOf(first.get("place_id").asLong()) : null;
-                return new NominatimResult(lat, lon, placeId);
-            }
-
-            return null;
+            JavaType type =
+                    objectMapper.getTypeFactory().constructCollectionLikeType(List.class, NominatimResult.class);
+            List<NominatimResult> rows = objectMapper.readValue(response.body(), type);
+            return rows.isEmpty() ? null : rows.get(0);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.warn("Geocoding interrupted for query: {}", query);
