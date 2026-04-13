@@ -1,7 +1,7 @@
 package com.delfino.expensetracker.controller;
 
 import com.delfino.expensetracker.service.CountryService;
-import com.delfino.expensetracker.config.UserContext;
+import com.delfino.expensetracker.dto.auth.UserToken;
 import com.delfino.expensetracker.dto.common.ErrorResponse;
 import com.delfino.expensetracker.dto.common.MessageResponse;
 import com.delfino.expensetracker.dto.expense.AttachmentPathResponse;
@@ -19,6 +19,7 @@ import com.delfino.expensetracker.service.SupportedCurrencyService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -62,8 +63,9 @@ public class ExpenseController {
                                   @RequestParam(required = false) String startDate,
                                   @RequestParam(required = false) String endDate,
                                   @RequestParam(required = false) String category,
-                                  @RequestParam(required = false) String country) {
-        Long userId = UserContext.currentUserId();
+                                  @RequestParam(required = false) String country,
+                                  UserToken userToken) {
+        long userId = userToken.getUserId();
         List<Expense> expenses = expenseService.search(userId, search, includeDeleted);
 
         expenses = filterByDateRange(expenses, startDate, endDate);
@@ -94,8 +96,8 @@ public class ExpenseController {
 
     @GetMapping("/categories")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> categories() {
-        Long userId = UserContext.currentUserId();
+    public ResponseEntity<?> categories(UserToken userToken) {
+        long userId = userToken.getUserId();
         List<String> cats = expenseRepository.findByUserIdAndDeletedFalse(userId).stream()
                 .map(Expense::getCategory)
                 .filter(Objects::nonNull)
@@ -107,8 +109,8 @@ public class ExpenseController {
     }
 
     @GetMapping("/{expenseUrlId}")
-    public ResponseEntity<?> get(@PathVariable String expenseUrlId) {
-        Long userId = UserContext.currentUserId(); // null for anonymous visitors
+    public ResponseEntity<?> get(@PathVariable String expenseUrlId, UserToken userToken) {
+        Long userId = userToken != null ? userToken.getUserId() : null;
         return expenseRepository.findByUrlId(expenseUrlId)
                 .map(expense -> {
                     boolean isOwner = userId != null && expense.getUserId() == userId;
@@ -124,22 +126,20 @@ public class ExpenseController {
 
     @PostMapping("/manual")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> createManual(@RequestBody Expense expense) {
-        Long userId = UserContext.currentUserId();
-        if (expense.getCurrency() != null && !expense.getCurrency().isBlank()) {
-            if (!supportedCurrencyService.isSupported(expense.getCurrency())) {
-                return ResponseEntity.badRequest().body(new ErrorResponse("Unsupported currency: " + expense.getCurrency()));
-            }
-            expense.setCurrency(expense.getCurrency().toUpperCase());
+    public ResponseEntity<?> createManual(@RequestBody Expense expense, UserToken userToken) {
+        long userId = userToken.getUserId();
+        if (!supportedCurrencyService.isSupported(expense.getCurrency())) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("Unsupported currency: " + expense.getCurrency()));
         }
+        expense.setCurrency(expense.getCurrency().toUpperCase());
         Expense saved = expenseService.createManualExpense(expense, userId);
         return ResponseEntity.ok(saved);
     }
 
     @PostMapping("/scan")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> uploadReceipt(@RequestParam("file") MultipartFile file) throws IOException {
-        Long userId = UserContext.currentUserId();
+    public ResponseEntity<?> uploadReceipt(@RequestParam("file") MultipartFile file, UserToken userToken) throws IOException {
+        long userId = userToken.getUserId();
         Path uploadDir = Path.of(dataDir, "receipts");
         Files.createDirectories(uploadDir);
         String filename = getDateString() + "_" + userId + "_" + file.getOriginalFilename();
@@ -155,9 +155,9 @@ public class ExpenseController {
 
     @PutMapping("/{expenseUrlId}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> update(@PathVariable String expenseUrlId, @RequestBody Expense updates) {
-        Long userId = UserContext.currentUserId();
-        if (updates.getCurrency() != null && !updates.getCurrency().isBlank()) {
+    public ResponseEntity<?> update(@PathVariable String expenseUrlId, @RequestBody Expense updates, UserToken userToken) {
+        long userId = userToken.getUserId();
+        if (StringUtils.hasText(updates.getCurrency())) {
             if (!supportedCurrencyService.isSupported(updates.getCurrency())) {
                 return ResponseEntity.badRequest().body(new ErrorResponse("Unsupported currency: " + updates.getCurrency()));
             }
@@ -169,29 +169,29 @@ public class ExpenseController {
 
     @DeleteMapping("/{expenseUrlId}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<MessageResponse> delete(@PathVariable String expenseUrlId) {
-        expenseService.softDelete(expenseUrlId, UserContext.currentUserId());
+    public ResponseEntity<MessageResponse> delete(@PathVariable String expenseUrlId, UserToken userToken) {
+        expenseService.softDelete(expenseUrlId, userToken.getUserId());
         return ResponseEntity.ok(new MessageResponse("Deleted"));
     }
 
     @PatchMapping("/{expenseUrlId}/restore")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<MessageResponse> restore(@PathVariable String expenseUrlId) {
-        expenseService.restore(expenseUrlId, UserContext.currentUserId());
+    public ResponseEntity<MessageResponse> restore(@PathVariable String expenseUrlId, UserToken userToken) {
+        expenseService.restore(expenseUrlId, userToken.getUserId());
         return ResponseEntity.ok(new MessageResponse("Restored"));
     }
 
     @PostMapping("/{expenseUrlId}/retry")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<MessageResponse> retry(@PathVariable String expenseUrlId) {
-        expenseService.retryOcr(expenseUrlId, UserContext.currentUserId());
+    public ResponseEntity<MessageResponse> retry(@PathVariable String expenseUrlId, UserToken userToken) {
+        expenseService.retryOcr(expenseUrlId, userToken.getUserId());
         return ResponseEntity.ok(new MessageResponse("Retry initiated"));
     }
 
     @PostMapping("/{expenseUrlId}/duplicate")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> duplicate(@PathVariable String expenseUrlId) {
-        Expense copy = expenseService.duplicate(expenseUrlId, UserContext.currentUserId());
+    public ResponseEntity<?> duplicate(@PathVariable String expenseUrlId, UserToken userToken) {
+        Expense copy = expenseService.duplicate(expenseUrlId, userToken.getUserId());
         return ResponseEntity.ok(copy);
     }
 
@@ -214,16 +214,18 @@ public class ExpenseController {
 
     @DeleteMapping("/{expenseUrlId}/items/{itemId}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<MessageResponse> deleteItem(@PathVariable String expenseUrlId, @PathVariable Long itemId) {
-        expenseService.softDeleteItem(expenseUrlId, itemId, UserContext.currentUserId());
+    public ResponseEntity<MessageResponse> deleteItem(@PathVariable String expenseUrlId, @PathVariable Long itemId,
+                                                      UserToken userToken) {
+        expenseService.softDeleteItem(expenseUrlId, itemId, userToken.getUserId());
         return ResponseEntity.ok(new MessageResponse("Item deleted"));
     }
 
     // --- Store ---
     @PutMapping("/{expenseUrlId}/store")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> updateStore(@PathVariable String expenseUrlId, @RequestBody Store store) {
-        Store saved = expenseService.saveStore(expenseUrlId, store, UserContext.currentUserId());
+    public ResponseEntity<?> updateStore(@PathVariable String expenseUrlId, @RequestBody Store store,
+                                         UserToken userToken) {
+        Store saved = expenseService.saveStore(expenseUrlId, store, userToken.getUserId());
         return ResponseEntity.ok(saved);
     }
 
@@ -248,8 +250,9 @@ public class ExpenseController {
     @GetMapping("/export")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> export(@RequestParam(defaultValue = "json") String format,
-                                    @RequestParam(required = false) String search) {
-        Long userId = UserContext.currentUserId();
+                                    @RequestParam(required = false) String search,
+                                    UserToken userToken) {
+        long userId = userToken.getUserId();
         List<Expense> expenses = expenseService.search(userId, search, false);
 
         if ("csv".equalsIgnoreCase(format)) {

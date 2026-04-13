@@ -1,6 +1,5 @@
 package com.delfino.expensetracker.controller;
 
-import com.delfino.expensetracker.config.UserContext;
 import com.delfino.expensetracker.dto.chat.ChatHistoryResponse;
 import com.delfino.expensetracker.dto.chat.ChatMessageRequest;
 import com.delfino.expensetracker.dto.chat.ChatResponse;
@@ -22,20 +21,16 @@ public class ChatController {
 
     private final ChatService chatService;
     private final ExpenseRepository expenseRepository;
-    private final UserContext userContext;
 
-    public ChatController(ChatService chatService, ExpenseRepository expenseRepository, UserContext userContext) {
+    public ChatController(ChatService chatService, ExpenseRepository expenseRepository) {
         this.chatService = chatService;
         this.expenseRepository = expenseRepository;
-        this.userContext = userContext;
     }
 
     @PostMapping
     public ResponseEntity<?> sendMessage(@RequestBody ChatMessageRequest body, HttpSession session) {
         Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(new ErrorResponse("Not authenticated"));
-
-        userContext.setUserId(userId);
 
         String message = body.message();
         if (message == null || message.isBlank()) {

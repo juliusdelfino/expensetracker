@@ -119,7 +119,7 @@ class DashboardControllerTest extends BaseControllerTest {
                 LocalDateTime.of(2026, 4, 1, 12, 0));
 
         Expense draft = createTestExpense(user.getId(), "Draft", BigDecimal.valueOf(1000), "USD");
-        draft.setStatus(ExpenseStatus.DRAFT);
+        draft.setStatus(ExpenseStatus.PROCESSING);
         expenseRepository.save(draft);
 
         MockHttpSession session = loginAs("alice", "pass");

@@ -14,9 +14,21 @@ function renderNewExpense(app, embedded = false) {
         <div id="tab-manual" class="tab-content active">
             <div class="card">
                 <form id="manualForm">
-                    <div class="form-group">
-                        <label>Amount <span style="color:var(--danger)">*</span></label>
-                        <input type="number" step="0.01" class="form-control" id="mAmount" required placeholder="0.00">
+                    <div style="display:grid; grid-template-columns:3fr 1fr; gap:0.75rem;">
+                        <div class="form-group">
+                            <label>Amount <span style="color:var(--danger)">*</span></label>
+                            <input type="number" step="0.01" class="form-control" id="mAmount" required placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label>Currency <span style="color:var(--danger)">*</span></label>
+                            <input type="text" class="form-control" id="mCurrency" list="mCurrencyList" placeholder="USD" required>
+                            <datalist id="mCurrencyList">
+                                <option value="USD"></option><option value="EUR"></option>
+                                <option value="GBP"></option><option value="SGD"></option>
+                                <option value="JPY"></option><option value="AUD"></option>
+                                <option value="CAD"></option><option value="CHF"></option>
+                            </datalist>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>Notes</label>
@@ -37,24 +49,14 @@ function renderNewExpense(app, embedded = false) {
                                 <datalist id="mCategoryList"></datalist>
                             </div>
                         </div>
-                        <div class="form-row-3">
+                        <div style="display:grid; grid-template-columns:2fr 1fr; gap:0.75rem;">
                             <div class="form-group">
-                                <label>Currency</label>
-                                <input type="text" class="form-control" id="mCurrency" list="mCurrencyList" placeholder="e.g. USD">
-                                <datalist id="mCurrencyList">
-                                    <option value="USD"></option><option value="EUR"></option>
-                                    <option value="GBP"></option><option value="SGD"></option>
-                                    <option value="JPY"></option><option value="AUD"></option>
-                                    <option value="CAD"></option><option value="CHF"></option>
-                                </datalist>
+                                <label>Receipt Number</label>
+                                <input type="text" class="form-control" id="mReceipt">
                             </div>
                             <div class="form-group">
                                 <label>Exchange Rate</label>
                                 <input type="number" step="0.000001" class="form-control" id="mExRate" placeholder="Auto-fetched">
-                            </div>
-                            <div class="form-group">
-                                <label>Receipt Number</label>
-                                <input type="text" class="form-control" id="mReceipt">
                             </div>
                         </div>
                         <div class="form-group">
@@ -62,6 +64,22 @@ function renderNewExpense(app, embedded = false) {
                             <div class="tags-container" id="mTagsContainer">
                                 <input type="text" class="tag-input" id="mTagInput" placeholder="Add tag...">
                             </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Items</label>
+                            <div id="mItemsList" class="new-expense-items-list"></div>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="addNewExpenseItem()" style="margin-top:0.5rem;">
+                                <i class="fa-solid fa-plus"></i> Add Item
+                            </button>
+                        </div>
+                        <div class="form-group">
+                            <label>Store</label>
+                            <div id="mStorePreview" class="new-expense-store-preview">
+                                <span class="text-light">No store set</span>
+                            </div>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="openNewExpenseStoreDialog()" style="margin-top:0.5rem;">
+                                <i class="fa-solid fa-store"></i> Set Store
+                            </button>
                         </div>
                         <div class="form-group">
                             <label>Attachments</label>
@@ -101,8 +119,9 @@ function renderNewExpense(app, embedded = false) {
         </div>
     </div>`;
 
-    // Set date default
-    document.getElementById('mDate').value = new Date().toISOString().slice(0, 16);
+    // Set date default to local time (not UTC)
+    const _now = new Date();
+    document.getElementById('mDate').value = new Date(_now - _now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     // Set user's base currency as default
     if (currentUser?.baseCurrency) {
         const currSel = document.getElementById('mCurrency');
@@ -120,6 +139,9 @@ function renderNewExpense(app, embedded = false) {
     populateCurrencyDatalist('mCurrencyList', 'mCurrency', currentUser?.baseCurrency);
 
     let tags = [];
+    window._newExpenseItems = [];
+    window._newExpenseStore = null;
+
     document.getElementById('mTagInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -131,8 +153,10 @@ function renderNewExpense(app, embedded = false) {
 
     document.getElementById('manualForm').onsubmit = async (ev) => {
         ev.preventDefault();
+        const _n = new Date();
+        const _localNow = new Date(_n - _n.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
         const expense = {
-            transactionDatetime: (document.getElementById('mDate').value || new Date().toISOString().slice(0, 16)) + ':00',
+            transactionDatetime: (document.getElementById('mDate').value || _localNow) + ':00',
             amount: parseFloat(document.getElementById('mAmount').value),
             currency: document.getElementById('mCurrency').value,
             category: document.getElementById('mCategory').value,
@@ -145,6 +169,15 @@ function renderNewExpense(app, embedded = false) {
 
         const saved = await api('/api/expenses/manual', { method: 'POST', body: expense });
         if (saved && saved.id) {
+            // Save items
+            for (const item of window._newExpenseItems) {
+                await api(`/api/expenses/${saved.urlId}/items`, { method: 'POST', body: item });
+            }
+            // Save store
+            if (window._newExpenseStore) {
+                await api(`/api/expenses/${saved.urlId}/store`, { method: 'PUT', body: window._newExpenseStore });
+            }
+            // Upload attachments
             const fileInput = document.getElementById('mAttachments');
             if (fileInput) {
                 const files = fileInput.files;
@@ -370,5 +403,272 @@ function captureCancel() {
     const overlay = document.getElementById('captureOverlay');
     if (overlay) overlay.remove();
     closeDesktopCamera();
+}
+
+// ============================================
+// NEW EXPENSE - INLINE ITEMS
+// ============================================
+function addNewExpenseItem() {
+    const overlay = document.createElement('div');
+    overlay.className = 'item-dialog-overlay';
+    overlay.id = 'newItemDialogOverlay';
+    overlay.onclick = (ev) => { if (ev.target === overlay) overlay.remove(); };
+    overlay.innerHTML = `
+        <div class="item-dialog">
+            <h3 class="item-dialog-title">Add Item</h3>
+            <div class="form-group">
+                <label>Item Name</label>
+                <input type="text" class="form-control" id="newDlgItemName" placeholder="Item name">
+            </div>
+            <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+                <div class="form-group">
+                    <label>Quantity</label>
+                    <input type="number" step="0.01" class="form-control" id="newDlgItemQty" value="1">
+                </div>
+                <div class="form-group">
+                    <label>Unit Price</label>
+                    <input type="number" step="0.01" class="form-control" id="newDlgItemPrice" placeholder="0.00">
+                </div>
+            </div>
+            <div class="item-dialog-actions">
+                <button class="btn btn-primary btn-sm" onclick="saveNewExpenseItem()">
+                    <i class="fa-solid fa-plus"></i> Add
+                </button>
+                <button class="btn btn-outline btn-sm" onclick="document.getElementById('newItemDialogOverlay').remove()">
+                    <i class="fa-solid fa-xmark"></i> Cancel
+                </button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    document.getElementById('newDlgItemName').focus();
+}
+
+function editNewExpenseItem(index) {
+    const item = window._newExpenseItems[index];
+    if (!item) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'item-dialog-overlay';
+    overlay.id = 'newItemDialogOverlay';
+    overlay.onclick = (ev) => { if (ev.target === overlay) overlay.remove(); };
+    overlay.innerHTML = `
+        <div class="item-dialog">
+            <h3 class="item-dialog-title">Edit Item</h3>
+            <div class="form-group">
+                <label>Item Name</label>
+                <input type="text" class="form-control" id="newDlgItemName" value="${esc(item.itemName)}">
+            </div>
+            <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+                <div class="form-group">
+                    <label>Quantity</label>
+                    <input type="number" step="0.01" class="form-control" id="newDlgItemQty" value="${item.quantity}">
+                </div>
+                <div class="form-group">
+                    <label>Unit Price</label>
+                    <input type="number" step="0.01" class="form-control" id="newDlgItemPrice" value="${item.unitPrice}">
+                </div>
+            </div>
+            <div class="item-dialog-actions">
+                <button class="btn btn-primary btn-sm" onclick="updateNewExpenseItem(${index})">
+                    <i class="fa-solid fa-save"></i> Save
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="removeNewExpenseItem(${index})">
+                    <i class="fa-solid fa-trash"></i> Delete
+                </button>
+                <button class="btn btn-outline btn-sm" onclick="document.getElementById('newItemDialogOverlay').remove()">
+                    <i class="fa-solid fa-xmark"></i> Cancel
+                </button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    document.getElementById('newDlgItemName').focus();
+}
+
+function saveNewExpenseItem() {
+    const name = document.getElementById('newDlgItemName').value.trim();
+    const qty = parseFloat(document.getElementById('newDlgItemQty').value) || 1;
+    const price = parseFloat(document.getElementById('newDlgItemPrice').value) || 0;
+    if (!name) { toast('Item name is required', 'error'); return; }
+    window._newExpenseItems.push({ itemName: name, quantity: qty, unitPrice: price });
+    document.getElementById('newItemDialogOverlay')?.remove();
+    renderNewExpenseItems();
+}
+
+function updateNewExpenseItem(index) {
+    const name = document.getElementById('newDlgItemName').value.trim();
+    const qty = parseFloat(document.getElementById('newDlgItemQty').value) || 1;
+    const price = parseFloat(document.getElementById('newDlgItemPrice').value) || 0;
+    if (!name) { toast('Item name is required', 'error'); return; }
+    window._newExpenseItems[index] = { itemName: name, quantity: qty, unitPrice: price };
+    document.getElementById('newItemDialogOverlay')?.remove();
+    renderNewExpenseItems();
+}
+
+function removeNewExpenseItem(index) {
+    window._newExpenseItems.splice(index, 1);
+    document.getElementById('newItemDialogOverlay')?.remove();
+    renderNewExpenseItems();
+}
+
+function renderNewExpenseItems() {
+    const container = document.getElementById('mItemsList');
+    if (!container) return;
+    if (window._newExpenseItems.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = window._newExpenseItems.map((item, i) => {
+        const total = (item.quantity * item.unitPrice).toFixed(2);
+        const qtyStr = item.quantity % 1 === 0 ? item.quantity.toFixed(0) : item.quantity.toFixed(2);
+        return `<div class="new-expense-item-row" onclick="editNewExpenseItem(${i})">
+            <span class="new-expense-item-name">${esc(item.itemName)}</span>
+            <span class="new-expense-item-detail">${qtyStr} × ${item.unitPrice.toFixed(2)} = ${total}</span>
+        </div>`;
+    }).join('');
+
+    // Auto-compute Amount from item totals
+    const itemsTotal = window._newExpenseItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const amountField = document.getElementById('mAmount');
+    if (amountField) amountField.value = itemsTotal.toFixed(2);
+}
+
+// ============================================
+// NEW EXPENSE - STORE DIALOG (reuses Change Store pattern)
+// ============================================
+function openNewExpenseStoreDialog() {
+    window._expenseIsOwner = true; // allow editing
+    const store = window._newExpenseStore || {};
+
+    const overlay = document.createElement('div');
+    overlay.className = 'item-dialog-overlay';
+    overlay.id = 'changeStoreOverlay';
+    overlay.onclick = (ev) => { if (ev.target === overlay) closeNewExpenseStoreDialog(); };
+
+    overlay.innerHTML = `
+        <div class="change-store-dialog" id="changeStoreDialog">
+            <div class="change-store-header">
+                <h3 class="item-dialog-title" style="margin-bottom:0"><i class="fa-solid fa-store"></i> Set Store</h3>
+                <button class="btn btn-outline btn-sm" onclick="closeNewExpenseStoreDialog()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="form-group" style="position:relative; margin-top:0.75rem;">
+                <label>Search address or place</label>
+                <input type="text" class="form-control" id="nominatimSearch" placeholder="e.g. Rivergate Vienna" oninput="debounceNominatim()" autocomplete="off">
+                <div class="nominatim-results" id="nominatimResults" style="display:none;"></div>
+            </div>
+            <p style="font-size:0.78rem; color:var(--text-light); margin-bottom:0.75rem;"><i class="fa-solid fa-circle-info"></i> Search to auto-fill, or edit fields directly.</p>
+            <div class="form-group">
+                <label>Name</label>
+                <input type="text" class="form-control" id="csName" value="${esc(store.name || '')}">
+            </div>
+            <div class="form-group">
+                <label>Address</label>
+                <input type="text" class="form-control" id="csAddress" value="${esc(store.address || '')}">
+            </div>
+            <div class="form-row-inline">
+                <div class="form-group">
+                    <label>City</label>
+                    <input type="text" class="form-control" id="csCity" value="${esc(store.city || '')}">
+                </div>
+                <div class="form-group">
+                    <label>Country Code</label>
+                    <input type="text" class="form-control" id="csCountry" value="${esc(store.country || '')}" placeholder="e.g. AT">
+                </div>
+            </div>
+            <div class="form-row-inline">
+                <div class="form-group">
+                    <label>Postal Code</label>
+                    <input type="text" class="form-control" id="csPostal" value="${esc(store.postalCode || '')}">
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="text" class="form-control" id="csPhone" value="${esc(store.phoneNumber || '')}">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Website</label>
+                <input type="text" class="form-control" id="csWebsite" value="${esc(store.website || '')}">
+            </div>
+            <div class="form-group">
+                <label>Location <span style="font-weight:normal; color:var(--text-light); font-size:0.8rem;">(drag pin to adjust)</span></label>
+                <div id="changeStoreMap" style="height:220px; border-radius:var(--radius); border:1px solid var(--border-color);"></div>
+            </div>
+            <input type="hidden" id="csLat" value="${store.latitude || ''}">
+            <input type="hidden" id="csLng" value="${store.longitude || ''}">
+            <div class="item-dialog-actions" style="margin-top:1rem;">
+                <button class="btn btn-primary" onclick="saveNewExpenseStore()">
+                    <i class="fa-solid fa-save"></i> Save
+                </button>
+                ${window._newExpenseStore ? `<button class="btn btn-danger" onclick="clearNewExpenseStore()">
+                    <i class="fa-solid fa-trash"></i> Remove
+                </button>` : ''}
+                <button class="btn btn-outline" onclick="closeNewExpenseStoreDialog()">
+                    <i class="fa-solid fa-xmark"></i> Cancel
+                </button>
+            </div>
+        </div>`;
+
+    document.body.appendChild(overlay);
+    document.getElementById('nominatimSearch').focus();
+    window._nominatimPlaceId = null;
+    window._nominatimSnapshot = null;
+    setTimeout(() => initChangeStoreMap(store), 200);
+}
+
+function saveNewExpenseStore() {
+    let sourceId = null;
+    if (window._nominatimPlaceId && window._nominatimSnapshot) {
+        const snap = window._nominatimSnapshot;
+        const currentAddr = document.getElementById('csAddress')?.value || '';
+        const currentCity = document.getElementById('csCity')?.value || '';
+        const currentCountry = document.getElementById('csCountry')?.value || '';
+        const currentPostal = document.getElementById('csPostal')?.value || '';
+        if (currentAddr === snap.address && currentCity === snap.city &&
+            currentCountry === snap.country && currentPostal === snap.postalCode) {
+            sourceId = 'nominatim-' + window._nominatimPlaceId;
+        }
+    }
+
+    window._newExpenseStore = {
+        name: document.getElementById('csName')?.value || '',
+        address: document.getElementById('csAddress')?.value || '',
+        city: document.getElementById('csCity')?.value || '',
+        country: document.getElementById('csCountry')?.value || '',
+        postalCode: document.getElementById('csPostal')?.value || '',
+        phoneNumber: document.getElementById('csPhone')?.value || '',
+        website: document.getElementById('csWebsite')?.value || '',
+        latitude: parseFloat(document.getElementById('csLat')?.value) || null,
+        longitude: parseFloat(document.getElementById('csLng')?.value) || null,
+        sourceId: sourceId
+    };
+    toast('Store set!', 'success');
+    closeNewExpenseStoreDialog();
+    renderNewExpenseStorePreview();
+}
+
+function clearNewExpenseStore() {
+    window._newExpenseStore = null;
+    closeNewExpenseStoreDialog();
+    renderNewExpenseStorePreview();
+    toast('Store removed', 'info');
+}
+
+function closeNewExpenseStoreDialog() {
+    if (_changeStoreMap) {
+        try { _changeStoreMap.remove(); } catch(e) {}
+        _changeStoreMap = null; _changeStoreMarker = null;
+    }
+    const overlay = document.getElementById('changeStoreOverlay');
+    if (overlay) overlay.remove();
+}
+
+function renderNewExpenseStorePreview() {
+    const preview = document.getElementById('mStorePreview');
+    if (!preview) return;
+    const store = window._newExpenseStore;
+    if (!store || !store.name) {
+        preview.innerHTML = '<span class="text-light">No store set</span>';
+        return;
+    }
+    const parts = [store.name, store.city, store.country].filter(Boolean);
+    preview.innerHTML = `<span><i class="fa-solid fa-store" style="color:var(--aegean-mid); margin-right:0.35rem;"></i>${esc(parts.join(', '))}</span>`;
 }
 

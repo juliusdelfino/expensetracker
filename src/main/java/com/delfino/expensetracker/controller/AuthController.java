@@ -1,6 +1,6 @@
 package com.delfino.expensetracker.controller;
 
-import com.delfino.expensetracker.config.UserContext;
+import com.delfino.expensetracker.dto.auth.UserToken;
 import com.delfino.expensetracker.dto.auth.LoginRequest;
 import com.delfino.expensetracker.dto.auth.LoginResponse;
 import com.delfino.expensetracker.dto.auth.RegisterRequest;
@@ -78,7 +78,7 @@ public class AuthController {
                             "Login successful",
                             u.getId(),
                             u.getUsername(),
-                            u.getBaseCurrency() != null ? u.getBaseCurrency() : "USD"
+                            u.getBaseCurrency()
                     ));
                 })
                 .orElse(ResponseEntity.status(401).body(new ErrorResponse("Invalid credentials")));
@@ -92,9 +92,8 @@ public class AuthController {
 
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> me() {
-        Long userId = UserContext.currentUserId();
-        return userRepository.findById(userId)
+    public ResponseEntity<?> me(UserToken user) {
+        return userRepository.findById(user.getUserId())
                 .map(u -> ResponseEntity.ok((Object) new UserProfileResponse(
                         u.getId(),
                         u.getUsername(),

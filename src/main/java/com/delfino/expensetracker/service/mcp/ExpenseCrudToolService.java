@@ -2,8 +2,8 @@ package com.delfino.expensetracker.service.mcp;
 
 import com.delfino.expensetracker.businesslogic.ExpenseDateRange;
 import com.delfino.expensetracker.businesslogic.StoreCountryMatcher;
+import com.delfino.expensetracker.dto.auth.UserContext;
 import com.delfino.expensetracker.service.CountryService;
-import com.delfino.expensetracker.config.UserContext;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.ExpenseItem;
 import com.delfino.expensetracker.model.Store;
@@ -160,6 +160,36 @@ public class ExpenseCrudToolService {
         }
     }
 
+    @Tool(description = "Update an existing item on an expense. Use this when the user wants to modify an item's name, quantity, or unit price. " +
+            "For example: 'change cookie ice cream price to 3.50' or 'update item 5 quantity to 2'.")
+    public String updateExpenseItem(
+            @ToolParam(description = "The Long of the expense containing the item.") String expenseId,
+            @ToolParam(description = "The Long of the item to update.") String itemId,
+            @ToolParam(description = "New name for the item. Pass empty string to keep current name.") String itemName,
+            @ToolParam(description = "New quantity. Pass 0 or negative to keep current quantity.") double quantity,
+            @ToolParam(description = "New unit price. Pass negative to keep current unit price.") double unitPrice) {
+
+        log.info("Tool call: updateExpenseItem(expenseId={}, itemId={}, userId={})", expenseId, itemId, userContext.getUserId());
+        Long userId = userContext.getUserId();
+
+        Expense expense = expenseRepository.findById(Long.valueOf(expenseId)).orElse(null);
+        if (expense == null) return "Expense not found.";
+        if (expense.getUserId() != userId) return "Not authorized.";
+
+        ExpenseItem existing = expenseItemRepository.findById(Long.valueOf(itemId)).orElse(null);
+        if (existing == null) return "Item not found.";
+        if (existing.getExpenseId() != expense.getId()) return "Item does not belong to this expense.";
+
+        if (StringUtils.hasText(itemName)) existing.setItemName(itemName);
+        if (quantity > 0) existing.setQuantity(BigDecimal.valueOf(quantity));
+        if (unitPrice >= 0) existing.setUnitPrice(BigDecimal.valueOf(unitPrice));
+
+        ExpenseItem saved = expenseService.saveItem(expense.getUrlId(), existing);
+
+        return "Item updated: " + saved.getItemName() + " (qty: " + saved.getQuantity()
+                + ", unit: " + saved.getUnitPrice() + ", total: " + saved.getTotalPrice() + ")";
+    }
+
     // ─────────────────────────────────────────────────────────────
     // STORE QUERY
     // ─────────────────────────────────────────────────────────────
@@ -185,9 +215,9 @@ public class ExpenseCrudToolService {
         StoreVisitMaps visitMaps = new StoreVisitMaps();
 
         for (Expense e : expenses) {
-            if (!ExpenseDateRange.isWithin(e, start, end)) continue;
-            if (e.getStoreId() == null) continue;
-            recordStoreVisit(e, userId, countryLower, resolvedCode, visitMaps);
+            if (ExpenseDateRange.isWithin(e, start, end) && e.getStoreId() != null) {
+                recordStoreVisit(e, userId, countryLower, resolvedCode, visitMaps);
+            }
         }
 
         if (visitMaps.visitCounts().isEmpty()) {
@@ -226,7 +256,7 @@ public class ExpenseCrudToolService {
         List<ExpenseItem> items = expenseItemRepository.findByExpenseIdAndDeletedFalse(expenseId);
         if (items.isEmpty()) return;
         sb.append("\nItems:\n");
-        items.forEach(item -> sb.append("  - ").append(item.getItemName())
+        items.forEach(item -> sb.append("  - [itemId: ").append(item.getId()).append("] ").append(item.getItemName())
                 .append(" (qty: ").append(item.getQuantity())
                 .append(", unit: ").append(item.getUnitPrice())
                 .append(", total: ").append(item.getTotalPrice()).append(")\n"));

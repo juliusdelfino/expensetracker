@@ -203,7 +203,6 @@ function statusBadge(status) {
         case 'PROCESSING': return '<span class="status-dot status-processing" title="Processing"><i class="fa-solid fa-spinner fa-spin"></i></span>';
         case 'COMPLETED': return '<span class="status-dot status-completed" title="Completed"><i class="fa-solid fa-check"></i></span>';
         case 'FAILED': return '<span class="status-dot status-failed" title="Failed"><i class="fa-solid fa-xmark"></i></span>';
-        case 'DRAFT': return '<span class="status-dot status-draft" title="Draft"><i class="fa-solid fa-pencil"></i></span>';
         default: return '<span class="status-dot"></span>';
     }
 }

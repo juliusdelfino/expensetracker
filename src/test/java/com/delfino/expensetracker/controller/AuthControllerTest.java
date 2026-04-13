@@ -148,26 +148,6 @@ class AuthControllerTest extends BaseControllerTest {
                 .andExpect(jsonPath("$.error").value("Invalid credentials"));
     }
 
-    @Test
-    void login_defaultsBaseCurrencyToUSD_whenUserHasNone() throws Exception {
-        // Create user without baseCurrency
-        User u = new User();
-        u.setUsername("noCurrency");
-        u.setPasswordHash(passwordEncoder.encode("pass"));
-        u.setCreatedAt(java.time.LocalDateTime.now());
-        u.setUpdatedAt(java.time.LocalDateTime.now());
-        userRepository.save(u);
-
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "username", "noCurrency",
-                                "password", "pass"
-                        ))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.baseCurrency").value("USD"));
-    }
-
     // ---- /api/auth/logout ----
 
     @Test

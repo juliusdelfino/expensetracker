@@ -3,8 +3,8 @@ package com.delfino.expensetracker.service.mcp;
 import com.delfino.expensetracker.businesslogic.ExpenseAggregation;
 import com.delfino.expensetracker.businesslogic.ExpenseDateRange;
 import com.delfino.expensetracker.businesslogic.StoreCountryMatcher;
+import com.delfino.expensetracker.dto.auth.UserContext;
 import com.delfino.expensetracker.service.CountryService;
-import com.delfino.expensetracker.config.UserContext;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.ExpenseItem;
 import com.delfino.expensetracker.model.Store;
@@ -224,6 +224,8 @@ public class ExpenseToolService {
 
     private static Map<String, Object> buildItemMatchEntry(Expense expense, ExpenseItem item, Store store) {
         Map<String, Object> match = new LinkedHashMap<>();
+        match.put("expenseId", expense.getId());
+        match.put("itemId", item.getId());
         match.put("itemName", item.getItemName());
         match.put("unitPrice", item.getUnitPrice());
         match.put("totalPrice", item.getTotalPrice());
@@ -239,7 +241,8 @@ public class ExpenseToolService {
         StringBuilder sb = new StringBuilder("Found ").append(matches.size())
                 .append(" result(s) for '").append(itemName).append("':\n");
         for (Map<String, Object> m : matches) {
-            sb.append("- ").append(m.get("itemName"))
+            sb.append("- [expenseId: ").append(m.get("expenseId")).append(", itemId: ").append(m.get("itemId")).append("] ")
+                    .append(m.get("itemName"))
                     .append(": ").append(m.get("unitPrice")).append(" ").append(m.get("currency"))
                     .append(" (qty: ").append(m.get("quantity")).append(")")
                     .append(" from ").append(m.get("storeName"))

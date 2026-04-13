@@ -1,7 +1,7 @@
 package com.delfino.expensetracker.controller;
 
 import com.delfino.expensetracker.service.CountryService;
-import com.delfino.expensetracker.config.UserContext;
+import com.delfino.expensetracker.dto.auth.UserToken;
 import com.delfino.expensetracker.dto.dashboard.DashboardResponse;
 import com.delfino.expensetracker.dto.dashboard.DiscoveryCard;
 import com.delfino.expensetracker.dto.dashboard.DiscoveryCardExpense;
@@ -54,8 +54,9 @@ public class DashboardController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<DashboardResponse> dashboard(@RequestParam(required = false) String startDate,
                                                        @RequestParam(required = false) String endDate,
-                                                       @RequestParam(required = false) String category) {
-        Long userId = UserContext.currentUserId();
+                                                       @RequestParam(required = false) String category,
+                                                       UserToken userToken) {
+        long userId = userToken.getUserId();
 
         List<Expense> allExpenses = expenseRepository.findByUserIdAndDeletedFalse(userId);
         List<Expense> expenses = new ArrayList<>(allExpenses);

@@ -96,7 +96,6 @@ function statusIcon(status) {
         case 'PROCESSING': return '<i class="fa-solid fa-spinner fa-spin"></i>';
         case 'COMPLETED': return '<i class="fa-solid fa-check"></i>';
         case 'FAILED': return '<i class="fa-solid fa-xmark"></i>';
-        case 'DRAFT': return '<i class="fa-solid fa-pencil"></i>';
         default: return '';
     }
 }

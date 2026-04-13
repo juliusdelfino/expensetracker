@@ -1,6 +1,6 @@
 package com.delfino.expensetracker.service.mcp;
 
-import com.delfino.expensetracker.config.UserContext;
+import com.delfino.expensetracker.dto.auth.UserContext;
 import com.delfino.expensetracker.model.User;
 import com.delfino.expensetracker.repository.UserRepository;
 import org.slf4j.Logger;
