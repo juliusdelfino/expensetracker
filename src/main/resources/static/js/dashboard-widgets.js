@@ -120,7 +120,7 @@ function getCurrentOrLatestMonth(data) {
 // ============================================
 // CHART HELPERS (deduplicated)
 // ============================================
-const CHART_COLORS = ['#1B3A5C','#2E5A88','#4A7FB5','#89B4D4','#D4A853','#E8C97A','#27AE60','#C0392B','#8E44AD','#F39C12'];
+const CHART_COLORS = ['#1565C0','#1976D2','#42A5F5','#7C4DFF','#FF7043','#66BB6A','#388E3C','#D32F2F','#AB47BC','#F9A825'];
 
 function createTimelineChart(canvasId, chartKey, data) {
     const tc = document.getElementById(canvasId);
@@ -310,7 +310,7 @@ function appendDiscoveryBatch(containerId, cards, count) {
     const startIdx = _discoveryIndex[containerId] || 0;
     const baseCur = currentUser?.baseCurrency || 'USD';
     const iconsPool = ['fa-plane','fa-globe','fa-map-pin','fa-compass','fa-earth-americas','fa-earth-europe','fa-earth-asia','fa-suitcase'];
-    const colorsPool = ['#1B3A5C','#2E5A88','#4A7FB5','#27AE60','#8E44AD','#C0392B','#E67E22','#16A085'];
+    const colorsPool = ['#1565C0','#1976D2','#42A5F5','#388E3C','#AB47BC','#D32F2F','#FF7043','#00897B'];
 
     for (let i = 0; i < count && startIdx + i < cards.length; i++) {
         const card = cards[startIdx + i];

@@ -32,7 +32,7 @@ async function renderExpenseDetail(app, id) {
     let html = `<div class="container">
         <div class="action-bar">
             <div class="action-bar-left">
-                <h2 style="color:var(--aegean-dark)">Expense Detail</h2>
+                <h2 style="color:var(--primary-dark)">Expense Detail</h2>
                 <span class="badge badge-${(e.status||'').toLowerCase()}">${statusIcon(e.status)} ${e.status}</span>
             </div>
             <div class="action-bar-right">
@@ -45,7 +45,7 @@ async function renderExpenseDetail(app, id) {
 
     if (isProcessing) {
         html += `<div class="card" style="text-align:center; padding:3rem">
-            <i class="fa-solid fa-spinner fa-spin" style="font-size:3rem; color:var(--aegean-mid)"></i>
+            <i class="fa-solid fa-spinner fa-spin" style="font-size:3rem; color:var(--primary)"></i>
             <p style="margin-top:1rem; color:var(--text-light)">Processing receipt... This may take 2-3 minutes.</p>
             <button class="btn btn-primary" style="margin-top:1rem" onclick="renderExpenseDetail(document.getElementById('app'),'${e.urlId}')">
                 <i class="fa-solid fa-rotate"></i> Refresh
@@ -138,7 +138,7 @@ async function renderExpenseDetail(app, id) {
                     <span>${new Date(e.updatedAt).toLocaleString()}</span>
                 </div>` : ''}
                 ${storeHasMap ? `<div class="other-detail-row">
-                    <span class="other-detail-label"><i class="fa-solid fa-map-location-dot" style="color:var(--aegean-mid); margin-right:0.25rem;"></i> Store location</span>
+                    <span class="other-detail-label"><i class="fa-solid fa-map-location-dot" style="color:var(--primary); margin-right:0.25rem;"></i> Store location</span>
                 </div>
                 <div id="storeOtherDetailsMap" style="height:200px; border-radius:var(--radius); margin-top:0.4rem; border:1px solid var(--border-color);"></div>` : ''}
             </div>

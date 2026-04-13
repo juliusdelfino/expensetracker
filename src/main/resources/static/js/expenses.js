@@ -22,7 +22,7 @@ async function renderExpenseList(app) {
     <div class="container">
         <div class="action-bar">
             <div class="action-bar-left">
-                <h2 style="color:var(--aegean-dark)"><i class="fa-solid fa-receipt"></i> Expenses</h2>
+                <h2 style="color:var(--primary-dark)"><i class="fa-solid fa-receipt"></i> Expenses</h2>
             </div>
             <div class="action-bar-right">
                 <button class="btn btn-outline btn-sm expense-desktop-only" onclick="exportExpenses('csv')">

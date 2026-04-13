@@ -6,7 +6,7 @@ function renderNewExpense(app, embedded = false) {
     const container = embedded ? app : app;
     container.innerHTML = `
     <div class="${embedded ? '' : 'container'}">
-        <h2 style="color:var(--aegean-dark); margin-bottom:1rem"><i class="fa-solid fa-plus-circle"></i> New Expense</h2>
+        <h2 style="color:var(--primary-dark); margin-bottom:1rem"><i class="fa-solid fa-plus-circle"></i> New Expense</h2>
         <div class="tabs">
             <div class="tab active" data-tab="manual" onclick="switchTab('manual', this)"><i class="fa-solid fa-pen"></i> Manual Entry</div>
             <div class="tab" data-tab="scan" onclick="switchTab('scan', this)"><i class="fa-solid fa-camera"></i> Scan Receipt</div>
@@ -194,10 +194,10 @@ function renderNewExpense(app, embedded = false) {
     };
 
     const zone = document.getElementById('uploadZone');
-    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.style.borderColor = 'var(--aegean-mid)'; });
-    zone.addEventListener('dragleave', () => { zone.style.borderColor = 'var(--aegean-pale)'; });
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.style.borderColor = 'var(--primary)'; });
+    zone.addEventListener('dragleave', () => { zone.style.borderColor = 'var(--primary-pale)'; });
     zone.addEventListener('drop', (e) => {
-        e.preventDefault(); zone.style.borderColor = 'var(--aegean-pale)';
+        e.preventDefault(); zone.style.borderColor = 'var(--primary-pale)';
         const file = e.dataTransfer.files[0];
         if (file) { document.getElementById('receiptFile').files = e.dataTransfer.files; uploadReceipt(); }
     });
@@ -669,6 +669,6 @@ function renderNewExpenseStorePreview() {
         return;
     }
     const parts = [store.name, store.city, store.country].filter(Boolean);
-    preview.innerHTML = `<span><i class="fa-solid fa-store" style="color:var(--aegean-mid); margin-right:0.35rem;"></i>${esc(parts.join(', '))}</span>`;
+    preview.innerHTML = `<span><i class="fa-solid fa-store" style="color:var(--primary); margin-right:0.35rem;"></i>${esc(parts.join(', '))}</span>`;
 }
 
