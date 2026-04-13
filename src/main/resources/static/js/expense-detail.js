@@ -113,8 +113,8 @@ async function renderExpenseDetail(app, id) {
     // Other Details collapsed section
     const storeHasMap = (store?.latitude != null && store?.longitude != null) || store?.name;
     html += `<div class="card">
-        <div class="expand-toggle" onclick="toggleOtherDetails()">
-            <i class="fa-solid fa-chevron-down" id="otherDetailsIcon"></i>
+        <div class="expand-toggle" onclick="toggleOtherDetails()" style="font-size:1.1rem; font-weight:600; color:var(--primary-dark); border-top:none; margin-top:0; padding-bottom:0;">
+            <i class="fa-solid fa-chevron-down" id="otherDetailsIcon" style="font-size:0.85rem;"></i>
             <span id="otherDetailsLabel">Other details</span>
         </div>
         <div id="otherDetailsSection" style="display:none;">
@@ -201,7 +201,9 @@ function initStoreOtherDetailsMap(store) {
     if (hasCoords) {
         const marker = L.marker([lat, lng]).addTo(window._storeOtherDetailsMap);
         marker.bindTooltip(name, { permanent: true, direction: 'top', offset: [0, -10] });
-        marker.bindPopup(`<b>${name}</b>`);
+        marker.on('click', function() {
+            window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
+        });
     }
     setTimeout(() => window._storeOtherDetailsMap && window._storeOtherDetailsMap.invalidateSize(), 300);
 }

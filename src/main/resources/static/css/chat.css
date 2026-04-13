@@ -9,7 +9,7 @@
     height: 100%;
 }
 .chat-header {
-    background: var(--primary-dark);
+    background: var(--navbar-bg);
     color: #fff;
     padding: 0.75rem 1rem;
     font-weight: 600;
@@ -190,7 +190,7 @@
     overflow: hidden;
 }
 .desktop-chat-panel-header {
-    background: var(--primary-dark);
+    background: var(--navbar-bg);
     color: #fff;
     padding: 0.75rem 1rem;
     font-weight: 600;

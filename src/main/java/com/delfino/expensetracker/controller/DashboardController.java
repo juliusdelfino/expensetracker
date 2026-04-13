@@ -97,7 +97,7 @@ public class DashboardController {
                 .geoData(buildGeoData(expenses, storeMap))
                 .geoByCountry(buildGeoByCountry(expenses, storeMap))
                 .topShops(buildTopShops(expenses, storeMap))
-                .topItems(buildTopItems(expenses))
+                .topItems(buildTopItems(expenses, storeMap))
                 .discoveryCards(buildDiscoveryCards(allExpenses, user, storeMap))
                 .categories(allCategories)
                 .totalExpenses(expenses.size())
@@ -221,33 +221,64 @@ public class DashboardController {
 
     private List<TopShop> buildTopShops(List<Expense> expenses, Map<Long, Store> storeMap) {
         Map<String, Integer> shopVisitCounts = new LinkedHashMap<>();
+        Map<String, List<Expense>> shopExpenses = new LinkedHashMap<>();
         for (Expense e : expenses) {
             var store = e.getStoreId() != null ? storeMap.get(e.getStoreId()) : null;
             if (store != null && store.getName() != null && !store.getName().isBlank()) {
                 shopVisitCounts.merge(store.getName(), 1, Integer::sum);
+                shopExpenses.computeIfAbsent(store.getName(), k -> new ArrayList<>()).add(e);
             }
         }
         return shopVisitCounts.entrySet().stream()
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
                 .limit(5)
-                .map(entry -> new TopShop(entry.getKey(), entry.getValue()))
+                .map(entry -> {
+                    List<TopShop.TopShopTransaction> recent = shopExpenses.getOrDefault(entry.getKey(), List.of()).stream()
+                            .filter(e -> e.getTransactionDatetime() != null)
+                            .sorted((a, b) -> b.getTransactionDatetime().compareTo(a.getTransactionDatetime()))
+                            .limit(3)
+                            .map(e -> new TopShop.TopShopTransaction(
+                                    e.getId(), e.getUrlId(),
+                                    e.getCategory() != null ? e.getCategory() : "Uncategorized",
+                                    e.getTransactionDatetime().toLocalDate().toString(),
+                                    e.getAmount(), e.getCurrency()))
+                            .toList();
+                    return new TopShop(entry.getKey(), entry.getValue(), recent);
+                })
                 .toList();
     }
 
-    private List<TopItem> buildTopItems(List<Expense> expenses) {
+    private List<TopItem> buildTopItems(List<Expense> expenses, Map<Long, Store> storeMap) {
         Map<String, BigDecimal> itemCounts = new LinkedHashMap<>();
+        // Track recent transactions per item name
+        Map<String, List<TopItem.TopItemTransaction>> itemTransactions = new LinkedHashMap<>();
+
         for (Expense e : expenses) {
+            String storeName = e.getStoreId() != null && storeMap.containsKey(e.getStoreId())
+                    ? storeMap.get(e.getStoreId()).getName() : null;
             for (ExpenseItem item : expenseItemRepository.findByExpenseIdAndDeletedFalse(e.getId())) {
                 if (item.getItemName() != null && !item.getItemName().isBlank()) {
                     BigDecimal qty = item.getQuantity() != null ? item.getQuantity() : BigDecimal.ONE;
                     itemCounts.merge(item.getItemName(), qty, BigDecimal::add);
+                    itemTransactions.computeIfAbsent(item.getItemName(), k -> new ArrayList<>())
+                            .add(new TopItem.TopItemTransaction(
+                                    e.getId(), e.getUrlId(),
+                                    e.getTransactionDatetime() != null ? e.getTransactionDatetime().toLocalDate().toString() : null,
+                                    item.getUnitPrice(), e.getCurrency(), storeName));
                 }
             }
         }
         return itemCounts.entrySet().stream()
                 .sorted(Map.Entry.<String, BigDecimal>comparingByValue().reversed())
-                .limit(10)
-                .map(entry -> new TopItem(entry.getKey(), entry.getValue()))
+                .limit(5)
+                .map(entry -> {
+                    List<TopItem.TopItemTransaction> recent = itemTransactions.getOrDefault(entry.getKey(), List.of()).stream()
+                            .filter(t -> t.date() != null)
+                            .sorted((a, b) -> b.date().compareTo(a.date()))
+                            .limit(3)
+                            .toList();
+                    return new TopItem(entry.getKey(), entry.getValue(), recent);
+                })
                 .toList();
     }
 

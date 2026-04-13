@@ -122,18 +122,53 @@ function getCurrentOrLatestMonth(data) {
 // ============================================
 const CHART_COLORS = ['#1565C0','#1976D2','#42A5F5','#7C4DFF','#FF7043','#66BB6A','#388E3C','#D32F2F','#AB47BC','#F9A825'];
 
+function getChartThemeColors() {
+    const style = getComputedStyle(document.documentElement);
+    const textColor = style.getPropertyValue('--chart-text-color').trim() || '#666';
+    const gridColor = style.getPropertyValue('--chart-grid-color').trim() || 'rgba(0,0,0,0.1)';
+    const cardBg = style.getPropertyValue('--bg-card').trim() || '#fff';
+    return { textColor, gridColor, cardBg };
+}
+
+function chartScaleOptions() {
+    const { textColor, gridColor } = getChartThemeColors();
+    return {
+        x: { ticks: { color: textColor }, grid: { color: gridColor } },
+        y: { ticks: { color: textColor }, grid: { color: gridColor } }
+    };
+}
+
+function chartPluginOptions() {
+    const { textColor } = getChartThemeColors();
+    return {
+        legend: { labels: { color: textColor } },
+        tooltip: {}
+    };
+}
+
 function createTimelineChart(canvasId, chartKey, data) {
     const tc = document.getElementById(canvasId);
     if (!tc) return;
     if (chartInstances[chartKey]) { chartInstances[chartKey].destroy(); delete chartInstances[chartKey]; }
+    const timelineLabels = Object.keys(data.timeline || {});
     chartInstances[chartKey] = new Chart(tc, {
         type: 'line',
-        data: { labels: Object.keys(data.timeline || {}),
+        data: { labels: timelineLabels,
             datasets: [{ label: 'Daily Spending',
                 data: Object.values(data.timeline || {}),
-                borderColor: '#D4A853', backgroundColor: 'rgba(212,168,83,0.1)',
+                borderColor: '#42A5F5', backgroundColor: 'rgba(66,165,245,0.1)',
                 fill: true, tension: 0.3, pointRadius: 3 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        options: { responsive: true, maintainAspectRatio: false,
+            plugins: { ...chartPluginOptions(), legend: { display: false } },
+            scales: chartScaleOptions(),
+            onClick: (evt, elements) => {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    const dateStr = timelineLabels[idx];
+                    if (dateStr) navigate('#/expenses?startDate=' + dateStr + '&endDate=' + dateStr);
+                }
+            }
+        }
     });
 }
 
@@ -141,21 +176,32 @@ function createCategoryChart(canvasId, chartKey, data) {
     const cc = document.getElementById(canvasId);
     if (!cc) return;
     if (chartInstances[chartKey]) { chartInstances[chartKey].destroy(); delete chartInstances[chartKey]; }
+    const { cardBg } = getChartThemeColors();
+    const catLabels = Object.keys(data.categoryTotals || {});
     chartInstances[chartKey] = new Chart(cc, {
         type: 'doughnut',
-        data: { labels: Object.keys(data.categoryTotals || {}),
-            datasets: [{ data: Object.values(data.categoryTotals || {}), backgroundColor: CHART_COLORS }] },
-        options: { responsive: true, maintainAspectRatio: false }
+        data: { labels: catLabels,
+            datasets: [{ data: Object.values(data.categoryTotals || {}), backgroundColor: CHART_COLORS, borderColor: cardBg, borderWidth: 1 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: chartPluginOptions(),
+            onClick: (evt, elements) => {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    const category = catLabels[idx];
+                    if (category) navigate('#/expenses?category=' + encodeURIComponent(category));
+                }
+            }
+        }
     });
 }
 
 // ============================================
 // TOP LISTS
 // ============================================
-async function renderRecentExpenses(elementId, count) {
+async function renderRecentExpenses(elementId, count, filterParams) {
     const el = document.getElementById(elementId);
     if (!el) return;
-    const allExpenses = await api('/api/expenses');
+    const url = filterParams ? '/api/expenses?' + filterParams : '/api/expenses';
+    const allExpenses = await api(url);
     if (allExpenses && Array.isArray(allExpenses)) {
         const recent = allExpenses.slice(0, count);
         el.innerHTML = recent.length ? recent.map(e => `
@@ -177,12 +223,21 @@ function renderTopShops(elementId, topShops) {
         el.innerHTML = '<p style="color:var(--text-light); text-align:center; padding:1rem;">No shop data yet</p>';
         return;
     }
-    el.innerHTML = topShops.map((s, i) => `
-        <div class="rank-row">
-            <span class="rank-badge">${i + 1}</span>
-            <span class="rank-name">${s.name}</span>
-            <span class="rank-value">${s.visits} visit${s.visits > 1 ? 's' : ''}</span>
-        </div>`).join('');
+    el.innerHTML = topShops.map((s, i) => {
+        const recentHtml = (s.recentTransactions || []).map(t =>
+            `<a href="#/expenses/${t.urlId}" class="rank-recent-tx">
+                <span class="rank-recent-cat">${t.category || 'Uncategorized'}</span>
+                <span class="rank-recent-detail">${t.amount != null ? Number(t.amount).toFixed(2) : '-'} ${t.currency || ''} · ${t.date || ''}</span>
+            </a>`).join('');
+        return `<div class="rank-row-wrap">
+            <div class="rank-row">
+                <span class="rank-badge">${i + 1}</span>
+                <a href="#/expenses?search=${encodeURIComponent(s.name)}" class="rank-name rank-name-link">${s.name}</a>
+                <span class="rank-value">${s.visits} visit${s.visits > 1 ? 's' : ''}</span>
+            </div>
+            ${recentHtml ? `<div class="rank-recent-list">${recentHtml}</div>` : ''}
+        </div>`;
+    }).join('');
 }
 
 function renderTopItems(elementId, topItems) {
@@ -192,12 +247,23 @@ function renderTopItems(elementId, topItems) {
         el.innerHTML = '<p style="color:var(--text-light); text-align:center; padding:1rem;">No item data yet</p>';
         return;
     }
-    el.innerHTML = topItems.map((item, i) => `
-        <div class="rank-row">
-            <span class="rank-badge">${i + 1}</span>
-            <span class="rank-name">${item.name}</span>
-            <span class="rank-value">\u00d7${Number(item.count).toFixed(0)}</span>
-        </div>`).join('');
+    el.innerHTML = topItems.map((item, i) => {
+        const recentHtml = (item.recentTransactions || []).map(t => {
+            const storeLabel = t.storeName ? ` · ${t.storeName}` : '';
+            return `<a href="#/expenses/${t.urlId}" class="rank-recent-tx">
+                <span class="rank-recent-cat">${t.unitPrice != null ? Number(t.unitPrice).toFixed(2) : '-'} ${t.currency || ''}</span>
+                <span class="rank-recent-detail">${t.date || ''}${storeLabel}</span>
+            </a>`;
+        }).join('');
+        return `<div class="rank-row-wrap">
+            <div class="rank-row">
+                <span class="rank-badge">${i + 1}</span>
+                <a href="#/expenses?search=${encodeURIComponent(item.name)}" class="rank-name rank-name-link">${item.name}</a>
+                <span class="rank-value">\u00d7${Number(item.count).toFixed(0)}</span>
+            </div>
+            ${recentHtml ? `<div class="rank-recent-list">${recentHtml}</div>` : ''}
+        </div>`;
+    }).join('');
 }
 
 function renderTopExpenses(elementId, topExpenses) {
@@ -273,8 +339,10 @@ function renderGeoMap(elementId, data) {
 
     (data.geoData || []).forEach(p => {
         if (p.lat == null || p.lng == null || (p.lat === 0 && p.lng === 0)) return;
+        const storeName = p.name || 'Store';
+        const storeLink = `<a href="#/expenses?search=${encodeURIComponent(storeName)}" style="color:var(--primary); text-decoration:none; font-weight:600;">${storeName}</a>`;
         L.marker([p.lat, p.lng]).addTo(map)
-            .bindPopup(`<b>${p.name || 'Store'}</b><br>${p.amount} ${p.currency || ''}<br>${p.date || ''}`);
+            .bindPopup(`${storeLink}<br>${p.amount} ${p.currency || ''}<br>${p.date || ''}`);
     });
 
     const allPoints = [...(data.geoData || []), ...geoByCountry].filter(p => p.lat && p.lng && !(p.lat === 0 && p.lng === 0));
@@ -328,6 +396,7 @@ function appendDiscoveryBatch(containerId, cards, count) {
         const div = document.createElement('div');
         div.className = 'feed-card discovery-card';
 
+        const flag = card.country ? countryCodeToFlag(card.country) : '';
         const topExp = card.topExpenses || [];
         let topExpHtml = '';
         if (topExp.length > 0) {
@@ -347,8 +416,9 @@ function appendDiscoveryBatch(containerId, cards, count) {
 
         div.innerHTML = `
             <div class="discovery-header" style="border-left-color:${accentColor}">
-                <div class="discovery-icon" style="background:${accentColor}15; color:${accentColor}"><i class="fa-solid ${icon}"></i></div>
+                ${flag ? `<div class="discovery-flag-icon">${flag}</div>` : `<div class="discovery-icon" style="background:${accentColor}15; color:${accentColor}"><i class="fa-solid ${icon}"></i></div>`}
                 <div class="discovery-title-area">
+                    <div class="discovery-trip-label">Trip to</div>
                     <div class="discovery-title">${card.locationLabel || card.countryName || card.country || 'Unknown'}</div>
                     <div class="discovery-subtitle">${card.month} ${card.year}</div>
                 </div>

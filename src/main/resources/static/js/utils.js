@@ -118,6 +118,17 @@ function getCountryName(code) {
     return window._countryCodeToName[code.toUpperCase()] || code;
 }
 
+/**
+ * Convert a 2-letter ISO country code to a flag emoji.
+ * e.g. "US" → "🇺🇸", "JP" → "🇯🇵"
+ */
+function countryCodeToFlag(code) {
+    if (!code || code.length !== 2) return '';
+    const upper = code.toUpperCase();
+    const offset = 0x1F1E6 - 65; // Regional Indicator Symbol Letter A - 'A' char code
+    return String.fromCodePoint(upper.charCodeAt(0) + offset, upper.charCodeAt(1) + offset);
+}
+
 function renderTags(containerId, inputId, tags) {
     const container = document.getElementById(containerId);
     container.innerHTML = tags.map((t, i) => `<span class="tag">${t} <span class="remove-tag" onclick="this.parentElement.remove(); window._tags_${containerId}?.splice(${i},1)">&times;</span></span>`).join('') +

@@ -77,7 +77,7 @@ async function router() {
     }
 
     if (hash === '#/dashboard') renderDashboard(app);
-    else if (hash === '#/expenses') renderExpenseList(app);
+    else if (hash === '#/expenses' || hash.startsWith('#/expenses?')) renderExpenseList(app);
     else if (hash === '#/expenses/new' || hash.startsWith('#/expenses/new?')) renderNewExpense(app);
     else if (hash === '#/profile') renderProfile(app);
     else if (hash === '#/chat') { toggleDesktopChat(); navigate('#/dashboard'); }

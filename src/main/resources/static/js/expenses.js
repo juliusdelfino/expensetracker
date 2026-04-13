@@ -75,6 +75,36 @@ async function renderExpenseList(app) {
     </div>`;
     _expensePage = 0;
     _expMoreFiltersShown = false;
+
+    // Pre-fill filters from URL hash params (e.g. #/expenses?startDate=...&category=...)
+    const hashQuery = window.location.hash.split('?')[1];
+    if (hashQuery) {
+        const hp = new URLSearchParams(hashQuery);
+        if (hp.get('search')) {
+            const searchEl = document.getElementById('expenseSearch');
+            if (searchEl) searchEl.value = hp.get('search');
+        }
+        if (hp.get('startDate') || hp.get('endDate') || hp.get('category') || hp.get('country')) {
+            toggleExpenseMoreFilters();
+            if (hp.get('startDate')) {
+                const el = document.getElementById('expFilterStartDate');
+                if (el) el.value = hp.get('startDate');
+            }
+            if (hp.get('endDate')) {
+                const el = document.getElementById('expFilterEndDate');
+                if (el) el.value = hp.get('endDate');
+            }
+            if (hp.get('category')) {
+                const el = document.getElementById('expFilterCategory');
+                if (el) el.value = hp.get('category');
+            }
+            if (hp.get('country')) {
+                const el = document.getElementById('expFilterCountry');
+                if (el) el.value = hp.get('country');
+            }
+        }
+    }
+
     await loadExpenses();
 }
 

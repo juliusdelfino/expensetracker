@@ -8,6 +8,16 @@
     grid-template-columns: 1fr 1fr;
     gap: 1.5rem;
 }
+.dashboard-grid > .card {
+    margin-bottom: 0;
+}
+/* Ensure the desktop hero card aligns with the dashboard grid */
+.desktop-hero-wrapper {
+    margin-bottom: 1.5rem;
+}
+.desktop-hero-wrapper > .feed-card {
+    margin-bottom: 0;
+}
 .filter-bar {
     display: flex;
     gap: 1rem;
@@ -433,6 +443,18 @@
 .exp-extra-filters select { flex: 1; min-width: 130px; }
 
 /* ===================== STORE READ-ONLY DISPLAY ===================== */
+/* Clickable rank names in top shops / top items */
+.rank-name-link {
+    color: var(--primary);
+    text-decoration: none;
+    cursor: pointer;
+    transition: var(--transition);
+}
+.rank-name-link:hover {
+    color: var(--primary-dark);
+    text-decoration: underline;
+}
+
 .store-readonly-layout {
     display: grid;
     grid-template-columns: 1fr 1fr;

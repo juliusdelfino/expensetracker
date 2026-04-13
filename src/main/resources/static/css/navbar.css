@@ -3,7 +3,7 @@
    Material Design Theme
    ============================================ */
 .navbar {
-    background: var(--primary-dark);
+    background: var(--navbar-bg);
     padding: 0 1rem;
     display: flex;
     align-items: center;
@@ -68,7 +68,7 @@
     position: absolute;
     top: var(--navbar-h);
     right: 0;
-    background: var(--primary-dark);
+    background: var(--navbar-bg);
     min-width: 220px;
     border-radius: 0 0 var(--radius) var(--radius);
     box-shadow: 0 8px 16px rgba(0,0,0,0.2);
