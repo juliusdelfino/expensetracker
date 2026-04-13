@@ -48,6 +48,7 @@ import javax.imageio.ImageIO;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.rendering.ImageType;
+import org.springframework.util.StringUtils;
 
 @Service
 public class OcrService {
@@ -258,9 +259,10 @@ public class OcrService {
         if (parsed.has("category")) expense.setCategory(parsed.get("category").asText());
 
         User user = userRepository.findById(expense.getUserId()).orElse(null);
-        if (user.getBaseCurrency() == null) {
+        if (!StringUtils.hasText(user.getBaseCurrency())) {
             user.setBaseCurrency(expense.getCurrency());
             userRepository.save(user);
+            log.info("Set base currency for the first time for user {} to {}", user.getId(), user.getBaseCurrency());
         }
         // Currency conversion
         if (expense.getCurrency() != null && user.getBaseCurrency() != null && expense.getAmount() != null) {
