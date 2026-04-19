@@ -18,7 +18,6 @@ async function openChangeStoreDialog(expenseId) {
     const overlay = document.createElement('div');
     overlay.className = 'item-dialog-overlay';
     overlay.id = 'changeStoreOverlay';
-    overlay.onclick = (ev) => { if (ev.target === overlay) closeChangeStoreDialog(); };
 
     overlay.innerHTML = `
         <div class="change-store-dialog" id="changeStoreDialog">

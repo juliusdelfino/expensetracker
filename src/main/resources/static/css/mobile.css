@@ -36,13 +36,13 @@
     left: 0;
     right: 0;
     height: var(--tabbar-h);
-    background: linear-gradient(135deg, var(--aegean-dark), var(--aegean-mid));
+    background: var(--navbar-bg);
     display: flex;
     justify-content: space-around;
     align-items: center;
     z-index: 1000;
     padding-bottom: env(safe-area-inset-bottom);
-    box-shadow: 0 -2px 8px rgba(27, 58, 92, 0.15);
+    box-shadow: 0 -2px 4px rgba(0,0,0,0.14);
 }
 .tab-btn {
     display: flex;
@@ -59,7 +59,7 @@
     transition: var(--transition);
 }
 .tab-btn i { font-size: 1.2rem; }
-.tab-btn.active { color: var(--sand); }
+.tab-btn.active { color: #fff; }
 .tab-btn:hover { color: rgba(255,255,255,0.8); }
 
 /* ===================== SCAN PANEL ===================== */
@@ -169,7 +169,7 @@
 
 /* Hero card */
 .hero-card {
-    background: linear-gradient(135deg, var(--aegean-dark), var(--aegean-mid));
+    background: var(--navbar-bg);
     color: #fff;
     text-align: center;
     padding: 1.5rem 1rem;
@@ -245,14 +245,14 @@
 }
 .quick-action-btn:hover,
 .quick-action-btn:active {
-    background: var(--aegean-pale);
+    background: var(--primary-pale);
 }
 .quick-action-icon {
     width: 52px;
     height: 52px;
     border-radius: 50%;
-    background: var(--aegean-pale);
-    color: var(--aegean-dark);
+    background: var(--primary-pale);
+    color: var(--primary-dark);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -261,7 +261,7 @@
 }
 .quick-action-btn:hover .quick-action-icon,
 .quick-action-btn:active .quick-action-icon {
-    background: var(--aegean-mid);
+    background: var(--primary);
     color: #fff;
 }
 
@@ -282,8 +282,8 @@
 .mini-card-icon {
     width: 36px; height: 36px;
     border-radius: 50%;
-    background: var(--aegean-pale);
-    color: var(--aegean-dark);
+    background: var(--primary-pale);
+    color: var(--primary-dark);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -294,13 +294,13 @@
 .mini-card-category {
     font-weight: 600;
     font-size: 0.85rem;
-    color: var(--aegean-dark);
+    color: var(--primary-dark);
 }
 .mini-card-date { font-size: 0.75rem; color: var(--text-light); }
 .mini-card-amount {
     font-weight: 600;
     font-size: 0.9rem;
-    color: var(--aegean-dark);
+    color: var(--primary-dark);
     white-space: nowrap;
 }
 
@@ -315,7 +315,7 @@
 }
 .date-range-label {
     font-size: 0.75rem;
-    color: var(--aegean-dark);
+    color: var(--primary-dark);
     font-weight: 600;
 }
 .dual-range-wrapper {
@@ -341,9 +341,9 @@
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    background: var(--aegean-mid);
+    background: var(--primary);
     border: 2px solid #fff;
-    box-shadow: 0 1px 4px rgba(27, 58, 92, 0.3);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
     cursor: pointer;
     pointer-events: auto;
 }
@@ -351,16 +351,16 @@
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    background: var(--aegean-mid);
+    background: var(--primary);
     border: 2px solid #fff;
-    box-shadow: 0 1px 4px rgba(27, 58, 92, 0.3);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
     cursor: pointer;
     pointer-events: auto;
 }
 .dual-range-track {
     position: absolute;
     height: 4px;
-    background: var(--aegean-mid);
+    background: var(--primary);
     border-radius: 2px;
     top: 50%;
     transform: translateY(-50%);
@@ -428,7 +428,7 @@
     outline: none;
 }
 .chart-period-select:focus {
-    border-color: var(--aegean-mid);
+    border-color: var(--primary);
 }
 
 /* ===================== RANK ROWS (top shops, items) ===================== */
@@ -444,8 +444,8 @@
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    background: var(--aegean-pale);
-    color: var(--aegean-dark);
+    background: var(--primary-pale);
+    color: var(--primary-dark);
     font-size: 0.75rem;
     font-weight: 700;
     display: flex;
@@ -466,14 +466,53 @@
 .rank-value {
     font-size: 0.8rem;
     font-weight: 600;
-    color: var(--aegean-mid);
+    color: var(--primary);
     white-space: nowrap;
+}
+
+/* ===================== RANK RECENT TRANSACTIONS ===================== */
+.rank-row-wrap {
+    border-bottom: 1px solid var(--border-color);
+}
+.rank-row-wrap:last-child { border-bottom: none; }
+.rank-row-wrap .rank-row { border-bottom: none; }
+.rank-recent-list {
+    padding: 0 0 0.4rem 2.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+.rank-recent-tx {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-light);
+    text-decoration: none;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    transition: var(--transition);
+}
+.rank-recent-tx:hover {
+    background: var(--table-stripe);
+    color: var(--primary);
+}
+.rank-recent-cat {
+    font-weight: 500;
+    color: var(--text);
+}
+.rank-recent-tx:hover .rank-recent-cat {
+    color: var(--primary);
+}
+.rank-recent-detail {
+    color: var(--text-light);
+    font-size: 0.72rem;
 }
 
 /* ===================== DISCOVERY CARDS ===================== */
 .discovery-card {
     padding: 1.25rem;
-    border-left: 4px solid var(--sand);
+    border-left: 4px solid var(--primary);
 }
 .discovery-header {
     display: flex;
@@ -487,8 +526,8 @@
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: var(--sand-pale);
-    color: var(--sand);
+    background: var(--secondary-pale);
+    color: var(--secondary);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -496,11 +535,30 @@
     flex-shrink: 0;
 }
 .discovery-title-area { flex: 1; min-width: 0; }
+.discovery-trip-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-light);
+    margin-bottom: 0.1rem;
+}
 .discovery-title {
     font-weight: 700;
     font-size: 1.1rem;
-    color: var(--aegean-dark);
+    color: var(--primary-dark);
     line-height: 1.2;
+}
+.discovery-flag-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    flex-shrink: 0;
+    line-height: 1;
 }
 .discovery-subtitle {
     font-size: 0.85rem;
@@ -525,7 +583,7 @@
 .discovery-metric-value {
     font-size: 1.05rem;
     font-weight: 700;
-    color: var(--aegean-dark);
+    color: var(--primary-dark);
     line-height: 1.2;
 }
 .discovery-metric-label {
@@ -546,7 +604,7 @@
     padding-top: 0.5rem;
     border-top: 1px solid var(--border-color);
 }
-.discovery-shops i { color: var(--sand); margin-right: 0.3rem; }
+.discovery-shops i { color: var(--secondary); margin-right: 0.3rem; }
 
 .discovery-section { margin-top: 1.5rem; }
 .discovery-section .feed-card { margin-bottom: 1rem; }
@@ -561,7 +619,7 @@
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: var(--aegean-mid);
+    background: var(--primary);
     color: #fff;
     font-size: 0.75rem;
     font-weight: 700;
@@ -577,12 +635,12 @@
 }
 .geo-popup b {
     font-size: 0.95rem;
-    color: var(--aegean-dark);
+    color: var(--primary-dark);
 }
 .geo-popup-row i {
     width: 16px;
     text-align: center;
     margin-right: 0.3rem;
-    color: var(--aegean-mid);
+    color: var(--primary);
 }
 

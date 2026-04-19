@@ -66,6 +66,7 @@ public class ExpenseController {
                                   @RequestParam(required = false) String country,
                                   UserToken userToken) {
         long userId = userToken.getUserId();
+        if (search != null) search = search.trim();
         List<Expense> expenses = expenseService.search(userId, search, includeDeleted);
 
         expenses = filterByDateRange(expenses, startDate, endDate);
@@ -253,6 +254,7 @@ public class ExpenseController {
                                     @RequestParam(required = false) String search,
                                     UserToken userToken) {
         long userId = userToken.getUserId();
+        if (search != null) search = search.trim();
         List<Expense> expenses = expenseService.search(userId, search, false);
 
         if ("csv".equalsIgnoreCase(format)) {

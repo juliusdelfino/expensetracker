@@ -32,7 +32,7 @@ async function renderExpenseDetail(app, id) {
     let html = `<div class="container">
         <div class="action-bar">
             <div class="action-bar-left">
-                <h2 style="color:var(--aegean-dark)">Expense Detail</h2>
+                <h2 style="color:var(--primary-dark)">Expense Detail</h2>
                 <span class="badge badge-${(e.status||'').toLowerCase()}">${statusIcon(e.status)} ${e.status}</span>
             </div>
             <div class="action-bar-right">
@@ -45,7 +45,7 @@ async function renderExpenseDetail(app, id) {
 
     if (isProcessing) {
         html += `<div class="card" style="text-align:center; padding:3rem">
-            <i class="fa-solid fa-spinner fa-spin" style="font-size:3rem; color:var(--aegean-mid)"></i>
+            <i class="fa-solid fa-spinner fa-spin" style="font-size:3rem; color:var(--primary)"></i>
             <p style="margin-top:1rem; color:var(--text-light)">Processing receipt... This may take 2-3 minutes.</p>
             <button class="btn btn-primary" style="margin-top:1rem" onclick="renderExpenseDetail(document.getElementById('app'),'${e.urlId}')">
                 <i class="fa-solid fa-rotate"></i> Refresh
@@ -113,8 +113,8 @@ async function renderExpenseDetail(app, id) {
     // Other Details collapsed section
     const storeHasMap = (store?.latitude != null && store?.longitude != null) || store?.name;
     html += `<div class="card">
-        <div class="expand-toggle" onclick="toggleOtherDetails()">
-            <i class="fa-solid fa-chevron-down" id="otherDetailsIcon"></i>
+        <div class="expand-toggle" onclick="toggleOtherDetails()" style="font-size:1.1rem; font-weight:600; color:var(--primary-dark); border-top:none; margin-top:0; padding-bottom:0;">
+            <i class="fa-solid fa-chevron-down" id="otherDetailsIcon" style="font-size:0.85rem;"></i>
             <span id="otherDetailsLabel">Other details</span>
         </div>
         <div id="otherDetailsSection" style="display:none;">
@@ -138,7 +138,7 @@ async function renderExpenseDetail(app, id) {
                     <span>${new Date(e.updatedAt).toLocaleString()}</span>
                 </div>` : ''}
                 ${storeHasMap ? `<div class="other-detail-row">
-                    <span class="other-detail-label"><i class="fa-solid fa-map-location-dot" style="color:var(--aegean-mid); margin-right:0.25rem;"></i> Store location</span>
+                    <span class="other-detail-label"><i class="fa-solid fa-map-location-dot" style="color:var(--primary); margin-right:0.25rem;"></i> Store location</span>
                 </div>
                 <div id="storeOtherDetailsMap" style="height:200px; border-radius:var(--radius); margin-top:0.4rem; border:1px solid var(--border-color);"></div>` : ''}
             </div>
@@ -201,7 +201,9 @@ function initStoreOtherDetailsMap(store) {
     if (hasCoords) {
         const marker = L.marker([lat, lng]).addTo(window._storeOtherDetailsMap);
         marker.bindTooltip(name, { permanent: true, direction: 'top', offset: [0, -10] });
-        marker.bindPopup(`<b>${name}</b>`);
+        marker.on('click', function() {
+            window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
+        });
     }
     setTimeout(() => window._storeOtherDetailsMap && window._storeOtherDetailsMap.invalidateSize(), 300);
 }

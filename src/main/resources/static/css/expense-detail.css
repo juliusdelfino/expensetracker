@@ -67,7 +67,7 @@
     letter-spacing: 0.4px;
     margin-bottom: 0.35rem;
 }
-.discovery-top-exp-label i { margin-right: 0.3rem; color: var(--sand); }
+.discovery-top-exp-label i { margin-right: 0.3rem; color: var(--secondary); }
 .discovery-exp-row {
     display: flex;
     align-items: center;
@@ -87,13 +87,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--aegean-dark);
+    color: var(--primary-dark);
     font-weight: 500;
 }
 .discovery-exp-amount {
     flex-shrink: 0;
     font-weight: 600;
-    color: var(--aegean-dark);
+    color: var(--primary-dark);
     white-space: nowrap;
 }
 .discovery-exp-orig {
@@ -121,7 +121,7 @@
 .top-expense-name {
     font-weight: 600;
     font-size: 0.88rem;
-    color: var(--aegean-dark);
+    color: var(--primary-dark);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -136,7 +136,7 @@
 .top-expense-base {
     font-weight: 700;
     font-size: 0.92rem;
-    color: var(--aegean-dark);
+    color: var(--primary-dark);
     white-space: nowrap;
 }
 .top-expense-orig {
@@ -229,7 +229,7 @@
     font-size: 1.05rem;
 }
 .receipt-total-label { color: var(--text); }
-.receipt-total-amount { color: var(--aegean-dark); }
+.receipt-total-amount { color: var(--primary-dark); }
 .receipt-base-amount {
     text-align: right;
     font-size: 0.78rem;
@@ -257,7 +257,7 @@
     transition: background 0.15s ease;
 }
 .receipt-clickable:hover {
-    background: rgba(74, 135, 196, 0.08);
+    background: rgba(25, 118, 210, 0.06);
 }
 .receipt-add-item {
     padding: 0.5rem 0 0.25rem;
@@ -322,7 +322,7 @@
     background: var(--table-stripe);
 }
 .share-menu-item i {
-    color: var(--aegean-mid);
+    color: var(--primary);
     width: 16px;
     text-align: center;
 }
@@ -345,8 +345,8 @@
     font-size: 0.88rem;
 }
 .new-expense-item-row:hover {
-    background: var(--aegean-pale);
-    color: var(--bg-white);
+    background: var(--primary-pale);
+    color: var(--primary-dark);
 }
 .new-expense-item-name {
     font-weight: 500;
@@ -356,7 +356,7 @@
     font-size: 0.82rem;
 }
 .new-expense-item-row:hover .new-expense-item-detail {
-    color: var(--bg-white);
+    color: var(--primary-dark);
 }
 .new-expense-store-preview {
     padding: 0.45rem 0.75rem;

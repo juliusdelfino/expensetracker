@@ -73,7 +73,7 @@ function renderHomePanel() {
             <div id="homeTopItems"></div>
         </div>
         <div class="feed-card">
-            <h3 class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Recent Expenses</h3>
+            <h3 class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Most Recent Expenses</h3>
             <div id="homeRecentExpenses"></div>
         </div>
         <div class="feed-card">
@@ -128,7 +128,11 @@ function renderHomeData(data) {
     createCategoryChart('homeCategoryChart', 'homeCategory', data);
     renderTopShops('homeTopShops', data.topShops);
     renderTopItems('homeTopItems', data.topItems);
-    renderRecentExpenses('homeRecentExpenses', 5);
+
+    // Get current hero period params for filtering recent expenses
+    const heroPeriod = document.getElementById('homeHeroPeriod')?.value;
+    const recentParams = heroPeriod ? buildParamsFromPeriod(heroPeriod) : '';
+    renderRecentExpenses('homeRecentExpenses', 5, recentParams);
     renderGeoMap('homeGeoMap', data);
 }
 
@@ -141,13 +145,27 @@ function updateHomeCharts() {
     if (!mc) return;
     if (chartInstances.homeMonthly) { chartInstances.homeMonthly.destroy(); delete chartInstances.homeMonthly; }
     const totalsData = period === 'weekly' ? data.weeklyTotals : period === 'annual' ? data.annualTotals : data.monthlyTotals;
+    const totalsLabels = Object.keys(totalsData || {});
     chartInstances.homeMonthly = new Chart(mc, {
         type: 'bar',
-        data: { labels: Object.keys(totalsData || {}),
+        data: { labels: totalsLabels,
             datasets: [{ label: 'Total (' + baseCur + ')',
                 data: Object.values(totalsData || {}),
-                backgroundColor: 'rgba(46, 90, 136, 0.7)', borderRadius: 6 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                backgroundColor: 'rgba(25, 118, 210, 0.7)', borderRadius: 6 }] },
+        options: { responsive: true, maintainAspectRatio: false,
+            plugins: { ...chartPluginOptions(), legend: { display: false } },
+            scales: chartScaleOptions(),
+            onClick: (evt, elements) => {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    const label = totalsLabels[idx];
+                    if (label) {
+                        const params = _totalsLabelToDateParams(label, period);
+                        navigate('#/expenses?' + params);
+                    }
+                }
+            }
+        }
     });
 }
 
@@ -169,10 +187,16 @@ async function reloadHomeWithFilter(params) {
 async function renderDashboard(app) {
     app.innerHTML = `
     <div class="container">
-        <div class="feed-card hero-card" id="desktopHeroCard" style="margin-bottom:1.5rem;">
-            <div class="hero-loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div>
+        <div class="desktop-hero-wrapper">
+            <div class="feed-card hero-card" id="desktopHeroCard">
+                <div class="hero-loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div>
+            </div>
         </div>
         <div class="dashboard-grid">
+            <div class="card" style="grid-column: 1 / -1;">
+                <h3 class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Most Recent Expenses</h3>
+                <div id="deskRecentExpenses"></div>
+            </div>
             <div class="card">
                 <div class="card-title-row">
                     <h3 class="card-title"><i class="fa-solid fa-chart-column"></i> Totals</h3>
@@ -203,10 +227,6 @@ async function renderDashboard(app) {
             <div class="card">
                 <h3 class="card-title"><i class="fa-solid fa-basket-shopping"></i> Most Bought Items</h3>
                 <div id="deskTopItems"></div>
-            </div>
-            <div class="card" style="grid-column: 1 / -1;">
-                <h3 class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Recent Expenses</h3>
-                <div id="deskRecentExpenses"></div>
             </div>
         </div>
         <div id="deskDiscoveryCards" class="discovery-section"></div>
@@ -250,7 +270,11 @@ function renderDesktopData(data) {
     renderGeoMap('geoMap', data);
     renderTopShops('deskTopShops', data.topShops);
     renderTopItems('deskTopItems', data.topItems);
-    renderRecentExpenses('deskRecentExpenses', 8);
+
+    // Get current hero period params for filtering recent expenses
+    const heroPeriod = document.getElementById('deskHeroPeriod')?.value;
+    const recentParams = heroPeriod ? buildParamsFromPeriod(heroPeriod) : '';
+    renderRecentExpenses('deskRecentExpenses', 8, recentParams);
 }
 
 function updateDesktopCharts() {
@@ -262,13 +286,27 @@ function updateDesktopCharts() {
     if (!mc) return;
     if (chartInstances.monthly) { chartInstances.monthly.destroy(); delete chartInstances.monthly; }
     const totalsData = period === 'weekly' ? data.weeklyTotals : period === 'annual' ? data.annualTotals : data.monthlyTotals;
+    const totalsLabels = Object.keys(totalsData || {});
     chartInstances.monthly = new Chart(mc, {
         type: 'bar',
-        data: { labels: Object.keys(totalsData || {}),
+        data: { labels: totalsLabels,
             datasets: [{ label: 'Total (' + baseCur + ')',
                 data: Object.values(totalsData || {}),
-                backgroundColor: 'rgba(46, 90, 136, 0.7)', borderRadius: 6 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                backgroundColor: 'rgba(25, 118, 210, 0.7)', borderRadius: 6 }] },
+        options: { responsive: true, maintainAspectRatio: false,
+            plugins: { ...chartPluginOptions(), legend: { display: false } },
+            scales: chartScaleOptions(),
+            onClick: (evt, elements) => {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    const label = totalsLabels[idx];
+                    if (label) {
+                        const params = _totalsLabelToDateParams(label, period);
+                        navigate('#/expenses?' + params);
+                    }
+                }
+            }
+        }
     });
 }
 
@@ -283,3 +321,30 @@ async function reloadDesktopWithFilter(params) {
 
     renderDesktopData(data);
 }
+
+/**
+ * Convert a totals chart label to startDate/endDate query string.
+ * Labels can be: "2026-04" (monthly), "2026-03-31" (weekly start), "2026" (annual).
+ */
+function _totalsLabelToDateParams(label, period) {
+    const params = new URLSearchParams();
+    if (period === 'annual') {
+        params.set('startDate', label + '-01-01');
+        params.set('endDate', label + '-12-31');
+    } else if (period === 'weekly') {
+        // label is the week start date (Monday)
+        const start = new Date(label + 'T00:00:00');
+        const end = new Date(start);
+        end.setDate(end.getDate() + 6);
+        params.set('startDate', label);
+        params.set('endDate', end.toISOString().slice(0, 10));
+    } else {
+        // monthly: label is "YYYY-MM"
+        const [y, m] = label.split('-');
+        const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
+        params.set('startDate', label + '-01');
+        params.set('endDate', label + '-' + String(lastDay).padStart(2, '0'));
+    }
+    return params.toString();
+}
+

@@ -12,10 +12,6 @@ function renderChatPanel(container) {
     const panel = container || document.getElementById('panel-chat');
     panel.innerHTML = `
     <div class="chat-container">
-        <div class="chat-header">
-            <i class="fa-solid fa-robot"></i>
-            <span class="chat-header-title">Expense Assistant</span>
-        </div>
         <div class="chat-load-older" id="chatLoadOlder" style="display:none">
             <button class="btn btn-outline btn-sm" onclick="loadOlderMessages()">
                 <i class="fa-solid fa-chevron-up"></i> Load earlier messages

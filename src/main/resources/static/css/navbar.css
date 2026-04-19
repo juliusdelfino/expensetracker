@@ -1,27 +1,29 @@
 /* ============================================
    Expense Tracker - Navbar & Navigation Drawer
+   Material Design Theme
    ============================================ */
 .navbar {
-    background: linear-gradient(135deg, var(--aegean-dark), var(--aegean-mid));
+    background: var(--navbar-bg);
     padding: 0 1rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    box-shadow: var(--shadow);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.14), 0 3px 4px rgba(0,0,0,0.12);
     position: sticky;
     top: 0;
     z-index: 1000;
     height: var(--navbar-h);
 }
 .navbar-brand {
-    color: var(--sand);
+    color: #fff;
     font-size: 1.25rem;
-    font-weight: 700;
+    font-weight: 500;
     text-decoration: none;
     display: flex;
     align-items: center;
     gap: 0.5rem;
     white-space: nowrap;
+    letter-spacing: 0.01em;
 }
 
 /* Burger button (always visible) */
@@ -66,10 +68,10 @@
     position: absolute;
     top: var(--navbar-h);
     right: 0;
-    background: linear-gradient(180deg, var(--aegean-dark), #152d49);
+    background: var(--navbar-bg);
     min-width: 220px;
     border-radius: 0 0 var(--radius) var(--radius);
-    box-shadow: var(--shadow-hover);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.2);
     z-index: 999;
     flex-direction: column;
     padding: 0.5rem 0;
@@ -87,6 +89,6 @@
 }
 .nav-drawer a:hover {
     background: rgba(255,255,255,0.1);
-    color: var(--sand);
+    color: #fff;
 }
 
