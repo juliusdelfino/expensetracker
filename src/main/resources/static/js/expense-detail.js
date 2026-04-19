@@ -37,8 +37,8 @@ async function renderExpenseDetail(app, id) {
             </div>
             <div class="action-bar-right">
                 ${isOwner && isFailed ? `<button class="btn btn-secondary btn-sm" onclick="retryExpense('${e.urlId}'); setTimeout(()=>location.reload(),500)"><i class="fa-solid fa-rotate"></i> Retry</button>` : ''}
-                <button class="btn btn-outline btn-sm" onclick="openShareMenu('${e.urlId}', this)"><i class="fa-solid fa-share-nodes"></i> Share</button>
-                ${isOwner ? `<button class="btn btn-secondary btn-sm" onclick="duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i> Duplicate</button>` : ''}
+                ${!isProcessing && !isFailed ? `<button class="btn btn-outline btn-sm" onclick="openShareMenu('${e.urlId}', this)"><i class="fa-solid fa-share-nodes"></i> Share</button>` : ''}
+                ${isOwner && !isProcessing && !isFailed ? `<button class="btn btn-secondary btn-sm" onclick="duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i> Duplicate</button>` : ''}
                 ${isOwner ? `<button class="btn btn-danger btn-sm" onclick="deleteExpense('${e.urlId}'); navigate('#/expenses')"><i class="fa-solid fa-trash"></i> Delete</button>` : ''}
             </div>
         </div>`;
@@ -60,8 +60,22 @@ async function renderExpenseDetail(app, id) {
         const ext = (imgFilename.split('.').pop() || '').toLowerCase();
         const isPdf = ext === 'pdf';
         html += `<div class="side-by-side">
-            <div class="card">
-                <h3 class="card-title"><i class="fa-solid ${isPdf ? 'fa-file-pdf' : 'fa-image'}"></i> Scanned Receipt</h3>
+            <div class="card receipt-details-card">
+                <div class="card-title-row">
+                    <h3 class="card-title"><i class="fa-solid fa-receipt"></i> Receipt Details</h3>
+                    <button class="btn btn-outline btn-sm receipt-scan-toggle-btn" onclick="toggleScannedReceipt()">
+                        <i class="fa-solid fa-${isPdf ? 'file-pdf' : 'image'}"></i> View Scan
+                    </button>
+                </div>
+                ${renderReceiptView(e, items, store, id, isOwner)}
+            </div>
+            <div class="card scanned-receipt-card">
+                <div class="card-title-row">
+                    <h3 class="card-title"><i class="fa-solid ${isPdf ? 'fa-file-pdf' : 'fa-image'}"></i> Scanned Receipt</h3>
+                    <button class="btn btn-outline btn-sm receipt-scan-toggle-btn" onclick="toggleScannedReceipt()">
+                        <i class="fa-solid fa-eye-slash"></i> Hide Scan
+                    </button>
+                </div>
                 ${isPdf ? `
                     <iframe src="/pdfjs-5.6.205-dist/web/viewer.html?file=/api/attachments/receipts/${imgFilename}" style="width:100%; height:600px; border:0;"></iframe>
                 ` : `
@@ -69,10 +83,6 @@ async function renderExpenseDetail(app, id) {
                         <img src="/api/attachments/receipts/${imgFilename}" class="receipt-image" id="receiptImg" alt="Receipt">
                     </div>
                 `}
-            </div>
-            <div class="card">
-                <h3 class="card-title"><i class="fa-solid fa-receipt"></i> Receipt Details</h3>
-                ${renderReceiptView(e, items, store, id, isOwner)}
             </div>
         </div>`;
     } else {
@@ -463,5 +473,19 @@ async function removeAttachment(expenseId, filename) {
     await api(`/api/expenses/${expenseId}/attachments/${filename}`, { method: 'DELETE' });
     toast('Attachment removed', 'success');
     renderExpenseDetail(document.getElementById('app'), expenseId);
+}
+
+function toggleScannedReceipt() {
+    const scanCard = document.querySelector('.scanned-receipt-card');
+    const detailsCard = document.querySelector('.receipt-details-card');
+    if (!scanCard || !detailsCard) return;
+    const showingScan = scanCard.classList.contains('show');
+    if (showingScan) {
+        scanCard.classList.remove('show');
+        detailsCard.classList.remove('hidden-mobile');
+    } else {
+        scanCard.classList.add('show');
+        detailsCard.classList.add('hidden-mobile');
+    }
 }
 

@@ -16,10 +16,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.file.*;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -56,18 +58,19 @@ public class ExpenseService {
 
     public Expense createManualExpense(Expense expense, Long userId) {
         // Validate currency if provided
-        if (expense.getCurrency() != null && !expense.getCurrency().isBlank()) {
-            String c = expense.getCurrency().toUpperCase();
-            if (!supportedCurrencyService.isSupported(c)) {
-                throw new IllegalArgumentException("Unsupported currency: " + expense.getCurrency());
-            }
-            expense.setCurrency(c);
-        }
 
+        if (!supportedCurrencyService.isSupported(expense.getCurrency())) {
+            throw new IllegalArgumentException("Unsupported currency: " + expense.getCurrency());
+        }
+        expense.setCurrency(expense.getCurrency());
+        User user = userRepository.findById(userId).orElse(null);
+        if (user != null && user.getBaseCurrency() == null) {
+            user.setBaseCurrency(expense.getCurrency());
+            userRepository.save(user);
+        }
         expense.setUserId(userId);
         expense.setType(ExpenseType.MANUAL);
         expense.setStatus(ExpenseStatus.COMPLETED);
-        expense.setDeleted(false);
         expense.setCreatedAt(LocalDateTime.now());
         expense.setUpdatedAt(LocalDateTime.now());
         expense.setUrlId(UUID.randomUUID().toString());
@@ -92,8 +95,7 @@ public class ExpenseService {
         expense.setUrlId(UUID.randomUUID().toString());
         expenseRepository.save(expense);
 
-        String baseCurrency = userRepository.findById(userId).map(User::getBaseCurrency).orElse("USD");
-        ocrService.processReceipt(expense.getId(), imagePath, baseCurrency);
+        ocrService.processReceipt(expense.getId(), imagePath);
         return expense;
     }
 
@@ -106,13 +108,11 @@ public class ExpenseService {
         if (updates.getAmount() != null) expense.setAmount(updates.getAmount());
         if (updates.getCurrency() != null) {
             String c = updates.getCurrency();
-            if (c != null && !c.isBlank()) {
+            if (StringUtils.hasText(c)) {
                 if (!supportedCurrencyService.isSupported(c)) {
                     throw new IllegalArgumentException("Unsupported currency: " + c);
                 }
                 expense.setCurrency(c.toUpperCase());
-            } else {
-                expense.setCurrency(null);
             }
         }
         if (updates.getReceiptNumber() != null) expense.setReceiptNumber(updates.getReceiptNumber());
@@ -156,8 +156,7 @@ public class ExpenseService {
         expense.setUpdatedAt(LocalDateTime.now());
         expense.setNotes("");
         expenseRepository.save(expense);
-        String baseCurrency = userRepository.findById(userId).map(User::getBaseCurrency).orElse("USD");
-        ocrService.processReceipt(expense.getId(), expense.getImagePath(), baseCurrency);
+        ocrService.processReceipt(expense.getId(), expense.getImagePath());
     }
 
     @Transactional
@@ -178,7 +177,7 @@ public class ExpenseService {
         copy.setCategory(original.getCategory());
         copy.setTags(new ArrayList<>(original.getTags() != null ? original.getTags() : List.of()));
         copy.setNotes(original.getNotes());
-        copy.setStatus(ExpenseStatus.DRAFT);
+        copy.setStatus(ExpenseStatus.COMPLETED);
         copy.setImagePath(original.getImagePath());
         copy.setAttachments(new ArrayList<>(original.getAttachments() != null ? original.getAttachments() : List.of()));
         copy.setDeleted(false);
@@ -310,7 +309,7 @@ public class ExpenseService {
 
     private void computeCurrency(Expense expense, Long userId) {
         if (expense.getCurrency() == null || expense.getAmount() == null) return;
-        String baseCurrency = userRepository.findById(userId).map(User::getBaseCurrency).orElse("USD");
+        String baseCurrency = userRepository.findById(userId).map(User::getBaseCurrency).orElse(null);
         if (expense.getCurrency().equalsIgnoreCase(baseCurrency)) {
             expense.setExchangeRate(BigDecimal.ONE);
             expense.setAmountInBase(expense.getAmount());
@@ -321,8 +320,8 @@ public class ExpenseService {
             expense.setAmountInBase(expense.getAmount().multiply(expense.getExchangeRate()));
             return;
         }
-        java.time.LocalDate date = expense.getTransactionDatetime() != null
-                ? expense.getTransactionDatetime().toLocalDate() : java.time.LocalDate.now();
+        LocalDate date = expense.getTransactionDatetime() != null
+                ? expense.getTransactionDatetime().toLocalDate() : LocalDate.now();
         BigDecimal rate = currencyService.getRate(expense.getCurrency(), baseCurrency, date);
         if (rate != null) {
             expense.setExchangeRate(rate);

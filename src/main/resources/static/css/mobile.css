@@ -137,6 +137,23 @@
     justify-content: center;
 }
 
+/* Camera overlay buttons (float over video) */
+.camera-overlay-btn {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+.camera-cancel-btn {
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    border-color: rgba(255,255,255,0.4);
+}
+.camera-cancel-btn:hover {
+    background: rgba(0,0,0,0.75);
+    border-color: rgba(255,255,255,0.6);
+}
+
 /* ===================== HOME FEED (social-scroll) ===================== */
 .home-feed {
     padding: 0.75rem;
@@ -200,6 +217,52 @@
     padding: 2rem;
     text-align: center;
     color: rgba(255,255,255,0.7);
+}
+
+/* ===================== QUICK ACTIONS CARD ===================== */
+.quick-actions-card {
+    padding: 0.75rem !important;
+}
+.quick-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.5rem;
+}
+.quick-action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    color: var(--text);
+    padding: 0.75rem 0.25rem;
+    border-radius: var(--radius);
+    transition: var(--transition);
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-align: center;
+    width: 100%;
+}
+.quick-action-btn:hover,
+.quick-action-btn:active {
+    background: var(--aegean-pale);
+}
+.quick-action-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--aegean-pale);
+    color: var(--aegean-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    transition: var(--transition);
+}
+.quick-action-btn:hover .quick-action-icon,
+.quick-action-btn:active .quick-action-icon {
+    background: var(--aegean-mid);
+    color: #fff;
 }
 
 /* ===================== EXPENSE MINI CARDS ===================== */

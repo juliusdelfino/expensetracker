@@ -1,11 +1,12 @@
 package com.delfino.expensetracker.config;
 
+import com.delfino.expensetracker.dto.auth.UserContext;
+import com.delfino.expensetracker.dto.auth.UserToken;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -35,7 +36,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
         if (session != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             Long userId = (Long) session.getAttribute("userId");
             if (userId != null) {
-                var auth = new UsernamePasswordAuthenticationToken(
+                var auth = new UserToken(
                         userId, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
                 SecurityContextHolder.getContext().setAuthentication(auth);
                 userContext.setUserId(userId);

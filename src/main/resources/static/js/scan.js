@@ -45,6 +45,12 @@ function initSwipe() {
 
     container.addEventListener('touchmove', (e) => {
         if (swipeDisabled) return;
+        // If user is selecting text (long-press + drag in chat), disable swipe
+        const sel = window.getSelection();
+        if (sel && !sel.isCollapsed) {
+            swipeDisabled = true;
+            return;
+        }
         const dx = e.touches[0].clientX - touchStartX;
         const dy = e.touches[0].clientY - touchStartY;
         if (!isSwiping && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {

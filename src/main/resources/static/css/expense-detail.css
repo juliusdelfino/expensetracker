@@ -327,3 +327,45 @@
     text-align: center;
 }
 
+/* ===================== NEW EXPENSE - INLINE ITEMS ===================== */
+.new-expense-items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+.new-expense-item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.45rem 0.75rem;
+    background: var(--table-stripe);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.15s ease;
+    font-size: 0.88rem;
+}
+.new-expense-item-row:hover {
+    background: var(--aegean-pale);
+    color: var(--bg-white);
+}
+.new-expense-item-name {
+    font-weight: 500;
+}
+.new-expense-item-detail {
+    color: var(--text-light);
+    font-size: 0.82rem;
+}
+.new-expense-item-row:hover .new-expense-item-detail {
+    color: var(--bg-white);
+}
+.new-expense-store-preview {
+    padding: 0.45rem 0.75rem;
+    background: var(--table-stripe);
+    border-radius: var(--radius);
+    font-size: 0.88rem;
+}
+.new-expense-store-preview .text-light {
+    color: var(--text-light);
+    font-style: italic;
+}
+

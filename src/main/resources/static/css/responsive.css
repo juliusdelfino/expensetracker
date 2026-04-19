@@ -6,6 +6,7 @@
 @media (min-width: 900px) {
     .swipe-wrapper { display: none !important; }
     .bottom-tab-bar { display: none !important; }
+    .quick-actions-card { display: none !important; }
 
     .dashboard-grid { grid-template-columns: 1fr 1fr; }
 
@@ -20,6 +21,9 @@
     /* On desktop: always show extra filters, hide "More filters" button */
     .exp-extra-filters { display: flex !important; }
     .exp-more-filters-btn { display: none !important; }
+
+    /* Receipt scan toggle only needed on mobile */
+    .receipt-scan-toggle-btn { display: none !important; }
 }
 
 /* Mobile */
@@ -150,5 +154,13 @@
         gap: 0.5rem;
     }
     .exp-dlg-f-date { max-width: 190px; }
+
+    /* Scanned Receipt card: hidden by default on mobile, shown via toggle */
+    .scanned-receipt-card { display: none; }
+    .scanned-receipt-card.show { display: block; }
+    /* When scan is shown, hide the details card so both occupy the same space */
+    .receipt-details-card.hidden-mobile { display: none; }
+    /* Toggle button: only visible on mobile */
+    .receipt-scan-toggle-btn { display: inline-flex; }
 }
 

@@ -1,6 +1,6 @@
 package com.delfino.expensetracker.controller;
 
-import com.delfino.expensetracker.config.UserContext;
+import com.delfino.expensetracker.dto.auth.UserToken;
 import com.delfino.expensetracker.dto.auth.UpdateProfileRequest;
 import com.delfino.expensetracker.dto.common.ErrorResponse;
 import com.delfino.expensetracker.dto.common.MessageResponse;
@@ -30,8 +30,8 @@ public class UserController {
 
     @PutMapping("/profile")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> updateProfile(@RequestBody UpdateProfileRequest body) {
-        Long userId = UserContext.currentUserId();
+    public ResponseEntity<?> updateProfile(@RequestBody UpdateProfileRequest body, UserToken userToken) {
+        long userId = userToken.getUserId();
 
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) return ResponseEntity.notFound().build();
@@ -40,7 +40,7 @@ public class UserController {
         if (body.phoneNumber() != null) user.setPhoneNumber(body.phoneNumber());
         if (body.baseCurrency() != null) {
             String bc = body.baseCurrency();
-            if (!bc.isBlank() && !supportedCurrencyService.isSupported(bc)) {
+            if (!supportedCurrencyService.isSupported(bc)) {
                 return ResponseEntity.badRequest().body(new ErrorResponse("Unsupported base currency: " + bc));
             }
             user.setBaseCurrency(bc);

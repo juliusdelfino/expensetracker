@@ -1,10 +1,7 @@
-package com.delfino.expensetracker.config;
+package com.delfino.expensetracker.dto.auth;
 
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.annotation.RequestScope;
-
-
 
 /**
  * Request-scoped bean that carries the authenticated userId
@@ -23,15 +20,5 @@ public class UserContext {
 
     public void setUserId(Long userId) {
         this.userId = userId;
-    }
-
-    /**
-     * Static helper: extract the authenticated userId from the SecurityContext.
-     * Returns null if not authenticated.
-     */
-    public static Long currentUserId() {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getPrincipal() instanceof Long id) return id;
-        return null;
     }
 }

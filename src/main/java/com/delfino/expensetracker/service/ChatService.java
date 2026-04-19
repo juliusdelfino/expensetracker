@@ -75,13 +75,12 @@ public class ChatService {
         userMsg.setCreatedAt(LocalDateTime.now());
         chatMessageRepository.save(userMsg);
 
-        String baseCurrency = userRepository.findById(userId)
-                .map(User::getBaseCurrency).orElse("USD");
+        User user = userRepository.findById(userId).get();
 
         try {
             String resolvedSystemPrompt = chatBotProperties.getSystemPrompt()
-                    .replace("{today}", LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE))
-                    .replace("{currency}", baseCurrency);
+                    .replace("{today}", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+                    .replace("{currency}", user.getBaseCurrency());
 
             log.info("Processing chat message for user {}: '{}'", userId, messageText);
 
@@ -128,8 +127,8 @@ public class ChatService {
                             }
                             if (expNode.has("currency")) {
                                 expense.setCurrency(expNode.get("currency").asText());
-                            } else {
-                                expense.setCurrency(baseCurrency);
+                            } else if (user.getBaseCurrency() != null) {
+                                expense.setCurrency(user.getBaseCurrency());
                             }
                             if (expNode.has("category")) {
                                 expense.setCategory(expNode.get("category").asText());
@@ -154,7 +153,7 @@ public class ChatService {
 
                         botText = summary + "\n\n\uD83D\uDCB0 Today's total: "
                                 + dailyTotal.setScale(2, RoundingMode.HALF_UP).toPlainString()
-                                + " " + baseCurrency;
+                                + " " + user.getBaseCurrency();
                     }
                 } catch (Exception e) {
                     // Not valid JSON — treat llmResponse as plain text (likely a query answer)

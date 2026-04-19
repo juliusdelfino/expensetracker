@@ -199,7 +199,9 @@ class ExpenseControllerTest extends BaseControllerTest {
 
     @Test
     void getExpense_notFound_returns404() throws Exception {
-        mockMvc.perform(get("/api/expenses/nonexistent-url-id"))
+        createTestUser("alice", "pass");
+        MockHttpSession session = loginAs("alice", "pass");
+        mockMvc.perform(get("/api/expenses/nonexistent-url-id").session(session))
                 .andExpect(status().isNotFound());
     }
 
@@ -207,8 +209,9 @@ class ExpenseControllerTest extends BaseControllerTest {
     void getExpense_noStore_storeIsNull() throws Exception {
         User user = createTestUser("alice", "pass");
         Expense expense = createTestExpense(user.getId(), "Food", BigDecimal.TEN, "USD");
+        MockHttpSession session = loginAs("alice", "pass");
 
-        mockMvc.perform(get("/api/expenses/" + expense.getUrlId()))
+        mockMvc.perform(get("/api/expenses/" + expense.getUrlId()).session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.store").isEmpty());
     }
@@ -273,7 +276,8 @@ class ExpenseControllerTest extends BaseControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "category", "Misc",
-                                "amount", 5.0
+                                "amount", 5.0,
+                                "currency", "EUR"
                         ))))
                 .andExpect(status().isOk());
     }
@@ -443,7 +447,7 @@ class ExpenseControllerTest extends BaseControllerTest {
         mockMvc.perform(post("/api/expenses/" + expense.getUrlId() + "/duplicate").session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.category").value("Food"))
-                .andExpect(jsonPath("$.status").value("DRAFT"));
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
 
         assertThat(expenseRepository.findAll()).hasSize(2);
     }
