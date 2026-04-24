@@ -46,6 +46,10 @@ function renderHomePanel() {
             </div>
         </div>
         <div class="feed-card">
+            <h3 class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Most Recent Expenses</h3>
+            <div id="homeRecentExpenses"></div>
+        </div>
+        <div class="feed-card">
             <div class="card-title-row">
                 <h3 class="card-title"><i class="fa-solid fa-chart-column"></i> Totals</h3>
                 <select class="chart-period-select interactive-element" id="homeTotalsPeriod" onchange="updateHomeCharts()">
@@ -71,10 +75,6 @@ function renderHomePanel() {
         <div class="feed-card">
             <h3 class="card-title"><i class="fa-solid fa-basket-shopping"></i> Most Bought Items</h3>
             <div id="homeTopItems"></div>
-        </div>
-        <div class="feed-card">
-            <h3 class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Most Recent Expenses</h3>
-            <div id="homeRecentExpenses"></div>
         </div>
         <div class="feed-card">
             <h3 class="card-title"><i class="fa-solid fa-map-location-dot"></i> Where You Spend</h3>
@@ -153,22 +153,21 @@ function updateHomeCharts() {
                 data: Object.values(totalsData || {}),
                 backgroundColor: 'rgba(25, 118, 210, 0.7)', borderRadius: 6 }] },
         options: { responsive: true, maintainAspectRatio: false,
-            plugins: { ...chartPluginOptions(), legend: { display: false } },
-            scales: chartScaleOptions(),
-            onClick: (evt, elements) => {
-                if (elements.length > 0) {
-                    const idx = elements[0].index;
-                    const label = totalsLabels[idx];
+            plugins: { ...chartPluginOptions(), legend: { display: false },
+                tooltip: buildClickableTooltip((idx, label) => {
                     if (label) {
                         const params = _totalsLabelToDateParams(label, period);
-                        navigate('#/expenses?' + params);
+                        return '#/expenses?' + params;
                     }
-                }
-            }
+                    return null;
+                })
+            },
+            scales: chartScaleOptions()
         }
     });
 }
 
+// Store last loaded data for chart period switching
 async function reloadHomeWithFilter(params) {
     const data = await api('/api/dashboard' + (params ? '?' + params : ''));
     if (!data) return;
@@ -294,18 +293,16 @@ function updateDesktopCharts() {
                 data: Object.values(totalsData || {}),
                 backgroundColor: 'rgba(25, 118, 210, 0.7)', borderRadius: 6 }] },
         options: { responsive: true, maintainAspectRatio: false,
-            plugins: { ...chartPluginOptions(), legend: { display: false } },
-            scales: chartScaleOptions(),
-            onClick: (evt, elements) => {
-                if (elements.length > 0) {
-                    const idx = elements[0].index;
-                    const label = totalsLabels[idx];
+            plugins: { ...chartPluginOptions(), legend: { display: false },
+                tooltip: buildClickableTooltip((idx, label) => {
                     if (label) {
                         const params = _totalsLabelToDateParams(label, period);
-                        navigate('#/expenses?' + params);
+                        return '#/expenses?' + params;
                     }
-                }
-            }
+                    return null;
+                })
+            },
+            scales: chartScaleOptions()
         }
     });
 }

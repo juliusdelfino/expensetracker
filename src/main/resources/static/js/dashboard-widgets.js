@@ -146,6 +146,53 @@ function chartPluginOptions() {
     };
 }
 
+/**
+ * Build tooltip config that shows a clickable "View expenses →" link.
+ * The chart's onClick is removed; navigation happens via the tooltip link.
+ */
+function buildClickableTooltip(resolveNavUrl) {
+    // We use an external tooltip rendered as HTML overlay
+    return {
+        enabled: false,
+        external: function(context) {
+            const { chart, tooltip } = context;
+            let tooltipEl = chart.canvas.parentNode.querySelector('.chart-click-tooltip');
+            if (!tooltipEl) {
+                tooltipEl = document.createElement('div');
+                tooltipEl.className = 'chart-click-tooltip';
+                chart.canvas.parentNode.style.position = 'relative';
+                chart.canvas.parentNode.appendChild(tooltipEl);
+            }
+
+            if (tooltip.opacity === 0) {
+                tooltipEl.style.opacity = 0;
+                tooltipEl.style.pointerEvents = 'none';
+                return;
+            }
+
+            const dataIndex = tooltip.dataPoints?.[0]?.dataIndex;
+            const label = tooltip.dataPoints?.[0]?.label || '';
+            const value = tooltip.dataPoints?.[0]?.formattedValue || '';
+            const datasetLabel = tooltip.dataPoints?.[0]?.dataset?.label || '';
+
+            const navUrl = resolveNavUrl(dataIndex, label);
+            const linkHtml = navUrl
+                ? `<a class="chart-tooltip-link" href="${navUrl}">View expenses →</a>`
+                : '';
+
+            tooltipEl.innerHTML = `
+                <div class="chart-tooltip-title">${label}</div>
+                <div class="chart-tooltip-value">${datasetLabel ? datasetLabel + ': ' : ''}${value}</div>
+                ${linkHtml}`;
+
+            tooltipEl.style.opacity = 1;
+            tooltipEl.style.pointerEvents = 'auto';
+            tooltipEl.style.left = tooltip.caretX + 'px';
+            tooltipEl.style.top = tooltip.caretY + 'px';
+        }
+    };
+}
+
 function createTimelineChart(canvasId, chartKey, data) {
     const tc = document.getElementById(canvasId);
     if (!tc) return;
@@ -159,15 +206,13 @@ function createTimelineChart(canvasId, chartKey, data) {
                 borderColor: '#42A5F5', backgroundColor: 'rgba(66,165,245,0.1)',
                 fill: true, tension: 0.3, pointRadius: 3 }] },
         options: { responsive: true, maintainAspectRatio: false,
-            plugins: { ...chartPluginOptions(), legend: { display: false } },
-            scales: chartScaleOptions(),
-            onClick: (evt, elements) => {
-                if (elements.length > 0) {
-                    const idx = elements[0].index;
+            plugins: { ...chartPluginOptions(), legend: { display: false },
+                tooltip: buildClickableTooltip((idx, label) => {
                     const dateStr = timelineLabels[idx];
-                    if (dateStr) navigate('#/expenses?startDate=' + dateStr + '&endDate=' + dateStr);
-                }
-            }
+                    return dateStr ? '#/expenses?startDate=' + dateStr + '&endDate=' + dateStr : null;
+                })
+            },
+            scales: chartScaleOptions()
         }
     });
 }
@@ -182,13 +227,11 @@ function createCategoryChart(canvasId, chartKey, data) {
         type: 'doughnut',
         data: { labels: catLabels,
             datasets: [{ data: Object.values(data.categoryTotals || {}), backgroundColor: CHART_COLORS, borderColor: cardBg, borderWidth: 1 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: chartPluginOptions(),
-            onClick: (evt, elements) => {
-                if (elements.length > 0) {
-                    const idx = elements[0].index;
+        options: { responsive: true, maintainAspectRatio: false, plugins: { ...chartPluginOptions(),
+                tooltip: buildClickableTooltip((idx, label) => {
                     const category = catLabels[idx];
-                    if (category) navigate('#/expenses?category=' + encodeURIComponent(category));
-                }
+                    return category ? '#/expenses?category=' + encodeURIComponent(category) : null;
+                })
             }
         }
     });
