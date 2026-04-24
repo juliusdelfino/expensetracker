@@ -11,6 +11,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.data.domain.PageRequest;
@@ -84,11 +87,30 @@ public class ChatService {
 
             log.info("Processing chat message for user {}: '{}'", userId, messageText);
 
+            // Build conversation history for context (last 10 messages before current)
+            List<ChatMessage> recentHistory = chatMessageRepository.findTop50ByUserIdOrderByCreatedAtDesc(userId);
+            Collections.reverse(recentHistory);
+            // Take the last 10 messages (excluding the user message we just saved, which is the last one)
+            int historySize = Math.min(recentHistory.size() - 1, 10);
+            List<Message> conversationMessages = new ArrayList<>();
+            if (historySize > 0) {
+                List<ChatMessage> historySlice = recentHistory.subList(
+                        Math.max(0, recentHistory.size() - 1 - historySize),
+                        recentHistory.size() - 1);
+                for (ChatMessage cm : historySlice) {
+                    if ("USER".equals(cm.getRole())) {
+                        conversationMessages.add(new UserMessage(cm.getText()));
+                    } else {
+                        conversationMessages.add(new AssistantMessage(cm.getText()));
+                    }
+                }
+            }
+
             // Call the LLM via Spring AI ChatClient — tool calls are handled automatically.
-            // If the LLM decides to call findItemPrice / totalExpenses / etc., Spring AI
-            // will invoke the @Tool method and feed the result back before returning.
+            // Include conversation history so the model has context of the ongoing conversation.
             String llmResponse = chatClient.prompt()
                     .system(resolvedSystemPrompt)
+                    .messages(conversationMessages)
                     .user(messageText)
                     .call()
                     .content();
@@ -135,6 +157,11 @@ public class ChatService {
                             }
                             if (expNode.has("notes")) {
                                 expense.setNotes(expNode.get("notes").asText());
+                            }
+                            if (expNode.has("storeId") && !expNode.get("storeId").isNull()) {
+                                try {
+                                    expense.setStoreId(expNode.get("storeId").asLong());
+                                } catch (Exception ignored) {}
                             }
 
                             Expense saved = expenseService.createManualExpense(expense, userId);

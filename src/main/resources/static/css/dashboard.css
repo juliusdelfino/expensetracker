@@ -3,6 +3,35 @@
    ============================================ */
 
 /* ===================== DASHBOARD (desktop) ===================== */
+
+/* Chart clickable tooltip */
+.chart-click-tooltip {
+    position: absolute;
+    background: var(--bg-card, #fff);
+    border: 1px solid var(--border, #e0e0e0);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    transform: translate(-50%, -110%);
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    font-size: 0.82rem;
+    min-width: 120px;
+    text-align: center;
+}
+.chart-tooltip-title { font-weight: 600; color: var(--text, #333); }
+.chart-tooltip-value { color: var(--text-light, #666); margin: 0.15rem 0; }
+.chart-tooltip-link {
+    display: inline-block;
+    margin-top: 0.3rem;
+    color: var(--primary, #1976D2);
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+}
+.chart-tooltip-link:hover { text-decoration: underline; }
 .dashboard-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
