@@ -239,13 +239,20 @@ public class ExpenseService {
         List<Expense> expenses = includeDeleted
                 ? expenseRepository.findByUserId(userId)
                 : expenseRepository.findByUserIdAndDeletedFalse(userId);
+        if (query == null || query.isBlank()) {
+            return expenses;
+        }
+        // Batch-load stores + items ONCE to avoid N+1 queries during filtering
+        Map<Long, Store> storeMap = getStoreMapForUser(userId);
+        Map<Long, List<ExpenseItem>> itemsByExpenseId = getItemsByExpenseId(expenses);
         return expenses.stream()
-                .filter(e -> matchesSearch(e, query))
+                .filter(e -> matchesSearch(e, query, storeMap, itemsByExpenseId))
                 .toList();
     }
 
-    private boolean matchesSearch(Expense e, String query) {
-        if (query == null || query.isBlank()) return true;
+    private boolean matchesSearch(Expense e, String query,
+                                  Map<Long, Store> storeMap,
+                                  Map<Long, List<ExpenseItem>> itemsByExpenseId) {
         String q = query.toLowerCase();
         // Match expense fields
         if (contains(e.getCategory(), q) || contains(e.getNotes(), q)
@@ -255,15 +262,14 @@ public class ExpenseService {
                 || (e.getTransactionDatetime() != null && e.getTransactionDatetime().toString().contains(q))) {
             return true;
         }
-        // Match expense items
-        List<ExpenseItem> items = expenseItemRepository.findByExpenseIdAndDeletedFalse(e.getId());
+        // Match expense items (from the pre-loaded index)
+        List<ExpenseItem> items = itemsByExpenseId.getOrDefault(e.getId(), List.of());
         if (items.stream().anyMatch(i -> contains(i.getItemName(), q))) {
             return true;
         }
-        // Match store details
-        Optional<Store> store = getStoreForExpense(e);
-        if (store.isPresent()) {
-            Store s = store.get();
+        // Match store details (from the pre-loaded map)
+        Store s = e.getStoreId() != null ? storeMap.get(e.getStoreId()) : null;
+        if (s != null) {
             if (contains(s.getName(), q) || contains(s.getAddress(), q)
                     || contains(s.getCity(), q) || contains(s.getCountry(), q)) {
                 return true;
@@ -275,6 +281,26 @@ public class ExpenseService {
             }
         }
         return false;
+    }
+
+    /** Build a {storeId -> Store} map for a user with a single query. */
+    public Map<Long, Store> getStoreMapForUser(Long userId) {
+        Map<Long, Store> map = new HashMap<>();
+        for (Store s : storeRepository.findByUserId(userId)) {
+            map.put(s.getId(), s);
+        }
+        return map;
+    }
+
+    /** Build a {expenseId -> [items]} index for the given expenses with a single query. */
+    public Map<Long, List<ExpenseItem>> getItemsByExpenseId(List<Expense> expenses) {
+        if (expenses.isEmpty()) return Map.of();
+        List<Long> ids = expenses.stream().map(Expense::getId).toList();
+        Map<Long, List<ExpenseItem>> map = new HashMap<>();
+        for (ExpenseItem item : expenseItemRepository.findByExpenseIdInAndDeletedFalse(ids)) {
+            map.computeIfAbsent(item.getExpenseId(), k -> new ArrayList<>()).add(item);
+        }
+        return map;
     }
 
     private boolean contains(String field, String query) {
@@ -429,22 +455,25 @@ public class ExpenseService {
         List<Expense> expenses = expenseRepository.findByUserIdAndDeletedFalse(userId);
         if (expenses.isEmpty()) return user;
 
+        // Batch-load this user's stores in a single query (avoids N+1)
+        Map<Long, Store> storeMap = getStoreMapForUser(userId);
+
         // Count expenses by city+country combination
         Map<String, Integer> locationCounts = new HashMap<>();
         Map<String, String> locationCity = new HashMap<>();
         Map<String, String> locationCountry = new HashMap<>();
 
         for (Expense e : expenses) {
-            getStoreForExpense(e).ifPresent(store -> {
-                String city = store.getCity();
-                String country = store.getCountry();
-                if (city != null && !city.isBlank() && country != null && !country.isBlank()) {
-                    String key = city.toLowerCase() + "|" + country.toUpperCase();
-                    locationCounts.merge(key, 1, Integer::sum);
-                    locationCity.put(key, city);
-                    locationCountry.put(key, country);
-                }
-            });
+            Store store = e.getStoreId() != null ? storeMap.get(e.getStoreId()) : null;
+            if (store == null) continue;
+            String city = store.getCity();
+            String country = store.getCountry();
+            if (city != null && !city.isBlank() && country != null && !country.isBlank()) {
+                String key = city.toLowerCase() + "|" + country.toUpperCase();
+                locationCounts.merge(key, 1, Integer::sum);
+                locationCity.put(key, city);
+                locationCountry.put(key, country);
+            }
         }
 
         if (locationCounts.isEmpty()) return user;
