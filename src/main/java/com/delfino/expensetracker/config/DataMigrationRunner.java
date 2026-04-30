@@ -78,7 +78,7 @@ public class DataMigrationRunner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         if (!migrationEnabled) {
-            log.info("JSON-to-SQLite migration is disabled (app.migration.enabled=false)");
+            log.info("JSON-to-PostgreSQL migration is disabled (app.migration.enabled=false)");
         } else {
             runMigration();
         }
@@ -101,7 +101,7 @@ public class DataMigrationRunner implements ApplicationRunner {
      *   use it to set expenses.store_id and stores.user_id directly.
      *
      * Strategy B (fallback): if expense_id is all null (already cleared), link stores to
-     *   RECEIPT_SCAN expenses by rowid insertion order (both were created together during OCR).
+     *   RECEIPT_SCAN expenses by id insertion order (both were created together during OCR).
      *
      * Also sets stores.user_id from the linked expense's user_id.
      */
@@ -150,20 +150,20 @@ public class DataMigrationRunner implements ApplicationRunner {
                      ResultSet rs = stmt.executeQuery(
                              "SELECT id, expense_id FROM stores WHERE expense_id IS NOT NULL")) {
                     while (rs.next()) {
-                        byte[] storeId = rs.getBytes("id");
-                        byte[] expenseId = rs.getBytes("expense_id");
-                        if (storeId == null || expenseId == null) continue;
+                        long storeId = rs.getLong("id");
+                        long expenseId = rs.getLong("expense_id");
+                        if (rs.wasNull()) continue;
                         try (PreparedStatement ps = conn.prepareStatement(
                                 "UPDATE expenses SET store_id = ? WHERE id = ? AND store_id IS NULL")) {
-                            ps.setBytes(1, storeId);
-                            ps.setBytes(2, expenseId);
+                            ps.setLong(1, storeId);
+                            ps.setLong(2, expenseId);
                             ps.executeUpdate();
                         }
                         try (PreparedStatement ps = conn.prepareStatement(
                                 "UPDATE stores SET user_id = (SELECT user_id FROM expenses WHERE id = ?) " +
-                                "WHERE id = ? AND user_id IS NULL")) {
-                            ps.setBytes(1, expenseId);
-                            ps.setBytes(2, storeId);
+                                        "WHERE id = ? AND user_id IS NULL")) {
+                            ps.setLong(1, expenseId);
+                            ps.setLong(2, storeId);
                             ps.executeUpdate();
                         }
                         count++;
@@ -173,34 +173,34 @@ public class DataMigrationRunner implements ApplicationRunner {
                 return;
             }
 
-            // ── Strategy B: rowid ordering ──
+            // ── Strategy B: id ordering ──
             // Stores were created in the same order as RECEIPT_SCAN expenses during OCR.
-            // Match them by rowid insertion order.
+            // Match them by id insertion order.
             if (alreadyLinked == 0) {
-                log.info("=== Strategy B: linking stores to RECEIPT_SCAN expenses by rowid order ===");
+                log.info("=== Strategy B: linking stores to RECEIPT_SCAN expenses by id order ===");
 
-                List<byte[]> scanExpenseIds = new ArrayList<>();
+                List<Long> scanExpenseIds = new ArrayList<>();
                 try (Statement st = conn.createStatement();
                      ResultSet rs = st.executeQuery(
-                             "SELECT id FROM expenses WHERE type='RECEIPT_SCAN' ORDER BY created_at ASC, rowid ASC")) {
-                    while (rs.next()) scanExpenseIds.add(rs.getBytes("id"));
+                             "SELECT id FROM expenses WHERE type='RECEIPT_SCAN' ORDER BY created_at ASC, id ASC")) {
+                    while (rs.next()) scanExpenseIds.add(rs.getLong("id"));
                 }
 
-                List<byte[]> storeIds = new ArrayList<>();
+                List<Long> storeIds = new ArrayList<>();
                 try (Statement st = conn.createStatement();
-                     ResultSet rs = st.executeQuery("SELECT id FROM stores ORDER BY rowid ASC")) {
-                    while (rs.next()) storeIds.add(rs.getBytes("id"));
+                     ResultSet rs = st.executeQuery("SELECT id FROM stores ORDER BY id ASC")) {
+                    while (rs.next()) storeIds.add(rs.getLong("id"));
                 }
 
                 int linked = 0;
                 int limit = Math.min(storeIds.size(), scanExpenseIds.size());
                 for (int i = 0; i < limit; i++) {
-                    byte[] sid = storeIds.get(i);
-                    byte[] eid = scanExpenseIds.get(i);
+                    long sid = storeIds.get(i);
+                    long eid = scanExpenseIds.get(i);
                     try (PreparedStatement ps = conn.prepareStatement(
                             "UPDATE expenses SET store_id = ? WHERE id = ? AND store_id IS NULL")) {
-                        ps.setBytes(1, sid);
-                        ps.setBytes(2, eid);
+                        ps.setLong(1, sid);
+                        ps.setLong(2, eid);
                         ps.executeUpdate();
                     }
                     linked++;
@@ -211,30 +211,30 @@ public class DataMigrationRunner implements ApplicationRunner {
             // Always: set user_id on stores that don't have it yet
             int userIdSet = 0;
             // Get the user's id first (single-user app)
-            byte[] primaryUserId = null;
+            long primaryUserId = 0;
             try (Statement st = conn.createStatement();
                  ResultSet rs = st.executeQuery("SELECT id FROM users LIMIT 1")) {
-                if (rs.next()) primaryUserId = rs.getBytes("id");
+                if (rs.next()) primaryUserId = rs.getLong("id");
             }
-            if (primaryUserId != null) {
+            if (primaryUserId != 0) {
                 try (Statement st = conn.createStatement();
-                     ResultSet rs = st.executeQuery("SELECT id FROM stores WHERE user_id IS NULL")) {
-                    List<byte[]> noUserStores = new ArrayList<>();
-                    while (rs.next()) noUserStores.add(rs.getBytes("id"));
-                    for (byte[] sid : noUserStores) {
+                     ResultSet rs = st.executeQuery("SELECT id FROM stores WHERE user_id IS NULL OR user_id = 0")) {
+                    List<Long> noUserStores = new ArrayList<>();
+                    while (rs.next()) noUserStores.add(rs.getLong("id"));
+                    for (long sid : noUserStores) {
                         // Try to find the user via linked expense
-                        byte[] uid = null;
+                        long uid = 0;
                         try (PreparedStatement ps = conn.prepareStatement(
                                 "SELECT e.user_id FROM expenses e WHERE e.store_id = ? LIMIT 1")) {
-                            ps.setBytes(1, sid);
+                            ps.setLong(1, sid);
                             ResultSet er = ps.executeQuery();
-                            if (er.next()) uid = er.getBytes("user_id");
+                            if (er.next()) uid = er.getLong("user_id");
                         }
-                        if (uid == null) uid = primaryUserId; // fallback to primary user
+                        if (uid == 0) uid = primaryUserId; // fallback to primary user
                         try (PreparedStatement ps = conn.prepareStatement(
-                                "UPDATE stores SET user_id = ? WHERE id = ? AND user_id IS NULL")) {
-                            ps.setBytes(1, uid);
-                            ps.setBytes(2, sid);
+                                "UPDATE stores SET user_id = ? WHERE id = ? AND (user_id IS NULL OR user_id = 0)")) {
+                            ps.setLong(1, uid);
+                            ps.setLong(2, sid);
                             userIdSet += ps.executeUpdate();
                         }
                     }
@@ -269,7 +269,7 @@ public class DataMigrationRunner implements ApplicationRunner {
             return;
         }
 
-        log.info("=== Starting JSON-to-SQLite data migration ===");
+        log.info("=== Starting JSON-to-PostgreSQL data migration ===");
 
         try {
             migrateUsers(dir);
@@ -279,9 +279,9 @@ public class DataMigrationRunner implements ApplicationRunner {
             migrateExchangeRateCache(dir);
             migrateChatMessages(dir);
 
-            log.info("=== JSON-to-SQLite migration completed successfully ===");
+            log.info("=== JSON-to-PostgreSQL migration completed successfully ===");
         } catch (Exception e) {
-            log.error("JSON-to-SQLite migration FAILED — database may be partially populated", e);
+            log.error("JSON-to-PostgreSQL migration FAILED — database may be partially populated", e);
         }
     }
 

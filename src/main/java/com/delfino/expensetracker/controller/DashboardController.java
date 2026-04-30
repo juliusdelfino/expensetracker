@@ -15,7 +15,6 @@ import com.delfino.expensetracker.model.ExpenseItem;
 import com.delfino.expensetracker.model.ExpenseStatus;
 import com.delfino.expensetracker.model.Store;
 import com.delfino.expensetracker.model.User;
-import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
 import com.delfino.expensetracker.service.ExpenseService;
@@ -35,17 +34,13 @@ import java.util.stream.Collectors;
 public class DashboardController {
 
     private final ExpenseRepository expenseRepository;
-    private final StoreRepository storeRepository;
-    private final ExpenseItemRepository expenseItemRepository;
     private final ExpenseService expenseService;
     private final CountryService countryService;
 
-    public DashboardController(ExpenseRepository expenseRepository, StoreRepository storeRepository,
-                               ExpenseItemRepository expenseItemRepository, ExpenseService expenseService,
+    public DashboardController(ExpenseRepository expenseRepository,
+                               ExpenseService expenseService,
                                CountryService countryService) {
         this.expenseRepository = expenseRepository;
-        this.storeRepository = storeRepository;
-        this.expenseItemRepository = expenseItemRepository;
         this.expenseService = expenseService;
         this.countryService = countryService;
     }
@@ -61,10 +56,7 @@ public class DashboardController {
         List<Expense> allExpenses = expenseRepository.findByUserIdAndDeletedFalse(userId);
         List<Expense> expenses = new ArrayList<>(allExpenses);
 
-        Map<Long, Store> storeMap = new LinkedHashMap<>();
-        for (Store s : storeRepository.findByUserId(userId)) {
-            storeMap.put(s.getId(), s);
-        }
+        Map<Long, Store> storeMap = expenseService.getStoreMapForUser(userId);
 
         // Apply filters
         expenses = ExpenseController.filterByDateRange(expenses, startDate, endDate);
@@ -253,10 +245,13 @@ public class DashboardController {
         // Track recent transactions per item name
         Map<String, List<TopItem.TopItemTransaction>> itemTransactions = new LinkedHashMap<>();
 
+        // Batch-load all items for these expenses in one query (avoids N+1)
+        Map<Long, List<ExpenseItem>> itemsByExpenseId = expenseService.getItemsByExpenseId(expenses);
+
         for (Expense e : expenses) {
             String storeName = e.getStoreId() != null && storeMap.containsKey(e.getStoreId())
                     ? storeMap.get(e.getStoreId()).getName() : null;
-            for (ExpenseItem item : expenseItemRepository.findByExpenseIdAndDeletedFalse(e.getId())) {
+            for (ExpenseItem item : itemsByExpenseId.getOrDefault(e.getId(), List.of())) {
                 if (item.getItemName() != null && !item.getItemName().isBlank()) {
                     BigDecimal qty = item.getQuantity() != null ? item.getQuantity() : BigDecimal.ONE;
                     itemCounts.merge(item.getItemName(), qty, BigDecimal::add);

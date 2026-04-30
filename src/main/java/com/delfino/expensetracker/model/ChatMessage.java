@@ -1,6 +1,7 @@
 package com.delfino.expensetracker.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.BatchSize;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -23,6 +24,7 @@ public class ChatMessage {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "chat_message_linked_expenses", joinColumns = @JoinColumn(name = "chat_message_id"))
     @Column(name = "expense_id")
+    @BatchSize(size = 50)
     private List<Long> linkedExpenseIds = new ArrayList<>(); // store original Long strings
 
     private LocalDateTime createdAt;

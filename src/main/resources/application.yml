@@ -89,13 +89,14 @@ spring:
         name: expense-tracker-mcp
         version: 1.0.0
   datasource:
-    url: jdbc:sqlite:data/expensetracker.db
-    driver-class-name: org.sqlite.JDBC
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/expensetracker}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
   jpa:
-    database-platform: org.hibernate.community.dialect.SQLiteDialect
     hibernate:
       ddl-auto: update
-    show-sql: false
+    show-sql: true
   servlet:
     multipart:
       max-file-size: 50MB

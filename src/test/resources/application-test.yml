@@ -2,13 +2,16 @@ spring:
   config:
     import: "optional:classpath:country-mapping.yml"
   datasource:
-    url: jdbc:sqlite:./target/test-expensetracker.db
-    driver-class-name: org.sqlite.JDBC
+    # Replaced by embedded PostgreSQL via @AutoConfigureEmbeddedDatabase in BaseControllerTest
+    url: jdbc:postgresql://localhost:5432/expensetracker
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 1
+      maximum-pool-size: 5
       minimum-idle: 1
   jpa:
-    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: create-drop
     show-sql: false

@@ -77,9 +77,12 @@ public class ExpenseController {
                     .filter(e -> category.equalsIgnoreCase(e.getCategory()))
                     .toList();
         }
+        // Batch-load this user's stores in one query (avoids N+1 across filter + enrichment)
+        Map<Long, Store> storeMap = expenseService.getStoreMapForUser(userId);
+
         // Apply country filter
         if (country != null && !country.isBlank()) {
-            expenses = filterByCountry(expenses, country);
+            expenses = filterByCountry(expenses, country, storeMap);
         }
 
         // Sort by date descending
@@ -91,7 +94,7 @@ public class ExpenseController {
             return b.getTransactionDatetime().compareTo(a.getTransactionDatetime());
         });
 
-        List<EnrichedExpense> enriched = enrichExpenses(expenses, search);
+        List<EnrichedExpense> enriched = enrichExpenses(expenses, search, storeMap);
         return ResponseEntity.ok(enriched);
     }
 
@@ -305,15 +308,14 @@ public class ExpenseController {
     }
 
     /** Filter expenses by country (supports both code and name). */
-    private List<Expense> filterByCountry(List<Expense> expenses, String country) {
+    private List<Expense> filterByCountry(List<Expense> expenses, String country, Map<Long, Store> storeMap) {
         final String countryFilter = country.toLowerCase();
         final String resolvedCode = countryService.findCodeByName(country);
         return expenses.stream()
                 .filter(e -> {
                     if (e.getStoreId() == null) return false;
-                    return storeRepository.findById(e.getStoreId())
-                        .map(s -> matchesCountry(s, countryFilter, resolvedCode))
-                        .orElse(false);
+                    Store s = storeMap.get(e.getStoreId());
+                    return s != null && matchesCountry(s, countryFilter, resolvedCode);
                 })
                 .toList();
     }
@@ -329,11 +331,15 @@ public class ExpenseController {
     }
 
     /** Enrich expenses with store info and matching items for the list view. */
-    private List<EnrichedExpense> enrichExpenses(List<Expense> expenses, String search) {
+    private List<EnrichedExpense> enrichExpenses(List<Expense> expenses, String search, Map<Long, Store> storeMap) {
         String searchLower = (search != null && !search.isBlank()) ? search.toLowerCase() : null;
+        // Pre-load matching items for ALL expenses in one query when searching (avoids N+1)
+        Map<Long, List<ExpenseItem>> itemsByExpenseId = searchLower != null
+                ? expenseService.getItemsByExpenseId(expenses)
+                : Map.of();
         List<EnrichedExpense> enriched = new ArrayList<>();
         for (Expense e : expenses) {
-            Store store = e.getStoreId() != null ? storeRepository.findById(e.getStoreId()).orElse(null) : null;
+            Store store = e.getStoreId() != null ? storeMap.get(e.getStoreId()) : null;
             String storeName = store != null ? store.getName() : null;
             String cat = e.getCategory() != null ? e.getCategory() : "Uncategorized";
 
@@ -366,7 +372,8 @@ public class ExpenseController {
                             ? cat + " \u2014 " + storeName : cat);
 
             if (searchLower != null) {
-                List<MatchingItem> matchingItems = getMatchingItems(e, searchLower);
+                List<MatchingItem> matchingItems = getMatchingItems(
+                        itemsByExpenseId.getOrDefault(e.getId(), List.of()), searchLower);
                 if (!matchingItems.isEmpty()) {
                     builder.matchingItems(matchingItems);
                 }
@@ -377,8 +384,7 @@ public class ExpenseController {
         return enriched;
     }
 
-    private List<MatchingItem> getMatchingItems(Expense e, String searchLower) {
-        List<ExpenseItem> items = expenseItemRepository.findByExpenseIdAndDeletedFalse(e.getId());
+    private List<MatchingItem> getMatchingItems(List<ExpenseItem> items, String searchLower) {
         return items.stream()
                 .filter(i -> i.getItemName() != null && i.getItemName().toLowerCase().contains(searchLower))
                 .map(i -> new MatchingItem(i.getItemName(), i.getUnitPrice(), i.getQuantity(), i.getTotalPrice()))
