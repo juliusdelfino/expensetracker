@@ -1,6 +1,7 @@
 package com.delfino.expensetracker.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -27,9 +28,10 @@ public class Expense {
     private String receiptNumber;
     private String category;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "expense_tags", joinColumns = @JoinColumn(name = "expense_id"))
     @Column(name = "tag")
+    @BatchSize(size = 50)
     private List<String> tags = new ArrayList<>();
 
     @Column(length = 2000)
@@ -40,9 +42,10 @@ public class Expense {
 
     private String imagePath;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "expense_attachments", joinColumns = @JoinColumn(name = "expense_id"))
     @Column(name = "attachment")
+    @BatchSize(size = 50)
     private List<String> attachments = new ArrayList<>();
 
     private boolean deleted;

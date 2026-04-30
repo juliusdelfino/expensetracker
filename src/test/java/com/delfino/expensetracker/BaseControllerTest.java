@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -37,6 +38,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.web.client.RestClient;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.http.HttpClient;
 import java.time.LocalDateTime;
@@ -50,7 +52,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Base class for all controller integration tests.
  * <p>
- * Uses a real SQLite DB with Hibernate create-drop for full integration coverage.
+ * Uses a real embedded PostgreSQL DB with Hibernate create-drop for full integration coverage.
  * A single WireMock server stubs all external HTTP calls so no service beans are mocked:
  * <ul>
  *   <li>Frankfurter currency API  → {@code GET /currencies} and {@code GET /{date}?from=&to=}</li>
@@ -95,21 +97,29 @@ public abstract class BaseControllerTest {
     }
 
     // -------------------------------------------------------------------------
-    // Single WireMock server shared across ALL test classes via static singleton.
-    // Started once at JVM startup; dynamic port kept constant so Spring's test
-    // context cache can be reused across subclasses.
+    // Single WireMock server and Embedded PostgreSQL shared across ALL test classes.
+    // Started once at JVM startup via static initializer.
     // -------------------------------------------------------------------------
     protected static final WireMockServer WIRE_MOCK;
+    private static final EmbeddedPostgres EMBEDDED_POSTGRES;
 
     static {
         WIRE_MOCK = new WireMockServer(WireMockConfiguration.wireMockConfig().dynamicPort());
         WIRE_MOCK.start();
         Runtime.getRuntime().addShutdownHook(new Thread(WIRE_MOCK::stop));
+
+        try {
+            EMBEDDED_POSTGRES = EmbeddedPostgres.start();
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                try { EMBEDDED_POSTGRES.close(); } catch (IOException ignored) {}
+            }));
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to start embedded PostgreSQL", e);
+        }
     }
 
     /**
-     * Override every external-service URL to point to WireMock before the
-     * Spring application context is created.
+     * Override every external-service URL and datasource to point to embedded services.
      */
     @DynamicPropertySource
     static void overrideExternalUrls(DynamicPropertyRegistry registry) {
@@ -122,6 +132,10 @@ public abstract class BaseControllerTest {
         registry.add("spring.ai.ollama.base-url", () -> base);
         // Nominatim geocoding API (used by GeocodingService)
         registry.add("geocoding.api.url", () -> base);
+        // Embedded PostgreSQL datasource
+        registry.add("spring.datasource.url", () -> EMBEDDED_POSTGRES.getJdbcUrl("postgres", "postgres"));
+        registry.add("spring.datasource.username", () -> "postgres");
+        registry.add("spring.datasource.password", () -> "");
     }
 
     // -------------------------------------------------------------------------
