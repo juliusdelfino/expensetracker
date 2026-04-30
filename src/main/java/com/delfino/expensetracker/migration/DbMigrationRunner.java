@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -92,7 +93,7 @@ public class DbMigrationRunner implements CommandLineRunner {
                     log.info("Clearing PostgreSQL tables...");
                     // Truncate in reverse dependency order
                     List<String> reversed = new ArrayList<>(TABLES);
-                    java.util.Collections.reverse(reversed);
+                    Collections.reverse(reversed);
                     try (Statement st = pg.createStatement()) {
                         for (String table : reversed) {
                             if (tableExistsInPg(pg, table)) {
