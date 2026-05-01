@@ -129,10 +129,29 @@ function countryCodeToFlag(code) {
     return String.fromCodePoint(upper.charCodeAt(0) + offset, upper.charCodeAt(1) + offset);
 }
 
+/**
+ * Commit any text currently typed in a tag input (without requiring Enter).
+ * Call this before reading the tags array on form submit.
+ * Returns the (possibly updated) tags array.
+ */
+function commitPendingTag(inputId, tags) {
+    const input = document.getElementById(inputId);
+    if (!input) return tags;
+    const val = input.value.trim();
+    if (val && !tags.includes(val)) {
+        tags.push(val);
+        input.value = '';
+    }
+    return tags;
+}
+
 function renderTags(containerId, inputId, tags) {
+    // Store the array reference so the remove-onclick can access it
+    window['_tagsArr_' + containerId] = tags;
     const container = document.getElementById(containerId);
-    container.innerHTML = tags.map((t, i) => `<span class="tag">${t} <span class="remove-tag" onclick="this.parentElement.remove(); window._tags_${containerId}?.splice(${i},1)">&times;</span></span>`).join('') +
-        `<input type="text" class="tag-input" id="${inputId}" placeholder="Add tag...">`;
+    container.innerHTML = tags.map((t, i) =>
+        `<span class="tag">${esc(t)} <span class="remove-tag" onclick="window['_tagsArr_${containerId}'].splice(${i},1); renderTags('${containerId}','${inputId}',window['_tagsArr_${containerId}'])">&times;</span></span>`
+    ).join('') + `<input type="text" class="tag-input" id="${inputId}" placeholder="Add tag...">`;
     document.getElementById(inputId).addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -141,7 +160,6 @@ function renderTags(containerId, inputId, tags) {
             e.target.value = '';
         }
     });
-    document.getElementById(inputId).focus();
 }
 
 /**

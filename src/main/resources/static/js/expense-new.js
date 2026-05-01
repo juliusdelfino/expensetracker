@@ -153,6 +153,7 @@ function renderNewExpense(app, embedded = false) {
 
     document.getElementById('manualForm').onsubmit = async (ev) => {
         ev.preventDefault();
+        commitPendingTag('mTagInput', tags);
         const _n = new Date();
         const _localNow = new Date(_n - _n.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
         const expense = {

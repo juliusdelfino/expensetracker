@@ -193,26 +193,41 @@ function buildClickableTooltip(resolveNavUrl) {
     };
 }
 
+/**
+ * Update a chart status bar element with clicked datapoint details and a "View expenses" link.
+ */
+function updateChartStatusBar(statusBarId, label, value, navUrl) {
+    const el = document.getElementById(statusBarId);
+    if (!el) return;
+    if (!label) { el.innerHTML = ''; return; }
+    const linkHtml = navUrl ? `&nbsp;<a class="chart-status-link" href="${navUrl}">View expenses →</a>` : '';
+    el.innerHTML = `<span class="chart-status-info"><strong>${label}</strong>: ${value}</span>${linkHtml}`;
+}
+
 function createTimelineChart(canvasId, chartKey, data) {
     const tc = document.getElementById(canvasId);
     if (!tc) return;
     if (chartInstances[chartKey]) { chartInstances[chartKey].destroy(); delete chartInstances[chartKey]; }
     const timelineLabels = Object.keys(data.timeline || {});
+    const timelineValues = Object.values(data.timeline || {});
     chartInstances[chartKey] = new Chart(tc, {
         type: 'line',
         data: { labels: timelineLabels,
             datasets: [{ label: 'Daily Spending',
-                data: Object.values(data.timeline || {}),
+                data: timelineValues,
                 borderColor: '#42A5F5', backgroundColor: 'rgba(66,165,245,0.1)',
                 fill: true, tension: 0.3, pointRadius: 3 }] },
         options: { responsive: true, maintainAspectRatio: false,
-            plugins: { ...chartPluginOptions(), legend: { display: false },
-                tooltip: buildClickableTooltip((idx, label) => {
-                    const dateStr = timelineLabels[idx];
-                    return dateStr ? '#/expenses?startDate=' + dateStr + '&endDate=' + dateStr : null;
-                })
-            },
-            scales: chartScaleOptions()
+            plugins: { ...chartPluginOptions(), legend: { display: false } },
+            scales: chartScaleOptions(),
+            onClick: (evt, elements) => {
+                if (!elements.length) return;
+                const idx = elements[0].index;
+                const label = timelineLabels[idx];
+                const value = timelineValues[idx];
+                const navUrl = label ? '#/expenses?startDate=' + label + '&endDate=' + label : null;
+                updateChartStatusBar(canvasId + 'Status', label, value, navUrl);
+            }
         }
     });
 }
@@ -223,15 +238,20 @@ function createCategoryChart(canvasId, chartKey, data) {
     if (chartInstances[chartKey]) { chartInstances[chartKey].destroy(); delete chartInstances[chartKey]; }
     const { cardBg } = getChartThemeColors();
     const catLabels = Object.keys(data.categoryTotals || {});
+    const catValues = Object.values(data.categoryTotals || {});
     chartInstances[chartKey] = new Chart(cc, {
         type: 'doughnut',
         data: { labels: catLabels,
-            datasets: [{ data: Object.values(data.categoryTotals || {}), backgroundColor: CHART_COLORS, borderColor: cardBg, borderWidth: 1 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { ...chartPluginOptions(),
-                tooltip: buildClickableTooltip((idx, label) => {
-                    const category = catLabels[idx];
-                    return category ? '#/expenses?category=' + encodeURIComponent(category) : null;
-                })
+            datasets: [{ data: catValues, backgroundColor: CHART_COLORS, borderColor: cardBg, borderWidth: 1 }] },
+        options: { responsive: true, maintainAspectRatio: false,
+            plugins: { ...chartPluginOptions() },
+            onClick: (evt, elements) => {
+                if (!elements.length) return;
+                const idx = elements[0].index;
+                const label = catLabels[idx];
+                const value = catValues[idx];
+                const navUrl = label ? '#/expenses?category=' + encodeURIComponent(label) : null;
+                updateChartStatusBar(canvasId + 'Status', label, value, navUrl);
             }
         }
     });

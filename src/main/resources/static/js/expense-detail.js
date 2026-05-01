@@ -152,6 +152,7 @@ async function renderExpenseDetail(app, id) {
     if (editForm) {
         editForm.onsubmit = async (ev) => {
             ev.preventDefault();
+            commitPendingTag('eTagInput', window._editTags || []);
             const updates = {
                 transactionDatetime: document.getElementById('eDate').value + ':00',
                 amount: parseFloat(document.getElementById('eAmount').value),

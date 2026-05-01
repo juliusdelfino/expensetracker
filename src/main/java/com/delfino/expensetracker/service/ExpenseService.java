@@ -99,6 +99,7 @@ public class ExpenseService {
         return expense;
     }
 
+    @Transactional
     public Expense updateExpense(String urlId, Expense updates, long userId) {
         Expense expense = expenseRepository.findByUrlId(urlId)
                 .orElseThrow(() -> new IllegalStateException("Expense not found"));
@@ -418,8 +419,7 @@ public class ExpenseService {
     public Store saveStore(String urlId, Store store) {
         Expense expense = expenseRepository.findByUrlId(urlId)
                 .orElseThrow(() -> new IllegalStateException("Expense not found"));
-        Long userId = expense != null ? expense.getUserId() : null;
-        return saveStore(urlId, store, userId);
+        return saveStore(urlId, store, expense.getUserId());
     }
 
     /**

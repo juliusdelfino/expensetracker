@@ -59,14 +59,17 @@ function renderHomePanel() {
                 </select>
             </div>
             <div class="chart-container-sm"><canvas id="homeMonthlyChart"></canvas></div>
+            <div class="chart-status-bar" id="homeMonthlyChartStatus"></div>
         </div>
         <div class="feed-card">
             <h3 class="card-title"><i class="fa-solid fa-chart-line"></i> Daily Spending</h3>
             <div class="chart-container-sm"><canvas id="homeTimelineChart"></canvas></div>
+            <div class="chart-status-bar" id="homeTimelineChartStatus"></div>
         </div>
         <div class="feed-card">
             <h3 class="card-title"><i class="fa-solid fa-chart-pie"></i> By Category</h3>
             <div class="chart-container-sm"><canvas id="homeCategoryChart"></canvas></div>
+            <div class="chart-status-bar" id="homeCategoryChartStatus"></div>
         </div>
         <div class="feed-card">
             <h3 class="card-title"><i class="fa-solid fa-store"></i> Most Visited Shops</h3>
@@ -146,23 +149,26 @@ function updateHomeCharts() {
     if (chartInstances.homeMonthly) { chartInstances.homeMonthly.destroy(); delete chartInstances.homeMonthly; }
     const totalsData = period === 'weekly' ? data.weeklyTotals : period === 'annual' ? data.annualTotals : data.monthlyTotals;
     const totalsLabels = Object.keys(totalsData || {});
+    const totalsValues = Object.values(totalsData || {});
     chartInstances.homeMonthly = new Chart(mc, {
         type: 'bar',
         data: { labels: totalsLabels,
             datasets: [{ label: 'Total (' + baseCur + ')',
-                data: Object.values(totalsData || {}),
+                data: totalsValues,
                 backgroundColor: 'rgba(25, 118, 210, 0.7)', borderRadius: 6 }] },
         options: { responsive: true, maintainAspectRatio: false,
-            plugins: { ...chartPluginOptions(), legend: { display: false },
-                tooltip: buildClickableTooltip((idx, label) => {
-                    if (label) {
-                        const params = _totalsLabelToDateParams(label, period);
-                        return '#/expenses?' + params;
-                    }
-                    return null;
-                })
-            },
-            scales: chartScaleOptions()
+            plugins: { ...chartPluginOptions(), legend: { display: false } },
+            scales: chartScaleOptions(),
+            onClick: (evt, elements) => {
+                if (!elements.length) return;
+                const idx = elements[0].index;
+                const label = totalsLabels[idx];
+                const value = totalsValues[idx];
+                if (label) {
+                    const params = _totalsLabelToDateParams(label, period);
+                    updateChartStatusBar('homeMonthlyChartStatus', label, value, '#/expenses?' + params);
+                }
+            }
         }
     });
 }
@@ -206,14 +212,17 @@ async function renderDashboard(app) {
                     </select>
                 </div>
                 <div class="chart-container"><canvas id="monthlyChart"></canvas></div>
+                <div class="chart-status-bar" id="monthlyChartStatus"></div>
             </div>
             <div class="card">
                 <h3 class="card-title"><i class="fa-solid fa-chart-pie"></i> By Category</h3>
                 <div class="chart-container"><canvas id="categoryChart"></canvas></div>
+                <div class="chart-status-bar" id="categoryChartStatus"></div>
             </div>
             <div class="card">
                 <h3 class="card-title"><i class="fa-solid fa-chart-line"></i> Daily Spending</h3>
                 <div class="chart-container"><canvas id="timelineChart"></canvas></div>
+                <div class="chart-status-bar" id="timelineChartStatus"></div>
             </div>
             <div class="card">
                 <h3 class="card-title"><i class="fa-solid fa-map-location-dot"></i> Geographical Map</h3>
@@ -286,23 +295,26 @@ function updateDesktopCharts() {
     if (chartInstances.monthly) { chartInstances.monthly.destroy(); delete chartInstances.monthly; }
     const totalsData = period === 'weekly' ? data.weeklyTotals : period === 'annual' ? data.annualTotals : data.monthlyTotals;
     const totalsLabels = Object.keys(totalsData || {});
+    const totalsValues = Object.values(totalsData || {});
     chartInstances.monthly = new Chart(mc, {
         type: 'bar',
         data: { labels: totalsLabels,
             datasets: [{ label: 'Total (' + baseCur + ')',
-                data: Object.values(totalsData || {}),
+                data: totalsValues,
                 backgroundColor: 'rgba(25, 118, 210, 0.7)', borderRadius: 6 }] },
         options: { responsive: true, maintainAspectRatio: false,
-            plugins: { ...chartPluginOptions(), legend: { display: false },
-                tooltip: buildClickableTooltip((idx, label) => {
-                    if (label) {
-                        const params = _totalsLabelToDateParams(label, period);
-                        return '#/expenses?' + params;
-                    }
-                    return null;
-                })
-            },
-            scales: chartScaleOptions()
+            plugins: { ...chartPluginOptions(), legend: { display: false } },
+            scales: chartScaleOptions(),
+            onClick: (evt, elements) => {
+                if (!elements.length) return;
+                const idx = elements[0].index;
+                const label = totalsLabels[idx];
+                const value = totalsValues[idx];
+                if (label) {
+                    const params = _totalsLabelToDateParams(label, period);
+                    updateChartStatusBar('monthlyChartStatus', label, value, '#/expenses?' + params);
+                }
+            }
         }
     });
 }

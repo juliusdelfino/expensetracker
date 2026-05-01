@@ -32,6 +32,29 @@
     cursor: pointer;
 }
 .chart-tooltip-link:hover { text-decoration: underline; }
+
+/* Chart status bar (shown at bottom of chart card on click) */
+.chart-status-bar {
+    min-height: 1.6rem;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.82rem;
+    color: var(--text-light, #666);
+    border-top: 1px solid var(--border, #e0e0e0);
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.chart-status-bar:empty { display: none; }
+.chart-status-info { color: var(--text, #333); }
+.chart-status-link {
+    color: var(--primary, #1976D2);
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.chart-status-link:hover { text-decoration: underline; }
 .dashboard-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;

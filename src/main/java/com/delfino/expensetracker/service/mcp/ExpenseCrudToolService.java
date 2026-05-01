@@ -57,12 +57,13 @@ public class ExpenseCrudToolService {
     // EXPENSE CRUD
     // ─────────────────────────────────────────────────────────────
 
-    @Tool(description = "Update the notes or category of an existing expense. " +
-            "Use this when the user wants to change the description or category of a specific expense.")
+    @Tool(description = "Update the notes, category, and/or tags of an existing expense. " +
+            "Use this when the user wants to change the description, category, or tags of a specific expense.")
     public String updateExpense(
             @ToolParam(description = "The Long of the expense to update.") String expenseId,
             @ToolParam(description = "New category value. Pass empty string to skip.") String category,
-            @ToolParam(description = "New notes value. Pass empty string to skip.") String notes) {
+            @ToolParam(description = "New notes value. Pass empty string to skip.") String notes,
+            @ToolParam(description = "Comma-separated list of tags to set (e.g. 'food,travel'). Pass empty string to skip changing tags. Pass a single space ' ' to clear all tags.") String tags) {
 
         log.info("Tool call: updateExpense(expenseId={}, userId={})", expenseId, userContext.getUserId());
         long userId = userContext.getUserId();
@@ -75,9 +76,19 @@ public class ExpenseCrudToolService {
             Expense updates = new Expense();
             if (StringUtils.hasText(category)) updates.setCategory(category);
             if (StringUtils.hasText(notes)) updates.setNotes(notes);
+            if (tags != null) {
+                if (tags.isBlank()) {
+                    // skip — empty string means don't change tags
+                } else if (tags.trim().equals(" ") || tags.equals(" ")) {
+                    updates.setTags(new ArrayList<>());
+                } else {
+                    updates.setTags(Arrays.asList(tags.split("\\s*,\\s*")));
+                }
+            }
 
             Expense updated = expenseService.updateExpense(expense.getUrlId(), updates, userId);
-            return "Expense updated. Category: " + updated.getCategory() + ", Notes: " + updated.getNotes();
+            String tagStr = updated.getTags() != null ? String.join(", ", updated.getTags()) : "";
+            return "Expense updated. Category: " + updated.getCategory() + ", Notes: " + updated.getNotes() + ", Tags: [" + tagStr + "]";
         } catch (Exception e) {
             return "Failed to update expense: " + e.getMessage();
         }
