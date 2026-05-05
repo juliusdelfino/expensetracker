@@ -13,8 +13,6 @@ app:
 
 ocr:
   api:
-    url: https://gpt.jdelfino.com/ollama/api/generate
-    model: qwen3.5:cloud
     api-key: ${LLM_API_KEY:}  # Set via LLM_API_KEY environment variable or override here
     prompt: >
       Parse this receipt image/PDF and return a JSON object with these exact fields:
@@ -76,14 +74,6 @@ spring:
     deserialization:
       fail-on-unknown-properties: false
   ai:
-    ollama:
-      base-url: https://gpt.jdelfino.com/ollama
-      # api-key is not a real OllamaConnectionProperties field and would be silently ignored.
-      # The key is injected via the custom OllamaApi bean in AiConfig, sourced from chatbot.api.api-key.
-      chat:
-        options:
-          model: qwen3.5:cloud
-          temperature: 0.3
     mcp:
       server:
         name: expense-tracker-mcp

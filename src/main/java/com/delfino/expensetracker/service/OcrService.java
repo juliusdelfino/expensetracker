@@ -72,6 +72,9 @@ public class OcrService {
     @Value("${ocr.api.api-key:}")
     private String ocrApiKey;
 
+    @Value("${ocr.api.format:ollama}")
+    private String ocrApiFormat;
+
     @Value("${ocr.api.prompt:Parse this receipt image and return a JSON object with these fields: {\"transactionDatetime\":\"ISO 8601\",\"amount\":0,\"currency\":\"USD\",\"receiptNumber\":\"\",\"category\":\"\",\"items\":[{\"itemName\":\"\",\"quantity\":1,\"unitPrice\":0,\"totalPrice\":0}],\"store\":{\"name\":\"\",\"address\":\"\",\"city\":\"\",\"country\":\"\",\"postalCode\":\"\",\"phoneNumber\":\"\",\"website\":\"\"}} Return ONLY valid JSON.}")
     private String ocrPrompt;
 
@@ -117,24 +120,54 @@ public class OcrService {
 
     public Map<String, Object> buildRequestBody(String ocrModel, String ocrPrompt,
                                                 List<byte[]> imageBytesList, String mediaType) {
-        Map<String, Object> requestBody = new LinkedHashMap<>();
-        requestBody.put("model", ocrModel);
-        requestBody.put("prompt", ocrPrompt);
-        requestBody.put("stream", false);
-
         if (imageBytesList == null || imageBytesList.isEmpty()) {
             throw new IllegalArgumentException("No image data provided");
         }
-
         if (!IMAGE_MEDIA_TYPES.contains(mediaType)) {
             throw new IllegalArgumentException("Unsupported media type: " + mediaType);
         }
 
+        if ("openai".equalsIgnoreCase(ocrApiFormat)) {
+            return buildOpenAiRequestBody(ocrModel, ocrPrompt, imageBytesList, mediaType);
+        } else {
+            return buildOllamaRequestBody(ocrModel, ocrPrompt, imageBytesList);
+        }
+    }
+
+    /** Ollama /api/generate format */
+    private Map<String, Object> buildOllamaRequestBody(String ocrModel, String ocrPrompt,
+                                                        List<byte[]> imageBytesList) {
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("model", ocrModel);
+        requestBody.put("prompt", ocrPrompt);
+        requestBody.put("stream", false);
         List<String> base64Images = new ArrayList<>();
         for (byte[] b : imageBytesList) {
             base64Images.add(Base64.getEncoder().encodeToString(b));
         }
         requestBody.put("images", base64Images);
+        return requestBody;
+    }
+
+    /** OpenAI /chat/completions format with vision content parts */
+    private Map<String, Object> buildOpenAiRequestBody(String ocrModel, String ocrPrompt,
+                                                        List<byte[]> imageBytesList, String mediaType) {
+        List<Object> contentParts = new ArrayList<>();
+        contentParts.add(Map.of("type", "text", "text", ocrPrompt));
+        for (byte[] b : imageBytesList) {
+            String dataUrl = "data:" + mediaType + ";base64," + Base64.getEncoder().encodeToString(b);
+            contentParts.add(Map.of(
+                    "type", "image_url",
+                    "image_url", Map.of("url", dataUrl)
+            ));
+        }
+        Map<String, Object> message = new LinkedHashMap<>();
+        message.put("role", "user");
+        message.put("content", contentParts);
+
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("model", ocrModel);
+        requestBody.put("messages", List.of(message));
         return requestBody;
     }
 
@@ -228,7 +261,20 @@ public class OcrService {
 
     private void processOcrResponse(Long expenseId, String responseBody) throws JsonProcessingException {
         JsonNode responseNode = objectMapper.readTree(responseBody);
-        String responseText = responseNode.has("response") ? responseNode.get("response").asText() : responseBody;
+
+        String responseText;
+        if ("openai".equalsIgnoreCase(ocrApiFormat)) {
+            // OpenAI: choices[0].message.content
+            responseText = responseNode
+                    .path("choices").path(0)
+                    .path("message").path("content").asText(null);
+            if (responseText == null || responseText.isBlank()) {
+                throw new IllegalStateException("OpenAI OCR response missing choices[0].message.content: " + responseBody);
+            }
+        } else {
+            // Ollama: response field, fall back to raw body
+            responseText = responseNode.has("response") ? responseNode.get("response").asText() : responseBody;
+        }
 
         // Strip markdown code fences if present
         responseText = responseText.strip();

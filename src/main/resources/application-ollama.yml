@@ -1,0 +1,25 @@
+spring:
+  ai:
+    ollama:
+      base-url: https://gpt.jdelfino.com/ollama
+      # api-key is not a real OllamaConnectionProperties field and would be silently ignored.
+      # The key is injected via the custom OllamaApi bean in AiConfig, sourced from chatbot.api.api-key.
+      chat:
+        enabled: true
+        options:
+          model: qwen3.5:cloud
+          temperature: 0.3
+    openai:
+      chat:
+        enabled: false
+
+ocr:
+  api:
+    url: https://gpt.jdelfino.com/ollama/api/generate
+    model: qwen3.5:cloud
+    format: ollama
+
+chatbot:
+  api:
+    api-key: ${LLM_API_KEY:}
+
