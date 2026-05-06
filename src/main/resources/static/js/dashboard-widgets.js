@@ -147,53 +147,6 @@ function chartPluginOptions() {
 }
 
 /**
- * Build tooltip config that shows a clickable "View expenses →" link.
- * The chart's onClick is removed; navigation happens via the tooltip link.
- */
-function buildClickableTooltip(resolveNavUrl) {
-    // We use an external tooltip rendered as HTML overlay
-    return {
-        enabled: false,
-        external: function(context) {
-            const { chart, tooltip } = context;
-            let tooltipEl = chart.canvas.parentNode.querySelector('.chart-click-tooltip');
-            if (!tooltipEl) {
-                tooltipEl = document.createElement('div');
-                tooltipEl.className = 'chart-click-tooltip';
-                chart.canvas.parentNode.style.position = 'relative';
-                chart.canvas.parentNode.appendChild(tooltipEl);
-            }
-
-            if (tooltip.opacity === 0) {
-                tooltipEl.style.opacity = 0;
-                tooltipEl.style.pointerEvents = 'none';
-                return;
-            }
-
-            const dataIndex = tooltip.dataPoints?.[0]?.dataIndex;
-            const label = tooltip.dataPoints?.[0]?.label || '';
-            const value = tooltip.dataPoints?.[0]?.formattedValue || '';
-            const datasetLabel = tooltip.dataPoints?.[0]?.dataset?.label || '';
-
-            const navUrl = resolveNavUrl(dataIndex, label);
-            const linkHtml = navUrl
-                ? `<a class="chart-tooltip-link" href="${navUrl}">View expenses →</a>`
-                : '';
-
-            tooltipEl.innerHTML = `
-                <div class="chart-tooltip-title">${label}</div>
-                <div class="chart-tooltip-value">${datasetLabel ? datasetLabel + ': ' : ''}${value}</div>
-                ${linkHtml}`;
-
-            tooltipEl.style.opacity = 1;
-            tooltipEl.style.pointerEvents = 'auto';
-            tooltipEl.style.left = tooltip.caretX + 'px';
-            tooltipEl.style.top = tooltip.caretY + 'px';
-        }
-    };
-}
-
-/**
  * Update a chart status bar element with clicked datapoint details and a "View expenses" link.
  */
 function updateChartStatusBar(statusBarId, label, value, navUrl) {
@@ -272,7 +225,7 @@ async function renderRecentExpenses(elementId, count, filterParams) {
                 <div class="mini-card-icon"><i class="fa-solid fa-${categoryIcon(e.category)}"></i></div>
                 <div class="mini-card-info">
                     <div class="mini-card-category">${e.displayName || e.category || 'Uncategorized'}</div>
-                    <div class="mini-card-date">${e.transactionDatetime ? new Date(e.transactionDatetime).toLocaleDateString() : '-'}</div>
+                    <div class="mini-card-date">${e.transactionDatetime ? new Date(e.transactionDatetime).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}</div>
                 </div>
                 <div class="mini-card-amount">${e.amount != null ? Number(e.amount).toFixed(2) : '-'} ${e.currency || ''}</div>
             </a>`).join('') : '<p style="color:var(--text-light); text-align:center; padding:1rem;">No expenses yet</p>';

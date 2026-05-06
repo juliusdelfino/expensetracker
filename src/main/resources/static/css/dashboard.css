@@ -158,6 +158,24 @@
 .upload-zone i { font-size: 3rem; color: var(--primary-light); margin-bottom: 1rem; }
 .upload-zone p { color: var(--text-light); }
 
+/* ===================== RECEIPT FILE LIST (batch upload) ===================== */
+.receipt-file-list-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 0.5rem; font-size: 0.9rem;
+}
+.receipt-file-items { max-height: 300px; overflow-y: auto; }
+.receipt-file-item {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--table-border);
+    font-size: 0.85rem;
+}
+.receipt-file-item i { color: var(--primary); width: 1rem; text-align: center; }
+.receipt-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.receipt-file-size { color: var(--text-light); font-size: 0.75rem; white-space: nowrap; }
+.receipt-file-actions {
+    display: flex; gap: 0.75rem; margin-top: 0.75rem; flex-wrap: wrap;
+}
+
 /* ===================== ATTACHMENTS ===================== */
 .attachment-list { list-style: none; }
 .attachment-list li {

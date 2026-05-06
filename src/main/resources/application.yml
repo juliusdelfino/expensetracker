@@ -22,6 +22,8 @@ ocr:
       "store":{"name":"string","address":"string","city":"string","country":"ISO 3166-1 alpha-2",
       "postalCode":"string","phoneNumber":"string","website":"string"}}
       Return ONLY valid JSON. No markdown fences, no explanation, no extra text, exclude thinking in the response.
+  batch:
+    max-files: 20
 
 chatbot:
   api:
@@ -86,7 +88,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
   servlet:
     multipart:
       max-file-size: 50MB

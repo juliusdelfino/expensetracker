@@ -5,7 +5,7 @@ spring:
         enabled: false
     openai:
       api-key: ${LLM_API_KEY:}
-      base-url: https://ws-zvyv34q5ihpp3gah.eu-central-1.maas.aliyuncs.com/compatible-mode
+      base-url: https://dashscope-intl.aliyuncs.com/compatible-mode
       chat:
         enabled: true
         options:
@@ -14,7 +14,7 @@ spring:
 
 ocr:
   api:
-    url: https://ws-zvyv34q5ihpp3gah.eu-central-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions
+    url: https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
     model: qwen3.5-plus
     format: openai
 

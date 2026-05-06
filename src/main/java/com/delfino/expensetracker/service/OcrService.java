@@ -220,6 +220,13 @@ public class OcrService {
 
     @Async
     public void processReceipt(Long expenseId, String imagePath) {
+        processReceiptSync(expenseId, imagePath);
+    }
+
+    /**
+     * Synchronous receipt processing (used by batch queue).
+     */
+    public void processReceiptSync(Long expenseId, String imagePath) {
         try {
 
             OcrRequest ocrRequest = buildRequestBody(ocrModel, ocrPrompt, imagePath, expenseId);
@@ -323,6 +330,14 @@ public class OcrService {
         expense.setStatus(ExpenseStatus.COMPLETED);
         expense.setUpdatedAt(LocalDateTime.now());
         expenseRepository.save(expense);
+
+        // Delete previous items before inserting new ones (handles retry scenario)
+        List<ExpenseItem> existingItems = expenseItemRepository.findByExpenseIdAndDeletedFalse(expenseId);
+        if (!existingItems.isEmpty()) {
+            existingItems.forEach(i -> i.setDeleted(true));
+            expenseItemRepository.saveAll(existingItems);
+            log.info("Deleted {} existing items for expense {} before re-processing", existingItems.size(), expenseId);
+        }
 
         // Parse items
         if (parsed.has("items") && parsed.get("items").isArray()) {

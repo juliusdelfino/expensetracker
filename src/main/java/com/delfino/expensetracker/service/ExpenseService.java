@@ -13,6 +13,7 @@ import com.delfino.expensetracker.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -97,6 +98,38 @@ public class ExpenseService {
 
         ocrService.processReceipt(expense.getId(), imagePath);
         return expense;
+    }
+
+    /**
+     * Creates a receipt scan expense without immediately triggering OCR (for batch processing).
+     */
+    public Expense createReceiptScanExpenseQueued(Long userId, String imagePath) {
+        Expense expense = new Expense();
+        expense.setUserId(userId);
+        expense.setType(ExpenseType.RECEIPT_SCAN);
+        expense.setStatus(ExpenseStatus.PROCESSING);
+        expense.setImagePath(imagePath);
+        expense.setDeleted(false);
+        expense.setAttachments(new ArrayList<>());
+        expense.setTags(new ArrayList<>());
+        expense.setScannedAt(LocalDateTime.now());
+        expense.setCreatedAt(LocalDateTime.now());
+        expense.setUpdatedAt(LocalDateTime.now());
+        expense.setUrlId(UUID.randomUUID().toString());
+        expenseRepository.save(expense);
+        return expense;
+    }
+
+    /**
+     * Processes a queue of expenses through OCR with configurable interval delays between each call.
+     */
+    @Async
+    public void processOcrQueue(List<Expense> expenses) {
+        for (int i = 0; i < expenses.size(); i++) {
+            Expense expense = expenses.get(i);
+            log.info("Processing OCR queue item {}/{}: expense {}", i + 1, expenses.size(), expense.getId());
+            ocrService.processReceiptSync(expense.getId(), expense.getImagePath());
+        }
     }
 
     @Transactional
