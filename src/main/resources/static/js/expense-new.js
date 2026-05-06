@@ -94,9 +94,9 @@ function renderNewExpense(app, embedded = false) {
             <div class="card">
                 <div class="upload-zone" id="uploadZone" onclick="document.getElementById('receiptFile').click()">
                     <i class="fa-solid fa-cloud-arrow-up"></i>
-                    <p>Click or drag & drop receipt image here</p>
-                    <p style="font-size:0.8rem; margin-top:0.5rem">Supported: JPG, PNG, PDF</p>
-                    <input type="file" id="receiptFile" style="display:none" accept="image/*,.pdf" onchange="uploadReceipt()">
+                    <p>Click or drag & drop receipt images here</p>
+                    <p style="font-size:0.8rem; margin-top:0.5rem">Supported: JPG, PNG, PDF &middot; Up to 20 files</p>
+                    <input type="file" id="receiptFile" style="display:none" accept="image/*,.pdf" multiple onchange="handleReceiptFiles(this.files)">
                 </div>
                 <div style="text-align:center; margin-top:1rem">
                     <span style="color:var(--text-light)">\u2014 or \u2014</span>
@@ -114,6 +114,7 @@ function renderNewExpense(app, embedded = false) {
                         <button class="btn camera-overlay-btn camera-cancel-btn" onclick="closeDesktopCamera()"><i class="fa-solid fa-xmark"></i> Cancel</button>
                     </div>
                 </div>
+                <div id="receiptFileList" style="display:none; margin-top:1rem;"></div>
                 <div id="uploadStatus" style="margin-top:1rem; display:none"></div>
             </div>
         </div>
@@ -140,6 +141,7 @@ function renderNewExpense(app, embedded = false) {
 
     let tags = [];
     window._newExpenseItems = [];
+    _pendingReceiptFiles = [];
     window._newExpenseStore = null;
 
     document.getElementById('mTagInput').addEventListener('keydown', (e) => {
@@ -153,6 +155,7 @@ function renderNewExpense(app, embedded = false) {
 
     document.getElementById('manualForm').onsubmit = async (ev) => {
         ev.preventDefault();
+        commitPendingTag('mTagInput', tags);
         const _n = new Date();
         const _localNow = new Date(_n - _n.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
         const expense = {
@@ -198,8 +201,7 @@ function renderNewExpense(app, embedded = false) {
     zone.addEventListener('dragleave', () => { zone.style.borderColor = 'var(--primary-pale)'; });
     zone.addEventListener('drop', (e) => {
         e.preventDefault(); zone.style.borderColor = 'var(--primary-pale)';
-        const file = e.dataTransfer.files[0];
-        if (file) { document.getElementById('receiptFile').files = e.dataTransfer.files; uploadReceipt(); }
+        if (e.dataTransfer.files.length > 0) handleReceiptFiles(e.dataTransfer.files);
     });
 
     // Auto-switch to Scan tab if ?tab=scan in the URL hash
@@ -239,21 +241,118 @@ function switchTab(tab, el) {
     contents.forEach(tc => tc.classList.toggle('active', tc.id === 'tab-' + tab));
 }
 
+const RECEIPT_MAX_FILES = 20;
+let _pendingReceiptFiles = [];
+
+function handleReceiptFiles(fileList) {
+    const files = Array.from(fileList).filter(f => {
+        const ext = f.name.split('.').pop().toLowerCase();
+        return ['jpg','jpeg','png','gif','webp','pdf'].includes(ext) || f.type.startsWith('image/');
+    });
+    if (files.length === 0) { toast('No supported files selected', 'error'); return; }
+
+    // Append to pending (dedupe by name+size)
+    for (const f of files) {
+        if (_pendingReceiptFiles.length >= RECEIPT_MAX_FILES) {
+            toast(`Maximum ${RECEIPT_MAX_FILES} files allowed`, 'error');
+            break;
+        }
+        const exists = _pendingReceiptFiles.some(p => p.name === f.name && p.size === f.size);
+        if (!exists) _pendingReceiptFiles.push(f);
+    }
+    renderReceiptFileList();
+}
+
+function renderReceiptFileList() {
+    const listEl = document.getElementById('receiptFileList');
+    if (!listEl) return;
+    if (_pendingReceiptFiles.length === 0) {
+        listEl.style.display = 'none';
+        listEl.innerHTML = '';
+        return;
+    }
+    listEl.style.display = 'block';
+    const formatSize = (bytes) => bytes < 1024 * 1024 ? (bytes / 1024).toFixed(0) + ' KB' : (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    listEl.innerHTML = `
+        <div class="receipt-file-list-header">
+            <span><strong>${_pendingReceiptFiles.length}</strong> file${_pendingReceiptFiles.length > 1 ? 's' : ''} selected</span>
+            <button class="btn btn-outline btn-sm" onclick="document.getElementById('receiptFile').click()"><i class="fa-solid fa-plus"></i> Add more</button>
+        </div>
+        <div class="receipt-file-items">
+            ${_pendingReceiptFiles.map((f, i) => {
+                const ext = f.name.split('.').pop().toLowerCase();
+                const icon = ext === 'pdf' ? 'fa-file-pdf' : 'fa-image';
+                return `<div class="receipt-file-item">
+                    <i class="fa-solid ${icon}"></i>
+                    <span class="receipt-file-name">${esc(f.name)}</span>
+                    <span class="receipt-file-size">${formatSize(f.size)}</span>
+                    <button class="btn btn-outline btn-sm btn-icon" onclick="removeReceiptFile(${i})"><i class="fa-solid fa-xmark"></i></button>
+                </div>`;
+            }).join('')}
+        </div>
+        <div class="receipt-file-actions">
+            <button class="btn btn-primary" onclick="submitReceiptBatch()"><i class="fa-solid fa-upload"></i> Submit ${_pendingReceiptFiles.length} receipt${_pendingReceiptFiles.length > 1 ? 's' : ''}</button>
+            <button class="btn btn-outline" onclick="cancelReceiptBatch()"><i class="fa-solid fa-xmark"></i> Cancel</button>
+        </div>`;
+}
+
+function removeReceiptFile(index) {
+    _pendingReceiptFiles.splice(index, 1);
+    renderReceiptFileList();
+}
+
+function cancelReceiptBatch() {
+    _pendingReceiptFiles = [];
+    renderReceiptFileList();
+    document.getElementById('receiptFile').value = '';
+}
+
+async function submitReceiptBatch() {
+    if (_pendingReceiptFiles.length === 0) return;
+
+    const statusEl = document.getElementById('uploadStatus');
+    statusEl.style.display = 'block';
+    statusEl.innerHTML = `<div class="badge badge-processing"><i class="fa-solid fa-spinner fa-spin"></i> Uploading ${_pendingReceiptFiles.length} receipt${_pendingReceiptFiles.length > 1 ? 's' : ''}...</div>`;
+
+    // Hide file list during upload
+    const listEl = document.getElementById('receiptFileList');
+    if (listEl) listEl.style.display = 'none';
+
+    if (_pendingReceiptFiles.length === 1) {
+        // Single file: use existing single endpoint for immediate processing
+        const fd = new FormData();
+        fd.append('file', _pendingReceiptFiles[0]);
+        const result = await api('/api/expenses/scan', { method: 'POST', body: fd });
+        _pendingReceiptFiles = [];
+        if (result && result.id) {
+            toast('Receipt uploaded! Processing...', 'info');
+            navigate('#/expenses/' + result.urlId);
+        } else {
+            statusEl.innerHTML = '<div class="badge badge-failed"><i class="fa-solid fa-xmark"></i> Upload failed</div>';
+            toast('Upload failed', 'error');
+        }
+    } else {
+        // Multiple files: use batch endpoint
+        const fd = new FormData();
+        for (const f of _pendingReceiptFiles) {
+            fd.append('files', f);
+        }
+        const results = await api('/api/expenses/scan/batch', { method: 'POST', body: fd });
+        _pendingReceiptFiles = [];
+        if (results && Array.isArray(results) && results.length > 0) {
+            toast(`${results.length} receipts uploaded! Processing in queue...`, 'info');
+            navigate('#/expenses');
+        } else {
+            statusEl.innerHTML = '<div class="badge badge-failed"><i class="fa-solid fa-xmark"></i> Upload failed</div>';
+            toast('Upload failed', 'error');
+        }
+    }
+}
+
 async function uploadReceipt() {
     const file = document.getElementById('receiptFile').files[0];
     if (!file) return;
-    const statusEl = document.getElementById('uploadStatus');
-    statusEl.style.display = 'block';
-    statusEl.innerHTML = '<div class="badge badge-processing"><i class="fa-solid fa-spinner fa-spin"></i> Uploading and processing...</div>';
-    const fd = new FormData(); fd.append('file', file);
-    const result = await api('/api/expenses/scan', { method: 'POST', body: fd });
-    if (result && result.id) {
-        toast('Receipt uploaded! Processing...', 'info');
-        navigate('#/expenses/' + result.urlId);
-    } else {
-        statusEl.innerHTML = '<div class="badge badge-failed"><i class="fa-solid fa-xmark"></i> Upload failed</div>';
-        toast('Upload failed', 'error');
-    }
+    handleReceiptFiles([file]);
 }
 
 // Desktop camera for new expense page
@@ -306,6 +405,13 @@ async function openDesktopCamera() {
                 if (tabs) tabs.style.display = 'none';
             }
         }
+
+        // On mobile, constrain the camera container so buttons are always visible
+        if (isMobile()) {
+            container.style.height = '80dvh';
+            video.style.height = '100%';
+            video.style.objectFit = 'cover';
+        }
     } catch (err) {
         let msg = 'Camera access denied or not available';
         if (err.name === 'NotAllowedError') msg = 'Camera permission denied. Allow access in browser settings.';
@@ -321,7 +427,9 @@ function closeDesktopCamera() {
     }
     const container = document.getElementById('desktopCameraContainer');
     if (container) {
-        // Restore card padding and hidden elements
+        container.style.height = '';
+        const video = document.getElementById('desktopCameraPreview');
+        if (video) { video.style.height = ''; video.style.objectFit = ''; }
         const scanCard = container.closest('.card');
         if (scanCard) {
             scanCard.style.padding = '';
@@ -349,11 +457,11 @@ function closeDesktopCamera() {
 async function desktopCapturePhoto() {
     const video = document.getElementById('desktopCameraPreview');
     const canvas = document.getElementById('desktopCameraCanvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0);
-
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    const scale = 0.5; // 1/4 total size (0.5 × 0.5)
+    canvas.width = video.videoWidth * scale;
+    canvas.height = video.videoHeight * scale;
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
     const overlay = document.createElement('div');
     overlay.className = 'capture-overlay';
     overlay.id = 'captureOverlay';

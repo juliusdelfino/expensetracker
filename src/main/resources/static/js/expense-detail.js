@@ -36,20 +36,77 @@ async function renderExpenseDetail(app, id) {
                 <span class="badge badge-${(e.status||'').toLowerCase()}">${statusIcon(e.status)} ${e.status}</span>
             </div>
             <div class="action-bar-right">
-                ${isOwner && isFailed ? `<button class="btn btn-secondary btn-sm" onclick="retryExpense('${e.urlId}'); setTimeout(()=>location.reload(),500)"><i class="fa-solid fa-rotate"></i> Retry</button>` : ''}
-                ${!isProcessing && !isFailed ? `<button class="btn btn-outline btn-sm" onclick="openShareMenu('${e.urlId}', this)"><i class="fa-solid fa-share-nodes"></i> Share</button>` : ''}
-                ${isOwner && !isProcessing && !isFailed ? `<button class="btn btn-secondary btn-sm" onclick="duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i> Duplicate</button>` : ''}
-                ${isOwner ? `<button class="btn btn-danger btn-sm" onclick="deleteExpense('${e.urlId}'); navigate('#/expenses')"><i class="fa-solid fa-trash"></i> Delete</button>` : ''}
+                <div class="action-menu-wrap" id="actionMenuWrap">
+                    <button class="btn btn-outline btn-sm btn-icon" onclick="toggleActionMenu()" title="Actions"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                    <div class="action-dropdown" id="actionDropdown" style="display:none;">
+                        ${isOwner && isReceiptScan && !isProcessing ? `<button class="action-dropdown-item" onclick="toggleActionMenu(); retryExpenseWithConfirm('${e.urlId}', '${e.status}')"><i class="fa-solid fa-rotate"></i> Retry Scan</button>` : ''}
+                        ${!isProcessing ? `<button class="action-dropdown-item" onclick="toggleActionMenu(); openShareMenu('${e.urlId}', document.getElementById('actionMenuWrap'))"><i class="fa-solid fa-share-nodes"></i> Share</button>` : ''}
+                        ${isOwner && !isProcessing ? `<button class="action-dropdown-item" onclick="toggleActionMenu(); duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i> Duplicate</button>` : ''}
+                        ${isOwner ? `<button class="action-dropdown-item action-dropdown-danger" onclick="toggleActionMenu(); deleteExpense('${e.urlId}'); navigate('#/expenses')"><i class="fa-solid fa-trash"></i> Delete</button>` : ''}
+                    </div>
+                </div>
             </div>
         </div>`;
+
+    if (isProcessing && isReceiptScan && e.imagePath) {
+        const imgFilename = e.imagePath.replace(/\\/g, '/').split('/').pop();
+        const ext = (imgFilename.split('.').pop() || '').toLowerCase();
+        const isPdf = ext === 'pdf';
+        html += `<div class="side-by-side">
+            <div class="card receipt-details-card">
+                <div class="card-title-row">
+                    <h3 class="card-title"><i class="fa-solid fa-receipt"></i> Receipt Details</h3>
+                    <button class="btn btn-outline btn-sm receipt-scan-toggle-btn" onclick="toggleScannedReceipt()">
+                        <i class="fa-solid fa-${isPdf ? 'file-pdf' : 'image'}"></i> View Scan
+                    </button>
+                </div>
+                <div style="text-align:center; padding:2rem 1rem;">
+                    <i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--primary)"></i>
+                    <p style="margin-top:1rem; color:var(--text-light)">Processing receipt...<br>This may take 2–3 minutes.</p>
+                    <div style="display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap; margin-top:1rem;">
+                        <button class="btn btn-primary btn-sm" onclick="renderExpenseDetail(document.getElementById('app'),'${e.urlId}')">
+                            <i class="fa-solid fa-rotate"></i> Refresh
+                        </button>
+                        <button class="btn btn-outline btn-sm" onclick="navigate('#/expenses/new?tab=scan')">
+                            <i class="fa-solid fa-camera"></i> Scan another
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card scanned-receipt-card">
+                <div class="card-title-row">
+                    <h3 class="card-title"><i class="fa-solid ${isPdf ? 'fa-file-pdf' : 'fa-image'}"></i> Scanned Receipt</h3>
+                    <button class="btn btn-outline btn-sm receipt-scan-toggle-btn" onclick="toggleScannedReceipt()">
+                        <i class="fa-solid fa-eye-slash"></i> Hide Scan
+                    </button>
+                </div>
+                ${isPdf ? `
+                    <iframe src="/pdfjs-5.6.205-dist/web/viewer.html?file=/api/attachments/receipts/${imgFilename}" style="width:100%; height:600px; border:0;"></iframe>
+                ` : `
+                    <div class="receipt-zoom-container" id="receiptZoomContainer">
+                        <img src="/api/attachments/receipts/${imgFilename}" class="receipt-image" id="receiptImg" alt="Receipt">
+                    </div>
+                `}
+            </div>
+        </div>`;
+        html += '</div>';
+        app.innerHTML = html;
+        initReceiptZoom();
+        return;
+    }
 
     if (isProcessing) {
         html += `<div class="card" style="text-align:center; padding:3rem">
             <i class="fa-solid fa-spinner fa-spin" style="font-size:3rem; color:var(--primary)"></i>
             <p style="margin-top:1rem; color:var(--text-light)">Processing receipt... This may take 2-3 minutes.</p>
-            <button class="btn btn-primary" style="margin-top:1rem" onclick="renderExpenseDetail(document.getElementById('app'),'${e.urlId}')">
-                <i class="fa-solid fa-rotate"></i> Refresh
-            </button>
+            <div style="display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap; margin-top:1rem;">
+                <button class="btn btn-primary" onclick="renderExpenseDetail(document.getElementById('app'),'${e.urlId}')">
+                    <i class="fa-solid fa-rotate"></i> Refresh
+                </button>
+                <button class="btn btn-outline" onclick="navigate('#/expenses/new?tab=scan')">
+                    <i class="fa-solid fa-camera"></i> Scan another receipt
+                </button>
+            </div>
         </div></div>`;
         app.innerHTML = html;
         return;
@@ -152,6 +209,7 @@ async function renderExpenseDetail(app, id) {
     if (editForm) {
         editForm.onsubmit = async (ev) => {
             ev.preventDefault();
+            commitPendingTag('eTagInput', window._editTags || []);
             const updates = {
                 transactionDatetime: document.getElementById('eDate').value + ':00',
                 amount: parseFloat(document.getElementById('eAmount').value),
@@ -476,7 +534,6 @@ async function removeAttachment(expenseId, filename) {
     toast('Attachment removed', 'success');
     renderExpenseDetail(document.getElementById('app'), expenseId);
 }
-
 function toggleScannedReceipt() {
     const scanCard = document.querySelector('.scanned-receipt-card');
     const detailsCard = document.querySelector('.receipt-details-card');
@@ -489,5 +546,33 @@ function toggleScannedReceipt() {
         scanCard.classList.add('show');
         detailsCard.classList.add('hidden-mobile');
     }
+}
+
+function toggleActionMenu() {
+    const dd = document.getElementById('actionDropdown');
+    if (!dd) return;
+    const visible = dd.style.display !== 'none';
+    dd.style.display = visible ? 'none' : 'block';
+    if (!visible) {
+        setTimeout(() => {
+            document.addEventListener('click', function closeMenu(e) {
+                if (!document.getElementById('actionMenuWrap')?.contains(e.target)) {
+                    const d = document.getElementById('actionDropdown');
+                    if (d) d.style.display = 'none';
+                    document.removeEventListener('click', closeMenu);
+                }
+            });
+        }, 10);
+    }
+}
+
+async function retryExpenseWithConfirm(id, status) {
+    if (status !== 'FAILED') {
+        const ok = confirm('This expense has already been processed (status: ' + status + '). Retrying will re-scan the receipt and replace the current data. Continue?');
+        if (!ok) return;
+    }
+    await api(`/api/expenses/${id}/retry`, { method: 'POST' });
+    toast('Retry initiated. Refreshing in a moment...', 'info');
+    setTimeout(() => renderExpenseDetail(document.getElementById('app'), id), 1500);
 }
 

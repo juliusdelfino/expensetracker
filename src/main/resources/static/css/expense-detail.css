@@ -3,6 +3,42 @@
    (Receipt view, store dialog, item dialog, share menu)
    ============================================ */
 
+/* ===================== ACTION MENU (3-DOT) ===================== */
+.action-menu-wrap {
+    position: relative;
+    display: inline-block;
+}
+.action-dropdown {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    min-width: 170px;
+    z-index: 999;
+    overflow: hidden;
+}
+.action-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.6rem 1rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text);
+    text-align: left;
+    transition: background 0.15s;
+}
+.action-dropdown-item:hover { background: var(--bg-hover, rgba(0,0,0,0.06)); }
+.action-dropdown-item i { width: 1rem; text-align: center; color: var(--primary); }
+.action-dropdown-danger { color: var(--danger, #d32f2f) !important; }
+.action-dropdown-danger i { color: var(--danger, #d32f2f) !important; }
+
 /* ===================== CHANGE STORE DIALOG ===================== */
 .change-store-dialog {
     background: var(--bg-card);

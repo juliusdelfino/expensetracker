@@ -3,6 +3,58 @@
    ============================================ */
 
 /* ===================== DASHBOARD (desktop) ===================== */
+
+/* Chart clickable tooltip */
+.chart-click-tooltip {
+    position: absolute;
+    background: var(--bg-card, #fff);
+    border: 1px solid var(--border, #e0e0e0);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    transform: translate(-50%, -110%);
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    font-size: 0.82rem;
+    min-width: 120px;
+    text-align: center;
+}
+.chart-tooltip-title { font-weight: 600; color: var(--text, #333); }
+.chart-tooltip-value { color: var(--text-light, #666); margin: 0.15rem 0; }
+.chart-tooltip-link {
+    display: inline-block;
+    margin-top: 0.3rem;
+    color: var(--primary, #1976D2);
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+}
+.chart-tooltip-link:hover { text-decoration: underline; }
+
+/* Chart status bar (shown at bottom of chart card on click) */
+.chart-status-bar {
+    min-height: 1.6rem;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.82rem;
+    color: var(--text-light, #666);
+    border-top: 1px solid var(--border, #e0e0e0);
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.chart-status-bar:empty { display: none; }
+.chart-status-info { color: var(--text, #333); }
+.chart-status-link {
+    color: var(--primary, #1976D2);
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.chart-status-link:hover { text-decoration: underline; }
 .dashboard-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -105,6 +157,24 @@
 .upload-zone:hover { border-color: var(--primary); background: rgba(25, 118, 210, 0.06); }
 .upload-zone i { font-size: 3rem; color: var(--primary-light); margin-bottom: 1rem; }
 .upload-zone p { color: var(--text-light); }
+
+/* ===================== RECEIPT FILE LIST (batch upload) ===================== */
+.receipt-file-list-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 0.5rem; font-size: 0.9rem;
+}
+.receipt-file-items { max-height: 300px; overflow-y: auto; }
+.receipt-file-item {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--table-border);
+    font-size: 0.85rem;
+}
+.receipt-file-item i { color: var(--primary); width: 1rem; text-align: center; }
+.receipt-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.receipt-file-size { color: var(--text-light); font-size: 0.75rem; white-space: nowrap; }
+.receipt-file-actions {
+    display: flex; gap: 0.75rem; margin-top: 0.75rem; flex-wrap: wrap;
+}
 
 /* ===================== ATTACHMENTS ===================== */
 .attachment-list { list-style: none; }

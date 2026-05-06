@@ -69,9 +69,9 @@ async function loadOlderMessages() {
     _chatHasMore = data.hasMore || false;
     _chatOffset += data.messages.length;
 
-    // Prepend messages (they arrive in chronological order)
+    // Prepend messages (they arrive in chronological order, oldest first)
     const firstBubble = container.firstElementChild;
-    for (let i = data.messages.length - 1; i >= 0; i--) {
+    for (let i = 0; i < data.messages.length; i++) {
         const msg = data.messages[i];
         const bubble = buildChatBubble(msg.role === 'USER' ? 'user' : 'bot', msg.text, msg.linkedExpenseIds, msg.createdAt);
         container.insertBefore(bubble, firstBubble);

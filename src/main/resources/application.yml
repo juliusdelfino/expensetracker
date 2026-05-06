@@ -13,8 +13,6 @@ app:
 
 ocr:
   api:
-    url: https://gpt.jdelfino.com/ollama/api/generate
-    model: qwen3.5:cloud
     api-key: ${LLM_API_KEY:}  # Set via LLM_API_KEY environment variable or override here
     prompt: >
       Parse this receipt image/PDF and return a JSON object with these exact fields:
@@ -24,6 +22,8 @@ ocr:
       "store":{"name":"string","address":"string","city":"string","country":"ISO 3166-1 alpha-2",
       "postalCode":"string","phoneNumber":"string","website":"string"}}
       Return ONLY valid JSON. No markdown fences, no explanation, no extra text, exclude thinking in the response.
+  batch:
+    max-files: 20
 
 chatbot:
   api:
@@ -32,15 +32,26 @@ chatbot:
       You are an expense tracking assistant. Today's date is {today}. The user's base currency is {currency}.
       If base currency is null, ask the user for base currency and update user profile.
 
-      You have TWO modes of operation:
+      IMPORTANT RULES:
+      - You are ONLY an expense tracking assistant. Do NOT answer questions unrelated to expense tracking,
+        personal finance, or your available tools. If the user asks about your model, version, general knowledge
+        questions, or anything outside your role, politely decline and remind them you can only help with expense tracking.
+      - When a multi-step conversation involves logging an expense (e.g. user says they bought something,
+        you ask for details, they provide info via a tool lookup), ALWAYS complete the expense logging at the end.
+        Do not forget pending actions from earlier in the conversation.
+      - When the user mentions a store/place name for a new expense, use the findRecentStoreBranch tool
+        to look up the most recently visited branch with that name, so the expense can be linked to that store.
+
+      You have THREE modes of operation:
 
       MODE 1 - LOGGING EXPENSES: When the user describes spending (e.g. "lunch 12.50 SGD", "coffee 5 USD"),
       parse them and return a JSON object with these fields:
       {"expenses":[{"transactionDatetime":"ISO 8601 yyyy-MM-ddTHH:mm:ss","amount":0,"currency":"USD",
-      "category":"best guess category","notes":"original user text for this entry"}],
+      "category":"best guess category","notes":"original user text for this entry","storeId":null}],
       "summary":"A brief friendly summary of what was recorded"}
       If the user says "today" or "yesterday", compute the actual date from {today}.
       Default currency to {currency} if not specified.
+      If a store/place is mentioned, use findRecentStoreBranch to get the storeId and include it.
       Return ONLY valid JSON for expense logging. No markdown fences, no explanation.
 
       MODE 2 - QUERYING EXPENSES: When the user asks questions about their expenses (e.g. "How much is soy sauce?",
@@ -65,14 +76,6 @@ spring:
     deserialization:
       fail-on-unknown-properties: false
   ai:
-    ollama:
-      base-url: https://gpt.jdelfino.com/ollama
-      # api-key is not a real OllamaConnectionProperties field and would be silently ignored.
-      # The key is injected via the custom OllamaApi bean in AiConfig, sourced from chatbot.api.api-key.
-      chat:
-        options:
-          model: qwen3.5:cloud
-          temperature: 0.3
     mcp:
       server:
         name: expense-tracker-mcp
@@ -85,7 +88,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
   servlet:
     multipart:
       max-file-size: 50MB

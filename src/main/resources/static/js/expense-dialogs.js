@@ -236,7 +236,7 @@ function closeChangeStoreDialog() {
 // ============================================
 // ITEM DIALOG
 // ============================================
-function openItemDialog(expenseId, itemId, itemName, quantity, unitPrice, totalPrice) {
+function openItemDialog(expenseId, itemId, itemName, quantity, unitPrice) {
     if (!window._expenseIsOwner) return;
     const isEdit = !!itemId;
     const overlay = document.createElement('div');
@@ -374,6 +374,7 @@ async function openExpenseDetailsDialog(expenseId) {
 }
 
 async function saveExpenseDetailsDialog(expenseId) {
+    commitPendingTag('dlgExpTagInput', window._dlgExpTags || []);
     const updates = {
         transactionDatetime: document.getElementById('dlgExpDate').value + ':00',
         amount: parseFloat(document.getElementById('dlgExpAmount').value),
