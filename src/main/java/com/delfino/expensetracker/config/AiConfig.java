@@ -3,13 +3,18 @@ package com.delfino.expensetracker.config;
 import com.delfino.expensetracker.service.mcp.ExpenseCrudToolService;
 import com.delfino.expensetracker.service.mcp.ExpenseToolService;
 import com.delfino.expensetracker.service.mcp.ProfileToolService;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.ollama.api.OllamaApi;
+import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -28,12 +33,10 @@ public class AiConfig {
     /**
      * Override the auto-configured OllamaApi bean to inject the API key as an
      * Authorization: Bearer header on every request.
-     * OllamaConnectionProperties only exposes baseUrl — there is no apiKey field —
-     * so spring.ai.ollama.api-key in application.yml is silently ignored by the
-     * framework. Providing our own OllamaApi bean (which is @ConditionalOnMissingBean
-     * in the auto-configuration) is the correct way to supply the header.
+     * Only active when the "ollama" Spring profile is selected.
      */
     @Bean
+    @Profile("ollama")
     public OllamaApi ollamaApi(
             @Value("${spring.ai.ollama.base-url:http://localhost:11434}") String baseUrl,
             ChatBotProperties chatBotProperties,
@@ -59,6 +62,27 @@ public class AiConfig {
         }
 
         return apiBuilder.restClientBuilder(restClientBuilder).build();
+    }
+
+    /**
+     * Mark the Ollama chat model as @Primary when the "ollama" profile is active,
+     * so that ChatClientAutoConfiguration doesn't complain about two ChatModel beans.
+     */
+    @Bean
+    @Primary
+    @Profile({"ollama", "test"})
+    public ChatModel primaryChatModel(OllamaChatModel ollamaChatModel) {
+        return ollamaChatModel;
+    }
+
+    /**
+     * Mark the OpenAI chat model as @Primary when the "openai" profile is active.
+     */
+    @Bean("primaryChatModel")
+    @Primary
+    @Profile("openai")
+    public ChatModel primaryChatModelOpenAi(OpenAiChatModel openAiChatModel) {
+        return openAiChatModel;
     }
 
     @Bean

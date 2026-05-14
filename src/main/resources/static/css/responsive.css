@@ -88,7 +88,7 @@
         max-width: none !important;
     }
 
-    .action-bar { flex-direction: column; align-items: flex-start; }
+    .action-bar { flex-direction: row; align-items: center; justify-content: space-between; }
     .action-bar-right { flex-wrap: wrap; }
 
     .navbar { padding: 0 0.75rem; }

@@ -57,12 +57,13 @@ public class ExpenseCrudToolService {
     // EXPENSE CRUD
     // ─────────────────────────────────────────────────────────────
 
-    @Tool(description = "Update the notes or category of an existing expense. " +
-            "Use this when the user wants to change the description or category of a specific expense.")
+    @Tool(description = "Update the notes, category, and/or tags of an existing expense. " +
+            "Use this when the user wants to change the description, category, or tags of a specific expense.")
     public String updateExpense(
             @ToolParam(description = "The Long of the expense to update.") String expenseId,
             @ToolParam(description = "New category value. Pass empty string to skip.") String category,
-            @ToolParam(description = "New notes value. Pass empty string to skip.") String notes) {
+            @ToolParam(description = "New notes value. Pass empty string to skip.") String notes,
+            @ToolParam(description = "Comma-separated list of tags to set (e.g. 'food,travel'). Pass empty string to skip changing tags. Pass a single space ' ' to clear all tags.") String tags) {
 
         log.info("Tool call: updateExpense(expenseId={}, userId={})", expenseId, userContext.getUserId());
         long userId = userContext.getUserId();
@@ -75,9 +76,19 @@ public class ExpenseCrudToolService {
             Expense updates = new Expense();
             if (StringUtils.hasText(category)) updates.setCategory(category);
             if (StringUtils.hasText(notes)) updates.setNotes(notes);
+            if (tags != null) {
+                if (tags.isBlank()) {
+                    // skip — empty string means don't change tags
+                } else if (tags.trim().equals(" ") || tags.equals(" ")) {
+                    updates.setTags(new ArrayList<>());
+                } else {
+                    updates.setTags(Arrays.asList(tags.split("\\s*,\\s*")));
+                }
+            }
 
             Expense updated = expenseService.updateExpense(expense.getUrlId(), updates, userId);
-            return "Expense updated. Category: " + updated.getCategory() + ", Notes: " + updated.getNotes();
+            String tagStr = updated.getTags() != null ? String.join(", ", updated.getTags()) : "";
+            return "Expense updated. Category: " + updated.getCategory() + ", Notes: " + updated.getNotes() + ", Tags: [" + tagStr + "]";
         } catch (Exception e) {
             return "Failed to update expense: " + e.getMessage();
         }
@@ -193,6 +204,40 @@ public class ExpenseCrudToolService {
     // ─────────────────────────────────────────────────────────────
     // STORE QUERY
     // ─────────────────────────────────────────────────────────────
+
+    @Tool(description = "Find the most recently visited store branch matching a given store name. " +
+            "Returns the store ID, name, address, city, and country of the most recent match. " +
+            "Use this when the user mentions a store/place name while logging a new expense, " +
+            "so the expense can be linked to the correct store branch.")
+    public String findRecentStoreBranch(
+            @ToolParam(description = "The store name to search for, e.g. 'Spar', 'Walmart', 'Starbucks'.") String storeName) {
+
+        log.info("Tool call: findRecentStoreBranch(storeName={}, userId={})", storeName, userContext.getUserId());
+        Long userId = userContext.getUserId();
+        String nameLower = storeName.toLowerCase();
+
+        List<Expense> expenses = expenseRepository.findByUserIdAndDeletedFalse(userId);
+        // Sort by date descending to find most recent
+        expenses.sort(Comparator.comparing(Expense::getTransactionDatetime,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+
+        for (Expense e : expenses) {
+            if (e.getStoreId() == null) continue;
+            Store store = storeRepository.findById(e.getStoreId()).orElse(null);
+            if (store != null && store.getName() != null && store.getName().toLowerCase().contains(nameLower)) {
+                StringBuilder sb = new StringBuilder("Found store branch:\n");
+                sb.append("- Store ID: ").append(store.getId()).append("\n");
+                sb.append("- Name: ").append(store.getName()).append("\n");
+                if (StringUtils.hasText(store.getAddress())) sb.append("- Address: ").append(store.getAddress()).append("\n");
+                if (StringUtils.hasText(store.getCity())) sb.append("- City: ").append(store.getCity()).append("\n");
+                if (StringUtils.hasText(store.getCountry())) sb.append("- Country: ").append(store.getCountry()).append("\n");
+                sb.append("- Last visited: ").append(e.getTransactionDatetime() != null
+                        ? e.getTransactionDatetime().format(DateTimeFormatter.ISO_LOCAL_DATE) : "unknown").append("\n");
+                return sb.toString();
+            }
+        }
+        return "No store found matching '" + storeName + "'.";
+    }
 
     @Tool(description = "List stores the user has visited, optionally filtered by date range and/or country. " +
             "Returns store names with visit counts, sorted by most visited. " +

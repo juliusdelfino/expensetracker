@@ -69,9 +69,9 @@ async function loadOlderMessages() {
     _chatHasMore = data.hasMore || false;
     _chatOffset += data.messages.length;
 
-    // Prepend messages (they arrive in chronological order)
+    // Prepend messages (they arrive in chronological order, oldest first)
     const firstBubble = container.firstElementChild;
-    for (let i = data.messages.length - 1; i >= 0; i--) {
+    for (let i = 0; i < data.messages.length; i++) {
         const msg = data.messages[i];
         const bubble = buildChatBubble(msg.role === 'USER' ? 'user' : 'bot', msg.text, msg.linkedExpenseIds, msg.createdAt);
         container.insertBefore(bubble, firstBubble);
@@ -102,9 +102,16 @@ function buildChatBubble(role, text, linkedExpenseIds, timestamp) {
     const bubble = document.createElement('div');
     bubble.className = `chat-bubble ${role}`;
 
-    let html = text.replace(/\n/g, '<br>');
     const timeStr = formatChatTime(timestamp);
-    bubble.innerHTML = `<p>${html}</p>${timeStr ? `<span class="chat-timestamp">${timeStr}</span>` : ''}`;
+
+    if (role === 'bot' && typeof marked !== 'undefined') {
+        // Render markdown for bot responses
+        const rendered = marked.parse(text, { breaks: true, gfm: true });
+        bubble.innerHTML = `<div class="chat-md">${rendered}</div>${timeStr ? `<span class="chat-timestamp">${timeStr}</span>` : ''}`;
+    } else {
+        const html = text.replace(/\n/g, '<br>');
+        bubble.innerHTML = `<p>${html}</p>${timeStr ? `<span class="chat-timestamp">${timeStr}</span>` : ''}`;
+    }
 
     if (role === 'bot' && linkedExpenseIds && linkedExpenseIds.length > 0) {
         const cardsHtml = linkedExpenseIds.map(id => {

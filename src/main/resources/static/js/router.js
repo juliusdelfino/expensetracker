@@ -43,6 +43,8 @@ async function tryCheckAuth() {
 async function router() {
     const hash = window.location.hash || '#/login';
     const app = document.getElementById('app');
+    // Stop any active expense-detail polling when navigating away
+    if (typeof _stopExpenseDetailPolling === 'function') _stopExpenseDetailPolling();
 
     if (hash === '#/login') { hideMobileUI(); renderLogin(app); return; }
     if (hash === '#/register') { hideMobileUI(); renderRegister(app); return; }

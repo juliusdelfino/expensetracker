@@ -236,7 +236,7 @@ function closeChangeStoreDialog() {
 // ============================================
 // ITEM DIALOG
 // ============================================
-function openItemDialog(expenseId, itemId, itemName, quantity, unitPrice, totalPrice) {
+function openItemDialog(expenseId, itemId, itemName, quantity, unitPrice, adjustment) {
     if (!window._expenseIsOwner) return;
     const isEdit = !!itemId;
     const overlay = document.createElement('div');
@@ -250,7 +250,7 @@ function openItemDialog(expenseId, itemId, itemName, quantity, unitPrice, totalP
                 <label>Item Name</label>
                 <input type="text" class="form-control" id="dlgItemName" value="${isEdit ? itemName : ''}" placeholder="Item name">
             </div>
-            <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+            <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.75rem;">
                 <div class="form-group">
                     <label>Quantity</label>
                     <input type="number" step="0.01" class="form-control" id="dlgItemQty" value="${isEdit ? quantity : 1}">
@@ -258,6 +258,10 @@ function openItemDialog(expenseId, itemId, itemName, quantity, unitPrice, totalP
                 <div class="form-group">
                     <label>Unit Price</label>
                     <input type="number" step="0.01" class="form-control" id="dlgItemPrice" value="${isEdit ? unitPrice : ''}">
+                </div>
+                <div class="form-group">
+                    <label>Adjustment <span style="font-size:0.7rem; color:var(--text-light)">±</span></label>
+                    <input type="number" step="0.01" class="form-control" id="dlgItemAdjustment" value="${isEdit && adjustment != null && adjustment != 0 ? adjustment : ''}" placeholder="0.00">
                 </div>
             </div>
             <div class="item-dialog-actions">
@@ -280,9 +284,15 @@ async function saveItemDialog(expenseId, itemId) {
     const name = document.getElementById('dlgItemName').value;
     const qty = parseFloat(document.getElementById('dlgItemQty').value);
     const price = parseFloat(document.getElementById('dlgItemPrice').value);
+    const adjustmentVal = document.getElementById('dlgItemAdjustment').value;
     if (!name) { toast('Item name is required', 'error'); return; }
 
+    const adjustment = adjustmentVal !== '' ? parseFloat(adjustmentVal) : null;
+    const totalPrice = (qty > 0 && price >= 0) ? parseFloat((qty * price + (adjustment || 0)).toFixed(2)) : null;
     const item = { itemName: name, quantity: qty, unitPrice: price };
+    if (adjustment != null) item.adjustment = adjustment;
+    if (totalPrice != null) item.totalPrice = totalPrice;
+
     if (itemId) {
         await api(`/api/expenses/${expenseId}/items/${itemId}`, { method: 'PUT', body: item });
         toast('Item updated', 'success');
@@ -374,6 +384,7 @@ async function openExpenseDetailsDialog(expenseId) {
 }
 
 async function saveExpenseDetailsDialog(expenseId) {
+    commitPendingTag('dlgExpTagInput', window._dlgExpTags || []);
     const updates = {
         transactionDatetime: document.getElementById('dlgExpDate').value + ':00',
         amount: parseFloat(document.getElementById('dlgExpAmount').value),

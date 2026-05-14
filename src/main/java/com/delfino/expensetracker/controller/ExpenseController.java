@@ -45,6 +45,9 @@ public class ExpenseController {
     @Value("${app.data.dir:data}")
     private String dataDir;
 
+    @Value("${ocr.batch.max-files:20}")
+    private int batchMaxFiles;
+
     public ExpenseController(ExpenseService expenseService, ExpenseRepository expenseRepository,
                              ExpenseItemRepository expenseItemRepository, StoreRepository storeRepository,
                              SupportedCurrencyService supportedCurrencyService, CountryService countryService) {
@@ -151,6 +154,28 @@ public class ExpenseController {
         Files.write(filePath, file.getBytes());
         Expense expense = expenseService.createReceiptScanExpense(userId, filePath.toString());
         return ResponseEntity.ok(expense);
+    }
+
+    @PostMapping("/scan/batch")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> uploadReceiptBatch(@RequestParam("files") List<MultipartFile> files, UserToken userToken) throws IOException {
+        long userId = userToken.getUserId();
+        if (files.size() > batchMaxFiles) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("Maximum " + batchMaxFiles + " files allowed per batch"));
+        }
+        Path uploadDir = Path.of(dataDir, "receipts");
+        Files.createDirectories(uploadDir);
+        List<Expense> expenses = new ArrayList<>();
+        for (MultipartFile file : files) {
+            String filename = getDateString() + "_" + userId + "_" + file.getOriginalFilename();
+            Path filePath = uploadDir.resolve(filename);
+            Files.write(filePath, file.getBytes());
+            Expense expense = expenseService.createReceiptScanExpenseQueued(userId, filePath.toString());
+            expenses.add(expense);
+        }
+        // Start queued OCR processing with intervals
+        expenseService.processOcrQueue(expenses);
+        return ResponseEntity.ok(expenses);
     }
 
     private String getDateString() {
@@ -325,7 +350,7 @@ public class ExpenseController {
         if (s.getCountry() == null) return false;
         String sc = s.getCountry().toLowerCase();
         if (sc.contains(countryFilterLower)) return true;
-        if (resolvedCode != null && sc.equalsIgnoreCase(resolvedCode)) return true;
+        if (sc.equalsIgnoreCase(resolvedCode)) return true;
         String name = countryService.getName(s.getCountry());
         return name != null && name.toLowerCase().contains(countryFilterLower);
     }

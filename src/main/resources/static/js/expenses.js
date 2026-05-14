@@ -170,6 +170,13 @@ async function loadExpenses() {
     if (country) params.set('country', country);
     const expenses = await api('/api/expenses?' + params.toString());
     if (!expenses || !Array.isArray(expenses)) return;
+
+    // Silently update the URL hash so filters survive a page refresh
+    const newHash = '#/expenses' + (params.toString() ? '?' + params.toString() : '');
+    if (window.location.hash !== newHash) {
+        history.replaceState(null, '', newHash);
+    }
+
     _allExpenses = expenses;
     renderExpenseTable();
 }

@@ -48,6 +48,7 @@ import javax.imageio.ImageIO;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.rendering.ImageType;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -72,6 +73,12 @@ public class OcrService {
     @Value("${ocr.api.api-key:}")
     private String ocrApiKey;
 
+    @Value("${ocr.api.format:ollama}")
+    private String ocrApiFormat;
+
+    @Value("${ocr.api.disable-thinking:false}")
+    private boolean ocrDisableThinking;
+
     @Value("${ocr.api.prompt:Parse this receipt image and return a JSON object with these fields: {\"transactionDatetime\":\"ISO 8601\",\"amount\":0,\"currency\":\"USD\",\"receiptNumber\":\"\",\"category\":\"\",\"items\":[{\"itemName\":\"\",\"quantity\":1,\"unitPrice\":0,\"totalPrice\":0}],\"store\":{\"name\":\"\",\"address\":\"\",\"city\":\"\",\"country\":\"\",\"postalCode\":\"\",\"phoneNumber\":\"\",\"website\":\"\"}} Return ONLY valid JSON.}")
     private String ocrPrompt;
 
@@ -93,8 +100,6 @@ public class OcrService {
 
     public OcrRequest buildRequestBody(String ocrModel, String ocrPrompt,
                                                 String imagePath, Long expenseId) throws IOException {
-        // Single-image convenience wrapper
-
         log.info("Processing receipt for expense {}: reading image from {}", expenseId, imagePath);
         byte[] imageBytes = Files.readAllBytes(Path.of(imagePath));
 
@@ -102,10 +107,19 @@ public class OcrService {
 
         Map requestBody;
         if (mediaType.equals("application/pdf")) {
-            log.info("PDF detected for expense {} - converting pages to images", expenseId);
+            // Try to extract text from PDF first (cheaper than vision)
+            String pdfText = extractPdfText(imageBytes);
+            if (hasUsableText(pdfText)) {
+                log.info("PDF for expense {} contains extractable text ({} chars) — using text-only LLM path",
+                        expenseId, pdfText.length());
+                requestBody = buildTextRequestBody(ocrModel, ocrPrompt, pdfText);
+                return new OcrRequest(imageBytes, "application/pdf", requestBody);
+            }
+            // No usable text — fall back to rendering PDF pages as images
+            log.info("PDF for expense {} appears image-based — falling back to vision path", expenseId);
             List<byte[]> imgs = convertPdfToImages(imageBytes);
             if (imgs.isEmpty()) throw new IOException("PDF contained no renderable pages");
-            imageBytes = imgs.get(0); // keep first for logging/fileSize
+            imageBytes = imgs.get(0);
             mediaType = "image/jpeg";
             requestBody = buildRequestBody(ocrModel, ocrPrompt, imgs, mediaType);
         } else {
@@ -117,24 +131,128 @@ public class OcrService {
 
     public Map<String, Object> buildRequestBody(String ocrModel, String ocrPrompt,
                                                 List<byte[]> imageBytesList, String mediaType) {
-        Map<String, Object> requestBody = new LinkedHashMap<>();
-        requestBody.put("model", ocrModel);
-        requestBody.put("prompt", ocrPrompt);
-        requestBody.put("stream", false);
-
         if (imageBytesList == null || imageBytesList.isEmpty()) {
             throw new IllegalArgumentException("No image data provided");
         }
-
         if (!IMAGE_MEDIA_TYPES.contains(mediaType)) {
             throw new IllegalArgumentException("Unsupported media type: " + mediaType);
         }
 
+        if ("openai".equalsIgnoreCase(ocrApiFormat)) {
+            return buildOpenAiRequestBody(ocrModel, ocrPrompt, imageBytesList, mediaType);
+        } else {
+            return buildOllamaRequestBody(ocrModel, ocrPrompt, imageBytesList);
+        }
+    }
+
+    /**
+     * Extract all text from a PDF using PDFBox's text stripper.
+     * Returns empty string if extraction fails.
+     */
+    private String extractPdfText(byte[] pdfBytes) {
+        try (PDDocument doc = PDDocument.load(pdfBytes)) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            String text = stripper.getText(doc);
+            return text != null ? text.trim() : "";
+        } catch (Exception e) {
+            log.warn("PDF text extraction failed: {}", e.getMessage());
+            return "";
+        }
+    }
+
+    /**
+     * Determine whether extracted PDF text is rich enough to contain receipt details.
+     * Returns false for image-only PDFs that produce no or garbage text.
+     */
+    private boolean hasUsableText(String text) {
+        if (text == null || text.isBlank()) return false;
+
+        // Must have at least 50 meaningful characters
+        String stripped = text.replaceAll("\\s+", " ").trim();
+        if (stripped.length() < 50) return false;
+
+        // Count alphanumeric tokens (words/numbers) — image PDFs often produce very few
+        long wordCount = Arrays.stream(stripped.split("\\s+"))
+                .filter(w -> w.matches(".*[a-zA-Z0-9].*"))
+                .count();
+        if (wordCount < 5) return false;
+
+        // Check for at least one digit sequence (likely price or date)
+        if (!stripped.matches(".*\\d+.*")) return false;
+
+        // Ratio of printable ASCII to total — image PDFs produce lots of garbage characters
+        long printable = stripped.chars().filter(c -> c >= 32 && c < 127).count();
+        double ratio = (double) printable / stripped.length();
+        return ratio >= 0.85;
+    }
+
+    /**
+     * Build a text-only LLM request body (no image data) for PDFs with extractable text.
+     * Cheaper and faster than vision — skips base64 encoding entirely.
+     */
+    private Map<String, Object> buildTextRequestBody(String ocrModel, String ocrPrompt, String pdfText) {
+        // Truncate to avoid exceeding typical context windows (~12 000 chars ≈ ~3 000 tokens)
+        String truncated = pdfText.length() > 12_000 ? pdfText.substring(0, 12_000) + "\n[truncated]" : pdfText;
+        String fullPrompt = ocrPrompt + "\n\nReceipt text:\n" + truncated;
+
+        if ("openai".equalsIgnoreCase(ocrApiFormat)) {
+            Map<String, Object> message = new LinkedHashMap<>();
+            message.put("role", "user");
+            message.put("content", fullPrompt);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("model", ocrModel);
+            body.put("messages", List.of(message));
+            if (ocrDisableThinking) {
+                body.put("enable_thinking", false);
+            }
+            return body;
+        } else {
+            // Ollama text-only (no images array)
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("model", ocrModel);
+            body.put("prompt", fullPrompt);
+            body.put("stream", false);
+            return body;
+        }
+    }
+
+    /** Ollama /api/generate format */
+    private Map<String, Object> buildOllamaRequestBody(String ocrModel, String ocrPrompt,
+                                                        List<byte[]> imageBytesList) {
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("model", ocrModel);
+        requestBody.put("prompt", ocrPrompt);
+        requestBody.put("stream", false);
         List<String> base64Images = new ArrayList<>();
         for (byte[] b : imageBytesList) {
             base64Images.add(Base64.getEncoder().encodeToString(b));
         }
         requestBody.put("images", base64Images);
+        return requestBody;
+    }
+
+    /** OpenAI /chat/completions format with vision content parts */
+    private Map<String, Object> buildOpenAiRequestBody(String ocrModel, String ocrPrompt,
+                                                        List<byte[]> imageBytesList, String mediaType) {
+        List<Object> contentParts = new ArrayList<>();
+        contentParts.add(Map.of("type", "text", "text", ocrPrompt));
+        for (byte[] b : imageBytesList) {
+            String dataUrl = "data:" + mediaType + ";base64," + Base64.getEncoder().encodeToString(b);
+            contentParts.add(Map.of(
+                    "type", "image_url",
+                    "image_url", Map.of("url", dataUrl)
+            ));
+        }
+        Map<String, Object> message = new LinkedHashMap<>();
+        message.put("role", "user");
+        message.put("content", contentParts);
+
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("model", ocrModel);
+        requestBody.put("messages", List.of(message));
+        if (ocrDisableThinking) {
+            requestBody.put("enable_thinking", false);
+        }
         return requestBody;
     }
 
@@ -156,20 +274,6 @@ public class OcrService {
         throw new IllegalArgumentException("Cannot detect media type from file bytes");
     }
 
-    /**
-     * Convert the first page of a PDF to a JPEG image (returned as bytes).
-     */
-    private byte[] convertPdfFirstPageToImage(byte[] pdfBytes) throws IOException {
-        try (PDDocument doc = PDDocument.load(pdfBytes)) {
-            PDFRenderer renderer = new PDFRenderer(doc);
-            // render first page at 300 DPI
-            BufferedImage bim = renderer.renderImageWithDPI(0, 300, ImageType.RGB);
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            ImageIO.write(bim, "jpg", baos);
-            return baos.toByteArray();
-        }
-    }
-
     private List<byte[]> convertPdfToImages(byte[] pdfBytes) throws IOException {
         List<byte[]> pages = new ArrayList<>();
         try (PDDocument doc = PDDocument.load(pdfBytes)) {
@@ -187,6 +291,13 @@ public class OcrService {
 
     @Async
     public void processReceipt(Long expenseId, String imagePath) {
+        processReceiptSync(expenseId, imagePath);
+    }
+
+    /**
+     * Synchronous receipt processing (used by batch queue).
+     */
+    public void processReceiptSync(Long expenseId, String imagePath) {
         try {
 
             OcrRequest ocrRequest = buildRequestBody(ocrModel, ocrPrompt, imagePath, expenseId);
@@ -228,7 +339,20 @@ public class OcrService {
 
     private void processOcrResponse(Long expenseId, String responseBody) throws JsonProcessingException {
         JsonNode responseNode = objectMapper.readTree(responseBody);
-        String responseText = responseNode.has("response") ? responseNode.get("response").asText() : responseBody;
+
+        String responseText;
+        if ("openai".equalsIgnoreCase(ocrApiFormat)) {
+            // OpenAI: choices[0].message.content
+            responseText = responseNode
+                    .path("choices").path(0)
+                    .path("message").path("content").asText(null);
+            if (responseText == null || responseText.isBlank()) {
+                throw new IllegalStateException("OpenAI OCR response missing choices[0].message.content: " + responseBody);
+            }
+        } else {
+            // Ollama: response field, fall back to raw body
+            responseText = responseNode.has("response") ? responseNode.get("response").asText() : responseBody;
+        }
 
         // Strip markdown code fences if present
         responseText = responseText.strip();
@@ -278,6 +402,14 @@ public class OcrService {
         expense.setUpdatedAt(LocalDateTime.now());
         expenseRepository.save(expense);
 
+        // Delete previous items before inserting new ones (handles retry scenario)
+        List<ExpenseItem> existingItems = expenseItemRepository.findByExpenseIdAndDeletedFalse(expenseId);
+        if (!existingItems.isEmpty()) {
+            existingItems.forEach(i -> i.setDeleted(true));
+            expenseItemRepository.saveAll(existingItems);
+            log.info("Deleted {} existing items for expense {} before re-processing", existingItems.size(), expenseId);
+        }
+
         // Parse items
         if (parsed.has("items") && parsed.get("items").isArray()) {
             List<ExpenseItem> items = new ArrayList<>();
@@ -287,8 +419,7 @@ public class OcrService {
                 item.setItemName(itemNode.has("itemName") ? itemNode.get("itemName").asText() : "");
                 item.setQuantity(itemNode.has("quantity") ? itemNode.get("quantity").decimalValue() : BigDecimal.ONE);
                 item.setUnitPrice(itemNode.has("unitPrice") ? itemNode.get("unitPrice").decimalValue() : BigDecimal.ZERO);
-                item.setTotalPrice(itemNode.has("totalPrice") ? itemNode.get("totalPrice").decimalValue()
-                        : item.getQuantity().multiply(item.getUnitPrice()));
+                if (itemNode.has("adjustment")) item.setAdjustment(itemNode.get("adjustment").decimalValue());
                 item.setDeleted(false);
                 items.add(item);
             }
