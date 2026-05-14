@@ -1,5 +1,6 @@
 package com.delfino.expensetracker.model;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -18,9 +19,10 @@ public class ExpenseItem {
 
     private long expenseId;
     private String itemName;
+    @Column(precision = 38, scale = 4)
     private BigDecimal quantity;
     private BigDecimal unitPrice;
-    private BigDecimal totalPrice;
+    private BigDecimal adjustment;  // extra charge (+) or discount (-) on this line item
     private boolean deleted;
 
     public ExpenseItem() {}
@@ -40,8 +42,10 @@ public class ExpenseItem {
     public BigDecimal getUnitPrice() { return unitPrice; }
     public void setUnitPrice(BigDecimal unitPrice) { this.unitPrice = unitPrice; }
 
-    public BigDecimal getTotalPrice() { return totalPrice; }
-    public void setTotalPrice(BigDecimal totalPrice) { this.totalPrice = totalPrice; }
+    public BigDecimal getAdjustment() { return adjustment != null ? adjustment : BigDecimal.ZERO; }
+    public void setAdjustment(BigDecimal adjustment) { this.adjustment = adjustment; }
+
+    public BigDecimal getTotalPrice() { return quantity.multiply(unitPrice).add(getAdjustment()); }
 
     public boolean isDeleted() { return deleted; }
     public void setDeleted(boolean deleted) { this.deleted = deleted; }

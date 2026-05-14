@@ -230,7 +230,6 @@ public class ExpenseService {
             ci.setItemName(oi.getItemName());
             ci.setQuantity(oi.getQuantity());
             ci.setUnitPrice(oi.getUnitPrice());
-            ci.setTotalPrice(oi.getTotalPrice());
             ci.setDeleted(false);
             copiedItems.add(ci);
         }
@@ -395,9 +394,6 @@ public class ExpenseService {
                 .orElseThrow(() -> new IllegalStateException("Expense not found"));
         item.setExpenseId(expense.getId());
         item.setDeleted(false);
-        if (item.getQuantity() != null && item.getUnitPrice() != null) {
-            item.setTotalPrice(item.getQuantity().multiply(item.getUnitPrice()));
-        }
         expenseItemRepository.save(item);
         recomputeTotal(expense.getId());
         return item;

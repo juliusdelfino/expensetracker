@@ -251,6 +251,11 @@
     font-weight: 600;
     color: var(--text);
 }
+.receipt-item-adjustment {
+    font-size: 0.75rem;
+    color: var(--text-light);
+    font-style: italic;
+}
 .receipt-no-items {
     text-align: center;
     color: var(--text-light);

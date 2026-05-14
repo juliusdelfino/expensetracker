@@ -306,7 +306,6 @@ public abstract class BaseControllerTest {
         item.setItemName(itemName);
         item.setQuantity(qty);
         item.setUnitPrice(price);
-        item.setTotalPrice(qty.multiply(price));
         item.setDeleted(false);
         return expenseItemRepository.save(item);
     }

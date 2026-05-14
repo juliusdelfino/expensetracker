@@ -14,14 +14,16 @@ app:
 ocr:
   api:
     api-key: ${LLM_API_KEY:}  # Set via LLM_API_KEY environment variable or override here
+    disable-thinking: true
     prompt: >
       Parse this receipt image/PDF and return a JSON object with these exact fields:
       {"transactionDatetime":"ISO 8601 yyyy-MM-ddTHH:mm:ss","amount":0,"currency":"ISO 4217 code",
       "receiptNumber":"string or null","category":"best guess category string",
-      "items":[{"itemName":"string","quantity":1,"unitPrice":0.0,"totalPrice":0.0}],
+      "items":[{"itemName":"string","quantity":1.0,"unitPrice":0.0,"adjustment":0.0}],
       "store":{"name":"string","address":"string","city":"string","country":"ISO 3166-1 alpha-2",
       "postalCode":"string","phoneNumber":"string","website":"string"}}
-      Return ONLY valid JSON. No markdown fences, no explanation, no extra text, exclude thinking in the response.
+      Return ONLY valid JSON. No markdown fences, no explanation, no extra text.
+      Validate amount = sum of [(item.quantity * item.unitPrice) + item.adjustment]
   batch:
     max-files: 20
 

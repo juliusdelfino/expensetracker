@@ -5,6 +5,17 @@
 let currentUser = null;
 let chartInstances = {};
 
+/**
+ * Format a quantity value: whole numbers show no decimals,
+ * fractional values show up to 4 significant decimal places (trailing zeros stripped).
+ */
+function formatQty(value) {
+    const n = Number(value);
+    if (n % 1 === 0) return n.toFixed(0);
+    // Up to 4 decimal places, strip trailing zeros
+    return parseFloat(n.toFixed(4)).toString();
+}
+
 // --- Theme management ---
 function applyTheme(theme) {
     // theme: 'light' | 'dark' | 'system'

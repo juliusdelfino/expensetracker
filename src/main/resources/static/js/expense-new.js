@@ -457,7 +457,7 @@ function closeDesktopCamera() {
 async function desktopCapturePhoto() {
     const video = document.getElementById('desktopCameraPreview');
     const canvas = document.getElementById('desktopCameraCanvas');
-    const scale = 0.5; // 1/4 total size (0.5 × 0.5)
+    const scale = 0.75; // 1/4 total size (0.5 × 0.5)
     canvas.width = video.videoWidth * scale;
     canvas.height = video.videoHeight * scale;
     canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -528,7 +528,7 @@ function addNewExpenseItem() {
                 <label>Item Name</label>
                 <input type="text" class="form-control" id="newDlgItemName" placeholder="Item name">
             </div>
-            <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+            <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.75rem;">
                 <div class="form-group">
                     <label>Quantity</label>
                     <input type="number" step="0.01" class="form-control" id="newDlgItemQty" value="1">
@@ -536,6 +536,10 @@ function addNewExpenseItem() {
                 <div class="form-group">
                     <label>Unit Price</label>
                     <input type="number" step="0.01" class="form-control" id="newDlgItemPrice" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label>Adjustment <span style="font-size:0.7rem; color:var(--text-light)">±</span></label>
+                    <input type="number" step="0.01" class="form-control" id="newDlgItemAdjustment" placeholder="0.00">
                 </div>
             </div>
             <div class="item-dialog-actions">
@@ -565,7 +569,7 @@ function editNewExpenseItem(index) {
                 <label>Item Name</label>
                 <input type="text" class="form-control" id="newDlgItemName" value="${esc(item.itemName)}">
             </div>
-            <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+            <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.75rem;">
                 <div class="form-group">
                     <label>Quantity</label>
                     <input type="number" step="0.01" class="form-control" id="newDlgItemQty" value="${item.quantity}">
@@ -573,6 +577,10 @@ function editNewExpenseItem(index) {
                 <div class="form-group">
                     <label>Unit Price</label>
                     <input type="number" step="0.01" class="form-control" id="newDlgItemPrice" value="${item.unitPrice}">
+                </div>
+                <div class="form-group">
+                    <label>Adjustment <span style="font-size:0.7rem; color:var(--text-light)">±</span></label>
+                    <input type="number" step="0.01" class="form-control" id="newDlgItemAdjustment" value="${item.adjustment || ''}" placeholder="0.00">
                 </div>
             </div>
             <div class="item-dialog-actions">
@@ -595,8 +603,11 @@ function saveNewExpenseItem() {
     const name = document.getElementById('newDlgItemName').value.trim();
     const qty = parseFloat(document.getElementById('newDlgItemQty').value) || 1;
     const price = parseFloat(document.getElementById('newDlgItemPrice').value) || 0;
+    const adjVal = document.getElementById('newDlgItemAdjustment').value;
     if (!name) { toast('Item name is required', 'error'); return; }
-    window._newExpenseItems.push({ itemName: name, quantity: qty, unitPrice: price });
+    const adjustment = adjVal !== '' ? parseFloat(adjVal) : null;
+    const totalPrice = parseFloat((qty * price + (adjustment || 0)).toFixed(2));
+    window._newExpenseItems.push({ itemName: name, quantity: qty, unitPrice: price, adjustment, totalPrice });
     document.getElementById('newItemDialogOverlay')?.remove();
     renderNewExpenseItems();
 }
@@ -605,8 +616,11 @@ function updateNewExpenseItem(index) {
     const name = document.getElementById('newDlgItemName').value.trim();
     const qty = parseFloat(document.getElementById('newDlgItemQty').value) || 1;
     const price = parseFloat(document.getElementById('newDlgItemPrice').value) || 0;
+    const adjVal = document.getElementById('newDlgItemAdjustment').value;
     if (!name) { toast('Item name is required', 'error'); return; }
-    window._newExpenseItems[index] = { itemName: name, quantity: qty, unitPrice: price };
+    const adjustment = adjVal !== '' ? parseFloat(adjVal) : null;
+    const totalPrice = parseFloat((qty * price + (adjustment || 0)).toFixed(2));
+    window._newExpenseItems[index] = { itemName: name, quantity: qty, unitPrice: price, adjustment, totalPrice };
     document.getElementById('newItemDialogOverlay')?.remove();
     renderNewExpenseItems();
 }
@@ -625,16 +639,21 @@ function renderNewExpenseItems() {
         return;
     }
     container.innerHTML = window._newExpenseItems.map((item, i) => {
-        const total = (item.quantity * item.unitPrice).toFixed(2);
-        const qtyStr = item.quantity % 1 === 0 ? item.quantity.toFixed(0) : item.quantity.toFixed(2);
+        const total = item.totalPrice != null ? Number(item.totalPrice).toFixed(2) : (item.quantity * item.unitPrice).toFixed(2);
+        const qtyStr = formatQty(item.quantity);
+        const adj = item.adjustment != null && item.adjustment !== 0 ? Number(item.adjustment) : null;
+        const adjStr = adj != null ? (adj > 0 ? ` +${adj.toFixed(2)}` : ` ${adj.toFixed(2)}`) : '';
         return `<div class="new-expense-item-row" onclick="editNewExpenseItem(${i})">
             <span class="new-expense-item-name">${esc(item.itemName)}</span>
-            <span class="new-expense-item-detail">${qtyStr} × ${item.unitPrice.toFixed(2)} = ${total}</span>
+            <span class="new-expense-item-detail">${qtyStr} × ${item.unitPrice.toFixed(2)}${adjStr} = ${total}</span>
         </div>`;
     }).join('');
 
     // Auto-compute Amount from item totals
-    const itemsTotal = window._newExpenseItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const itemsTotal = window._newExpenseItems.reduce((sum, item) => {
+        const total = item.totalPrice != null ? Number(item.totalPrice) : item.quantity * item.unitPrice + (item.adjustment || 0);
+        return sum + total;
+    }, 0);
     const amountField = document.getElementById('mAmount');
     if (amountField) amountField.value = itemsTotal.toFixed(2);
 }

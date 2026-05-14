@@ -2,7 +2,34 @@
    Expense Tracker - Expense Detail & Receipt View
    ============================================ */
 
+// Auto-refresh polling handle
+let _expenseDetailPollTimer = null;
+
+function _stopExpenseDetailPolling() {
+    if (_expenseDetailPollTimer) {
+        clearInterval(_expenseDetailPollTimer);
+        _expenseDetailPollTimer = null;
+    }
+}
+
+function _startExpenseDetailPolling(app, id) {
+    _stopExpenseDetailPolling();
+    _expenseDetailPollTimer = setInterval(async () => {
+        try {
+            const data = await api(`/api/expenses/${id}`, { noAuthRedirect: true });
+            const status = data && data.expense && data.expense.status;
+            if (status && status !== 'PROCESSING') {
+                _stopExpenseDetailPolling();
+                renderExpenseDetail(app, id);
+            }
+        } catch (e) {
+            // ignore polling errors
+        }
+    }, 5000);
+}
+
 async function renderExpenseDetail(app, id) {
+    _stopExpenseDetailPolling();
     const data = await api(`/api/expenses/${id}`, { noAuthRedirect: true });
     if (!data || !data.expense) {
         app.innerHTML = `<div class="container"><div class="card" style="text-align:center; padding:2rem;">
@@ -62,7 +89,7 @@ async function renderExpenseDetail(app, id) {
                 </div>
                 <div style="text-align:center; padding:2rem 1rem;">
                     <i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--primary)"></i>
-                    <p style="margin-top:1rem; color:var(--text-light)">Processing receipt...<br>This may take 2–3 minutes.</p>
+                    <p style="margin-top:1rem; color:var(--text-light)">Processing receipt...<br>This may take less than a minute.</p>
                     <div style="display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap; margin-top:1rem;">
                         <button class="btn btn-primary btn-sm" onclick="renderExpenseDetail(document.getElementById('app'),'${e.urlId}')">
                             <i class="fa-solid fa-rotate"></i> Refresh
@@ -92,13 +119,14 @@ async function renderExpenseDetail(app, id) {
         html += '</div>';
         app.innerHTML = html;
         initReceiptZoom();
+        _startExpenseDetailPolling(app, id);
         return;
     }
 
     if (isProcessing) {
         html += `<div class="card" style="text-align:center; padding:3rem">
             <i class="fa-solid fa-spinner fa-spin" style="font-size:3rem; color:var(--primary)"></i>
-            <p style="margin-top:1rem; color:var(--text-light)">Processing receipt... This may take 2-3 minutes.</p>
+            <p style="margin-top:1rem; color:var(--text-light)">Processing receipt... This may take less than a minute.</p>
             <div style="display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap; margin-top:1rem;">
                 <button class="btn btn-primary" onclick="renderExpenseDetail(document.getElementById('app'),'${e.urlId}')">
                     <i class="fa-solid fa-rotate"></i> Refresh
@@ -109,6 +137,7 @@ async function renderExpenseDetail(app, id) {
             </div>
         </div></div>`;
         app.innerHTML = html;
+        _startExpenseDetailPolling(app, id);
         return;
     }
 
@@ -414,16 +443,20 @@ function renderReceiptView(e, items, store, id, isOwner) {
     if (activeItems.length > 0) {
         activeItems.forEach(i => {
             const qty = Number(i.quantity);
-            const qtyStr = qty % 1 === 0 ? qty.toFixed(0) : qty.toFixed(2);
+            const qtyStr = formatQty(qty);
             const unitPrice = Number(i.unitPrice).toFixed(2);
             const itemTotal = i.totalPrice != null ? Number(i.totalPrice).toFixed(2) : '\u2014';
+            const adj = i.adjustment != null ? Number(i.adjustment) : 0;
+            const hasAdj = adj !== 0;
+            const adjStr = adj > 0 ? `+${adj.toFixed(2)}` : adj.toFixed(2);
             const itemClick = isOwner
-                ? `onclick="openItemDialog('${id}','${i.id}','${esc(i.itemName).replace(/'/g, "\\'")}',${i.quantity},${i.unitPrice},${i.totalPrice != null ? i.totalPrice : 0})" title="Click to edit item"`
+                ? `onclick="openItemDialog('${id}','${i.id}','${esc(i.itemName).replace(/'/g, "\\'")}',${i.quantity},${i.unitPrice},${i.adjustment != null ? i.adjustment : 0})" title="Click to edit item"`
                 : '';
             html += `<div class="receipt-item-row${isOwner ? ' receipt-clickable' : ''}" ${itemClick}>
                 <div class="receipt-item-name">${esc(i.itemName)}</div>
                 <div class="receipt-item-detail">
                     <span class="receipt-item-qty">${qtyStr} \u00d7 ${unitPrice}</span>
+                    ${hasAdj ? `<span class="receipt-item-adjustment">${adjStr}</span>` : ''}
                     <span class="receipt-item-total">${itemTotal}</span>
                 </div>
             </div>`;
