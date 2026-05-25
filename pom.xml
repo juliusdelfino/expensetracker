@@ -114,6 +114,12 @@
             <artifactId>jackson-dataformat-yaml</artifactId>
         </dependency>
 
+        <!-- Validation -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
         <!-- JPA + PostgreSQL -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -230,7 +236,6 @@
                 <configuration>
                     <excludes>
                         <exclude>**/*.yml</exclude>
-                        <exclude>**/*.json</exclude>
                     </excludes>
                 </configuration>
             </plugin>

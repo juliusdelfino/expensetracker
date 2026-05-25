@@ -3,6 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1976d2">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Expenses">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/images/logo-large.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="./images/logo192.png" />
     <title>Expense Tracker</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,7 +32,7 @@
 <!-- Navbar -->
 <nav class="navbar" id="navbar" style="display:none;">
     <a href="#/dashboard" class="navbar-brand" onclick="if(isMobile()){ goToDashboard(); return false; }">
-        <i class="fa-solid fa-wallet"></i> Expense Tracker
+        <img src="/images/logo192.png" alt="logo" style="width:28px;height:28px;border-radius:6px;"> Expense Tracker
     </a>
     <div class="nav-inline" id="navInline">
         <a href="#/dashboard" onclick="if(isMobile()){ goToDashboard(); return false; }"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
@@ -88,6 +95,18 @@
 
 <div class="toast-container" id="toasts"></div>
 
+<!-- Footer (non-fixed, shown at bottom of page content) -->
+<footer class="site-footer" id="siteFooter">
+    <div class="footer-content">
+        <div class="footer-links">
+            <a href="https://github.com/jdelfino/expensetracker/wiki" target="_blank"><i class="fa-solid fa-book"></i> Wiki</a>
+            <a href="#/terms">Terms of Service</a>
+            <a href="#/privacy">Privacy Policy</a>
+        </div>
+        <div class="footer-copy">&copy; 2026 Expense Tracker. All rights reserved.</div>
+    </div>
+</footer>
+
 <!-- Split JS files by feature -->
 <script src="/js/utils.js"></script>
 <script src="/js/router.js"></script>
@@ -100,5 +119,13 @@
 <script src="/js/expense-new.js"></script>
 <script src="/js/expense-detail.js"></script>
 <script src="/js/expense-dialogs.js"></script>
+<script>
+// Register service worker for PWA
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+        console.log('SW registered:', reg.scope);
+    }).catch(err => console.warn('SW registration failed:', err));
+}
+</script>
 </body>
 </html>

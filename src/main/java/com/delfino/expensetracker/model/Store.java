@@ -5,6 +5,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.Size;
 
 
 
@@ -17,10 +18,20 @@ public class Store {
 
     private long userId;
     private String sourceId;
+
+    @Size(max = 100)
     private String name;
+
+    @Size(max = 200)
     private String address;
+
+    @Size(max = 100)
     private String city;
+
+    @Size(max = 2)
     private String country;
+
+    @Size(max = 20)
     private String postalCode;
     private Double latitude;
     private Double longitude;

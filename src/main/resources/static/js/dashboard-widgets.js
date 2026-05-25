@@ -6,6 +6,10 @@
 // ============================================
 // HERO CARD
 // ============================================
+
+// Global additional filters state
+let _dashFilters = {};
+
 function renderHeroCard(elementId, data, selectId, mode) {
     const baseCur = currentUser?.baseCurrency || 'USD';
     const heroCard = document.getElementById(elementId);
@@ -22,17 +26,23 @@ function renderHeroCard(elementId, data, selectId, mode) {
     heroCard.innerHTML = `
         <div class="hero-header-row">
             <div class="hero-title"><i class="fa-solid fa-chart-simple"></i> Summary</div>
-            <select class="hero-period-select interactive-element" id="${selectId}"
-                    onchange="onHeroPeriodChange('${elementId}', '${selectId}', '${mode}')">
-                <optgroup label="Monthly">
-                    ${monthKeys.map(m => `<option value="month:${m}" ${m === defaultMonth ? 'selected' : ''}>${formatYearMonth(m)}</option>`).join('')}
-                </optgroup>
-                <optgroup label="Annual">
-                    ${yearKeys.map(y => `<option value="year:${y}">${y}</option>`).join('')}
-                </optgroup>
-                <option value="all">All Time</option>
-            </select>
+            <div class="hero-controls">
+                <select class="hero-period-select interactive-element" id="${selectId}"
+                        onchange="onHeroPeriodChange('${elementId}', '${selectId}', '${mode}')">
+                    <optgroup label="Monthly">
+                        ${monthKeys.map(m => `<option value="month:${m}" ${m === defaultMonth ? 'selected' : ''}>${formatYearMonth(m)}</option>`).join('')}
+                    </optgroup>
+                    <optgroup label="Annual">
+                        ${yearKeys.map(y => `<option value="year:${y}">${y}</option>`).join('')}
+                    </optgroup>
+                    <option value="all">All Time</option>
+                </select>
+                <button class="btn btn-outline btn-sm" onclick="openDashFilterDialog('${selectId}','${mode}')" title="More filters">
+                    <i class="fa-solid fa-filter"></i>
+                </button>
+            </div>
         </div>
+        <div class="hero-filter-badges" id="${elementId}Badges">${renderFilterBadges(mode)}</div>
         <div class="hero-amount" id="${elementId}Amount">${defaultAmt.toFixed(2)} <span class="hero-currency">${baseCur}</span></div>
         <div class="hero-stats" id="${elementId}Stats">
             <div class="hero-stat"><span class="hero-stat-value" id="${elementId}TxCount">${periodInfo.txCount}</span><span class="hero-stat-label">transactions</span></div>
@@ -65,9 +75,10 @@ function onHeroPeriodChange(elementId, selectId, mode) {
     const sel = document.getElementById(selectId);
     if (!sel) return;
     const val = sel.value;
-    const data = heroCard._dashData;
     const baseCur = currentUser?.baseCurrency || 'USD';
 
+    // Update amount from base (unfiltered) data optimistically while the filtered call loads
+    const data = heroCard._dashData;
     let amount = 0;
     if (val === 'all') {
         amount = Object.values(data.monthlyTotals || {}).reduce((a, b) => a + Number(b), 0);
@@ -85,9 +96,40 @@ function onHeroPeriodChange(elementId, selectId, mode) {
     const catEl = document.getElementById(elementId + 'TopCat');
     if (catEl) catEl.textContent = periodInfo.topCategory;
 
-    const params = buildParamsFromPeriod(val);
+    const params = buildFullFilterParams(val);
     if (mode === 'home') reloadHomeWithFilter(params);
     else reloadDesktopWithFilter(params);
+}
+
+/**
+ * After a filtered dashboard API call, update the hero card amount and stats
+ * using the filtered data so additional filters (category, country, etc.) are reflected.
+ */
+function updateHeroFromFilteredData(elementId, selectId, filteredData) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const val = sel.value;
+    const baseCur = currentUser?.baseCurrency || 'USD';
+
+    // Derive amount from the filtered totals
+    let amount = 0;
+    if (val === 'all') {
+        amount = Object.values(filteredData.monthlyTotals || {}).reduce((a, b) => a + Number(b), 0);
+    } else if (val.startsWith('month:')) {
+        amount = Number(filteredData.monthlyTotals?.[val.split(':')[1]] || 0);
+    } else if (val.startsWith('year:')) {
+        amount = Number(filteredData.annualTotals?.[val.split(':')[1]] || 0);
+    }
+    const amtEl = document.getElementById(elementId + 'Amount');
+    if (amtEl) amtEl.innerHTML = `${amount.toFixed(2)} <span class="hero-currency">${baseCur}</span>`;
+
+    // Stats from filtered data
+    const txCount = filteredData.totalExpenses ?? '\u2014';
+    const topCategory = getTopCategory(filteredData.categoryTotals);
+    const txEl = document.getElementById(elementId + 'TxCount');
+    if (txEl) txEl.textContent = txCount;
+    const catEl = document.getElementById(elementId + 'TopCat');
+    if (catEl) catEl.textContent = topCategory;
 }
 
 function buildParamsFromPeriod(val) {
@@ -179,31 +221,6 @@ function createTimelineChart(canvasId, chartKey, data) {
                 const label = timelineLabels[idx];
                 const value = timelineValues[idx];
                 const navUrl = label ? '#/expenses?startDate=' + label + '&endDate=' + label : null;
-                updateChartStatusBar(canvasId + 'Status', label, value, navUrl);
-            }
-        }
-    });
-}
-
-function createCategoryChart(canvasId, chartKey, data) {
-    const cc = document.getElementById(canvasId);
-    if (!cc) return;
-    if (chartInstances[chartKey]) { chartInstances[chartKey].destroy(); delete chartInstances[chartKey]; }
-    const { cardBg } = getChartThemeColors();
-    const catLabels = Object.keys(data.categoryTotals || {});
-    const catValues = Object.values(data.categoryTotals || {});
-    chartInstances[chartKey] = new Chart(cc, {
-        type: 'doughnut',
-        data: { labels: catLabels,
-            datasets: [{ data: catValues, backgroundColor: CHART_COLORS, borderColor: cardBg, borderWidth: 1 }] },
-        options: { responsive: true, maintainAspectRatio: false,
-            plugins: { ...chartPluginOptions() },
-            onClick: (evt, elements) => {
-                if (!elements.length) return;
-                const idx = elements[0].index;
-                const label = catLabels[idx];
-                const value = catValues[idx];
-                const navUrl = label ? '#/expenses?category=' + encodeURIComponent(label) : null;
                 updateChartStatusBar(canvasId + 'Status', label, value, navUrl);
             }
         }
@@ -518,4 +535,250 @@ function getTopCategory(categoryTotals) {
     const top = Object.entries(categoryTotals || {}).sort((a, b) => Number(b[1]) - Number(a[1]))[0];
     return top ? top[0] : '-';
 }
+
+// Track preferred chart view per canvas
+const _categoryChartView = {};
+
+function switchCategoryView(canvasId, chartKey, viewType, btn) {
+    _categoryChartView[canvasId] = viewType;
+    const toggle = btn.parentElement;
+    toggle.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    // Use the filtered data (not unfiltered) so date range is respected
+    const data = canvasId.startsWith('home') ? (_filteredHomeData || _homeData) : (_filteredDesktopData || _desktopData);
+    if (data) createCategoryChart(canvasId, chartKey, data);
+}
+
+function createCategoryChart(canvasId, chartKey, data) {
+    const cc = document.getElementById(canvasId);
+    if (!cc) return;
+    if (chartInstances[chartKey]) { chartInstances[chartKey].destroy(); delete chartInstances[chartKey]; }
+    const { cardBg } = getChartThemeColors();
+    const catLabels = Object.keys(data.categoryTotals || {});
+    const catValues = Object.values(data.categoryTotals || {});
+    const viewType = _categoryChartView[canvasId] || 'pie';
+
+    // Sync toggle button active state to match the actual viewType being rendered
+    const toggleId = canvasId.startsWith('home') ? 'homeCategoryToggle' : 'deskCategoryToggle';
+    const toggleEl = document.getElementById(toggleId);
+    if (toggleEl) {
+        toggleEl.querySelectorAll('button').forEach(b => {
+            const bView = b.getAttribute('onclick')?.includes("'pie'") ? 'pie' : 'bar';
+            b.classList.toggle('active', bView === viewType);
+        });
+    }
+
+    if (viewType === 'bar') {
+        const { textColor, gridColor } = getChartThemeColors();
+        chartInstances[chartKey] = new Chart(cc, {
+            type: 'bar',
+            data: { labels: catLabels,
+                datasets: [{ data: catValues, backgroundColor: CHART_COLORS, borderRadius: 4 }] },
+            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {}
+                },
+                scales: {
+                    x: { beginAtZero: true, ticks: { color: textColor }, grid: { color: gridColor } },
+                    y: { ticks: { color: textColor }, grid: { color: gridColor } }
+                },
+                onClick: (evt, elements) => {
+                    if (!elements.length) return;
+                    const idx = elements[0].index;
+                    const label = catLabels[idx];
+                    const value = catValues[idx];
+                    const navUrl = label ? '#/expenses?category=' + encodeURIComponent(label) : null;
+                    updateChartStatusBar(canvasId + 'Status', label, value, navUrl);
+                }
+            }
+        });
+    } else {
+        chartInstances[chartKey] = new Chart(cc, {
+            type: 'doughnut',
+            data: { labels: catLabels,
+                datasets: [{ data: catValues, backgroundColor: CHART_COLORS, borderColor: cardBg, borderWidth: 1 }] },
+            options: { responsive: true, maintainAspectRatio: false,
+                plugins: { ...chartPluginOptions() },
+                onClick: (evt, elements) => {
+                    if (!elements.length) return;
+                    const idx = elements[0].index;
+                    const label = catLabels[idx];
+                    const value = catValues[idx];
+                    const navUrl = label ? '#/expenses?category=' + encodeURIComponent(label) : null;
+                    updateChartStatusBar(canvasId + 'Status', label, value, navUrl);
+                }
+            }
+        });
+    }
+}
+
+// ============================================
+// DASHBOARD FILTER DIALOG
+// ============================================
+function renderFilterBadges(mode) {
+    const f = _dashFilters;
+    const badges = [];
+    const addBadges = (key, label, val) => {
+        const arr = Array.isArray(val) ? val : (val ? [val] : []);
+        arr.forEach(v => badges.push({ key, label, value: v }));
+    };
+    addBadges('category', 'Category', f.category);
+    addBadges('country', 'Country', f.country);
+    addBadges('storeName', 'Store', f.storeName);
+    if (f.search) badges.push({ key: 'search', label: 'Keyword', value: f.search });
+    if (badges.length === 0) return '';
+    return badges.map(b =>
+        `<span class="filter-badge">${b.label}: <strong>${esc(b.value)}</strong>
+            <button class="filter-badge-x" onclick="removeDashFilterValue('${b.key}','${esc(b.value)}','${mode}')">&times;</button>
+        </span>`
+    ).join('');
+}
+
+function removeDashFilterValue(key, value, mode) {
+    if (key === 'search') {
+        delete _dashFilters[key];
+    } else {
+        const arr = Array.isArray(_dashFilters[key]) ? _dashFilters[key] : (_dashFilters[key] ? [_dashFilters[key]] : []);
+        const updated = arr.filter(v => v !== value);
+        if (updated.length === 0) delete _dashFilters[key];
+        else _dashFilters[key] = updated;
+    }
+    applyDashFilters(mode);
+}
+
+function _checkboxList(id, items, selected) {
+    if (!items || items.length === 0)
+        return `<div class="filter-checkbox-list"><div class="filter-checkbox-empty">No options available</div></div>`;
+    const rows = items.map(v =>
+        `<label class="filter-checkbox-item">
+            <input type="checkbox" name="${id}" value="${esc(v)}" ${selected.includes(v) ? 'checked' : ''}>
+            ${esc(v)}
+        </label>`
+    ).join('');
+    return `<div class="filter-checkbox-list" id="${id}List">${rows}</div>`;
+}
+
+function _checkboxListCountries(id, codes, selected) {
+    if (!codes || codes.length === 0)
+        return `<div class="filter-checkbox-list"><div class="filter-checkbox-empty">No options available</div></div>`;
+    const rows = codes.map(code => {
+        const label = getCountryName(code) || code;
+        return `<label class="filter-checkbox-item">
+            <input type="checkbox" name="${id}" value="${esc(code)}" ${selected.includes(code) ? 'checked' : ''}>
+            ${countryCodeToFlag(code)} ${esc(label)}
+        </label>`;
+    }).join('');
+    return `<div class="filter-checkbox-list" id="${id}List">${rows}</div>`;
+}
+
+function openDashFilterDialog(selectId, mode) {
+    const existing = document.getElementById('dashFilterDialog');
+    if (existing) existing.remove();
+
+    const cats = Array.isArray(window._allExpenseCategories) ? window._allExpenseCategories : Array.from(window._allExpenseCategories || []);
+    const countries = window._allDashCountries || [];
+    const storeNames = window._allDashStoreNames || [];
+    const f = _dashFilters;
+
+    const selCat = Array.isArray(f.category) ? f.category : (f.category ? [f.category] : []);
+    const selCountry = Array.isArray(f.country) ? f.country : (f.country ? [f.country] : []);
+    const selStore = Array.isArray(f.storeName) ? f.storeName : (f.storeName ? [f.storeName] : []);
+
+    const dialog = document.createElement('div');
+    dialog.id = 'dashFilterDialog';
+    dialog.className = 'modal-overlay';
+    dialog.innerHTML = `
+        <div class="modal-content" style="max-width:420px; max-height:80vh; display:flex; flex-direction:column; padding:0; overflow:hidden;">
+            <div class="modal-header" style="padding:1.25rem 1.5rem 1rem; flex-shrink:0;">
+                <h3><i class="fa-solid fa-filter"></i> More Filters</h3>
+                <button class="modal-close" onclick="closeDashFilterDialog()">&times;</button>
+            </div>
+            <div style="overflow-y:auto; flex:1; min-height:0; padding:0 1.5rem;">
+                <div class="form-group">
+                    <label>Category</label>
+                    ${_checkboxList('dfCategory', cats, selCat)}
+                </div>
+                <div class="form-group">
+                    <label>Country</label>
+                    ${_checkboxListCountries('dfCountry', countries, selCountry)}
+                </div>
+                <div class="form-group">
+                    <label>Store</label>
+                    ${_checkboxList('dfStoreName', storeNames, selStore)}
+                </div>
+                <div class="form-group">
+                    <label>Keyword (tags / notes)</label>
+                    <input type="text" class="form-control" id="dfSearch" maxlength="100" value="${esc(f.search || '')}" placeholder="e.g. lunch, travel">
+                </div>
+            </div>
+            <div style="display:flex; gap:0.5rem; padding:1rem 1.5rem; flex-shrink:0; border-top:1px solid var(--border-color); background:var(--bg-card);">
+                <button class="btn btn-primary" onclick="saveDashFilters('${mode}')"><i class="fa-solid fa-check"></i> Apply</button>
+                <button class="btn btn-outline" onclick="clearDashFilters('${mode}')"><i class="fa-solid fa-eraser"></i> Clear</button>
+                <button class="btn btn-outline" onclick="closeDashFilterDialog()">Cancel</button>
+            </div>
+        </div>`;
+    dialog.addEventListener('click', e => { if (e.target === dialog) closeDashFilterDialog(); });
+    document.body.appendChild(dialog);
+}
+
+function closeDashFilterDialog() {
+    const d = document.getElementById('dashFilterDialog');
+    if (d) d.remove();
+}
+
+function _readCheckboxes(name) {
+    return Array.from(document.querySelectorAll(`input[name="${name}"]:checked`)).map(cb => cb.value);
+}
+
+function saveDashFilters(mode) {
+    const cats = _readCheckboxes('dfCategory');
+    const countries = _readCheckboxes('dfCountry');
+    const stores = _readCheckboxes('dfStoreName');
+    const search = document.getElementById('dfSearch')?.value?.trim() || '';
+
+    if (cats.length) _dashFilters.category = cats; else delete _dashFilters.category;
+    if (countries.length) _dashFilters.country = countries; else delete _dashFilters.country;
+    if (stores.length) _dashFilters.storeName = stores; else delete _dashFilters.storeName;
+    if (search) _dashFilters.search = search; else delete _dashFilters.search;
+
+    closeDashFilterDialog();
+    applyDashFilters(mode);
+}
+
+function clearDashFilters(mode) {
+    _dashFilters = {};
+    closeDashFilterDialog();
+    applyDashFilters(mode);
+}
+
+function applyDashFilters(mode) {
+    const selectId = mode === 'home' ? 'homeHeroPeriod' : 'deskHeroPeriod';
+    const sel = document.getElementById(selectId);
+    const periodVal = sel ? sel.value : 'all';
+    const params = buildFullFilterParams(periodVal);
+    if (mode === 'home') {
+        reloadHomeWithFilter(params);
+        const badgeEl = document.getElementById('heroCardBadges');
+        if (badgeEl) badgeEl.innerHTML = renderFilterBadges(mode);
+    } else {
+        reloadDesktopWithFilter(params);
+        const badgeEl = document.getElementById('desktopHeroCardBadges');
+        if (badgeEl) badgeEl.innerHTML = renderFilterBadges(mode);
+    }
+}
+
+function buildFullFilterParams(periodVal) {
+    const params = new URLSearchParams(buildParamsFromPeriod(periodVal));
+    const appendArr = (key, val) => {
+        const arr = Array.isArray(val) ? val : (val ? [val] : []);
+        arr.forEach(v => params.append(key, v));
+    };
+    appendArr('category', _dashFilters.category);
+    appendArr('country', _dashFilters.country);
+    appendArr('storeName', _dashFilters.storeName);
+    if (_dashFilters.search) params.set('search', _dashFilters.search);
+    return params.toString();
+}
+
 

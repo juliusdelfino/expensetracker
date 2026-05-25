@@ -56,7 +56,12 @@ async function renderExpenseDetail(app, id) {
         window._allExpenseCategories = (await api('/api/expenses/categories')) || [];
     }
 
-    let html = `<div class="container">
+    let html = '';
+    // Show branded header for shared (non-owner/non-logged-in) views
+    if (!currentUser) {
+        html += `<div class="shared-header"><a href="/" class="brand"><img src="/images/logo192.png" alt="logo"> Expense Tracker</a></div>`;
+    }
+    html += `<div class="container">
         <div class="action-bar">
             <div class="action-bar-left">
                 <h2 style="color:var(--primary-dark)">Expense Detail</h2>
@@ -414,6 +419,15 @@ function renderReceiptView(e, items, store, id, isOwner) {
     const storeClick = isOwner ? `onclick="openChangeStoreDialog('${id}')" title="Click to edit store details"` : '';
     html += `<div class="receipt-store-section${isOwner ? ' receipt-clickable' : ''}" ${storeClick}>`;
     if (storeName) {
+        // Logo: show only if the store has a website and a logo.dev token is configured
+        if (website && appConfig.logoDevToken) {
+            const domain = getRootDomain(website);
+            if (domain) {
+                html += `<img id="storeFavicon" src="https://img.logo.dev/${encodeURIComponent(domain)}?token=${encodeURIComponent(appConfig.logoDevToken)}"
+                    alt="" class="receipt-store-favicon" style="display:none;"
+                    onload="checkFaviconDefault(this)" onerror="this.style.display='none'">`;
+            }
+        }
         html += `<div class="receipt-store-name">${esc(storeName)}</div>`;
         if (addressStr) html += `<div class="receipt-store-address">${esc(addressStr)}</div>`;
         if (phone || website) {
@@ -512,7 +526,7 @@ function expenseForm(e, id, isOwner = true) {
                 <input type="datetime-local" class="form-control detail-datetime" id="eDate" value="${e.transactionDatetime ? e.transactionDatetime.substring(0,16) : ''}" ${ro}>
             </div>
             <div class="form-group"><label>Category</label>
-                <input type="text" class="form-control" id="eCategory" value="${esc(e.category)}" list="eCategoryList" autocomplete="off" ${ro}>
+                <input type="text" class="form-control" id="eCategory" maxlength="50" value="${esc(e.category)}" list="eCategoryList" autocomplete="off" ${ro}>
                 <datalist id="eCategoryList">
                     ${allCats.map(c => `<option value="${esc(c)}">`).join('')}
                 </datalist>
@@ -520,10 +534,10 @@ function expenseForm(e, id, isOwner = true) {
         </div>
         <div class="form-row detail-amount-row">
             <div class="form-group"><label>Amount</label>
-                <input type="number" step="0.01" class="form-control" id="eAmount" value="${e.amount||''}" ${ro}>
+                <input type="number" step="0.01" min="0" max="9999999999" class="form-control" id="eAmount" value="${e.amount||''}" ${ro}>
             </div>
             <div class="form-group"><label>Currency</label>
-                <input type="text" class="form-control" id="eCurrency" value="${esc(e.currency)}" list="eCurrencyList" autocomplete="off" ${ro}>
+                <input type="text" class="form-control" id="eCurrency" maxlength="3" value="${esc(e.currency)}" list="eCurrencyList" autocomplete="off" ${ro}>
                 <datalist id="eCurrencyList">
                     <option value="USD"></option><option value="EUR"></option>
                     <option value="GBP"></option><option value="SGD"></option>
@@ -532,12 +546,12 @@ function expenseForm(e, id, isOwner = true) {
                 </datalist>
             </div>
             <div class="form-group"><label>Exchange Rate</label>
-                <input type="number" step="0.000001" class="form-control" id="eExRate" value="${e.exchangeRate||''}" placeholder="Auto-fetched" ${ro}>
+                <input type="number" step="0.000001" min="0" max="999999" class="form-control" id="eExRate" value="${e.exchangeRate||''}" placeholder="Auto-fetched" ${ro}>
             </div>
         </div>
         ${e.amountInBase ? `<p class="amount-secondary" style="margin-bottom:1rem"><i class="fa-solid fa-exchange-alt"></i> ${Number(e.amountInBase).toFixed(2)} ${currentUser?.baseCurrency||''}</p>` : ''}
         <div class="form-group"><label>Receipt Number</label>
-            <input type="text" class="form-control" id="eReceipt" value="${esc(e.receiptNumber)}" ${ro}>
+            <input type="text" class="form-control" id="eReceipt" maxlength="50" value="${esc(e.receiptNumber)}" ${ro}>
         </div>
         <div class="form-group"><label>Tags</label>
             <div class="tags-container" id="eTagsContainer">
@@ -545,7 +559,7 @@ function expenseForm(e, id, isOwner = true) {
             </div>
         </div>
         <div class="form-group"><label>Notes</label>
-            <textarea class="form-control" id="eNotes" rows="2" ${ro}>${esc(e.notes)}</textarea>
+            <textarea class="form-control" id="eNotes" rows="2" maxlength="500" ${ro}>${esc(e.notes)}</textarea>
         </div>
         ${isOwner ? `<button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Save Changes</button>` : ''}
     </form>`;

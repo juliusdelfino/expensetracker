@@ -1,0 +1,44 @@
+{
+  "type": "function",
+  "function": {
+    "name": "submit_receipt",
+    "description": "Submit the parsed receipt data. The field 'amount' MUST equal the sum of (item.quantity * unitPrice + item.adjustment) across all items.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "transactionDatetime": { "type": "string", "description": "ISO 8601 datetime" },
+        "amount": { "type": "number", "description": "Total receipt amount. Must equal sum of (quantity * unitPrice + adjustment) for every item." },
+        "currency": { "type": "string" },
+        "receiptNumber": { "type": "string" },
+        "category": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "itemName": { "type": "string" },
+              "quantity": { "type": "number" },
+              "unitPrice": { "type": "number" },
+              "adjustment": { "type": "number", "description": "Discount (negative) or surcharge (positive) on this line; 0 if none" }
+            },
+            "required": ["itemName", "quantity", "unitPrice", "adjustment"]
+          }
+        },
+        "store": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "address": { "type": "string" },
+            "city": { "type": "string" },
+            "country": { "type": "string" },
+            "postalCode": { "type": "string" },
+            "phoneNumber": { "type": "string" },
+            "website": { "type": "string" }
+          }
+        }
+      },
+      "required": ["amount", "currency", "items"]
+    }
+  }
+}
+

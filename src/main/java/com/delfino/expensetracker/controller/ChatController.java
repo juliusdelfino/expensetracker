@@ -9,7 +9,9 @@ import com.delfino.expensetracker.model.ChatMessage;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.service.ChatService;
 import jakarta.servlet.http.HttpSession;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -17,6 +19,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/chat")
+@Validated
 public class ChatController {
 
     private final ChatService chatService;
@@ -28,7 +31,7 @@ public class ChatController {
     }
 
     @PostMapping
-    public ResponseEntity<?> sendMessage(@RequestBody ChatMessageRequest body, HttpSession session) {
+    public ResponseEntity<?> sendMessage(@RequestBody @Valid ChatMessageRequest body, HttpSession session) {
         Long userId = getUserId(session);
         if (userId == null) return ResponseEntity.status(401).body(new ErrorResponse("Not authenticated"));
 

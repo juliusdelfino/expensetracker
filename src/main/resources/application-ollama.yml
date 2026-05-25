@@ -10,13 +10,14 @@ spring:
           model: qwen3.5:cloud
           temperature: 0.3
     openai:
+      api-key: ${LLM_API_KEY:}
       chat:
         enabled: false
 
 ocr:
   api:
-    url: https://gpt.jdelfino.com/ollama/api/generate
-    model: qwen3.5:cloud
+    url: http://ludwig:11434/api/chat
+    model: gemma4:latest
     format: ollama
 
 chatbot:

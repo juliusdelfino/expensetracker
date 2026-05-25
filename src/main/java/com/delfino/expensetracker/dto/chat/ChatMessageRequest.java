@@ -1,3 +1,5 @@
 package com.delfino.expensetracker.dto.chat;
 
-public record ChatMessageRequest(String message) {}
+import jakarta.validation.constraints.Size;
+
+public record ChatMessageRequest(@Size(max = 500) String message) {}

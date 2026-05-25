@@ -7,11 +7,14 @@ function renderLogin(app) {
     app.innerHTML = `
     <div class="auth-container">
         <div class="card">
-            <h2 class="card-title"><i class="fa-solid fa-wallet"></i> Expense Tracker</h2>
+            <div style="text-align:center; margin-bottom:1rem;">
+                <img src="/images/logo-large.png" alt="Expense Tracker" style="width:80px;height:80px;border-radius:16px;">
+            </div>
+            <h2 class="card-title" style="text-align:center;">Expense Tracker</h2>
             <form id="loginForm">
                 <div class="form-group">
                     <label><i class="fa-solid fa-user"></i> Username</label>
-                    <input type="text" class="form-control" id="loginUsername" required>
+                    <input type="text" class="form-control" id="loginUsername" maxlength="100" required>
                 </div>
                 <div class="form-group">
                     <label><i class="fa-solid fa-lock"></i> Password</label>
@@ -44,7 +47,7 @@ function renderRegister(app) {
             <form id="registerForm">
                 <div class="form-group">
                     <label>Username</label>
-                    <input type="text" class="form-control" id="regUsername" required>
+                    <input type="text" class="form-control" id="regUsername" maxlength="100" required>
                 </div>
                 <div class="form-group">
                     <label>Password</label>
@@ -53,16 +56,16 @@ function renderRegister(app) {
                 <div class="form-row">
                     <div class="form-group">
                         <label>Email</label>
-                        <input type="email" class="form-control" id="regEmail">
+                        <input type="email" class="form-control" id="regEmail" maxlength="100">
                     </div>
                     <div class="form-group">
                         <label>Phone</label>
-                        <input type="text" class="form-control" id="regPhone" placeholder="+65...">
+                        <input type="text" class="form-control" id="regPhone" maxlength="30" placeholder="+65...">
                     </div>
                 </div>
                 <div class="form-group">
                     <label>Base Currency</label>
-                    <input type="text" class="form-control" id="regCurrency" list="regCurrencyList" placeholder="e.g. USD">
+                    <input type="text" class="form-control" id="regCurrency" maxlength="3" list="regCurrencyList" placeholder="e.g. USD">
                     <datalist id="regCurrencyList">
                         <option value="USD"></option><option value="EUR"></option>
                         <option value="GBP"></option><option value="SGD"></option>

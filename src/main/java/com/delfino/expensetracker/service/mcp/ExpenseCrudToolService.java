@@ -201,6 +201,36 @@ public class ExpenseCrudToolService {
                 + ", unit: " + saved.getUnitPrice() + ", total: " + saved.getTotalPrice() + ")";
     }
 
+    @Tool(description = "Link an existing store to an expense, or update the expense's store association. " +
+            "Use this when the user wants to set or change which store an expense is associated with. " +
+            "You can use findRecentStoreBranch first to find the store ID.")
+    public String linkStoreToExpense(
+            @ToolParam(description = "The ID of the expense to update.") String expenseId,
+            @ToolParam(description = "The ID of the store to link to the expense.") String storeId) {
+
+        log.info("Tool call: linkStoreToExpense(expenseId={}, storeId={}, userId={})", expenseId, storeId, userContext.getUserId());
+        long userId = userContext.getUserId();
+
+        try {
+            Expense expense = expenseRepository.findById(Long.valueOf(expenseId)).orElse(null);
+            if (expense == null) return "Expense not found.";
+            if (expense.getUserId() != userId) return "Not authorized to modify this expense.";
+
+            Store store = storeRepository.findById(Long.valueOf(storeId)).orElse(null);
+            if (store == null) return "Store not found.";
+            if (store.getUserId() != userId) return "Not authorized to use this store.";
+
+            expense.setStoreId(store.getId());
+            expense.setUpdatedAt(java.time.LocalDateTime.now());
+            expenseRepository.save(expense);
+
+            return "Store linked successfully. Expense " + expenseId + " is now associated with store '"
+                    + store.getName() + "' (ID: " + store.getId() + ").";
+        } catch (Exception e) {
+            return "Failed to link store: " + e.getMessage();
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────
     // STORE QUERY
     // ─────────────────────────────────────────────────────────────

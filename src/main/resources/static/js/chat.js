@@ -24,7 +24,7 @@ function renderChatPanel(container) {
             </div>
         </div>
         <div class="chat-input-area">
-            <textarea class="chat-input" id="chatInput" placeholder="Type expenses here..." rows="1" onkeydown="chatKeydown(event)"></textarea>
+            <textarea class="chat-input" id="chatInput" placeholder="Type expenses here..." rows="1" maxlength="500" onkeydown="chatKeydown(event)"></textarea>
             <button class="btn btn-primary chat-send-btn" onclick="sendChat()">
                 <i class="fa-solid fa-paper-plane"></i>
             </button>

@@ -9,6 +9,7 @@
 let _changeStoreMap = null;
 let _changeStoreMarker = null;
 let _nominatimTimer = null;
+let _selectedDbStoreId = null; // tracks a DB store selected from the search dropdown
 
 async function openChangeStoreDialog(expenseId) {
     if (!window._expenseIsOwner) return;
@@ -26,11 +27,11 @@ async function openChangeStoreDialog(expenseId) {
                 <button class="btn btn-outline btn-sm" onclick="closeChangeStoreDialog()"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="form-group" style="position:relative; margin-top:0.75rem;">
-                <label>Search address or place</label>
-                <input type="text" class="form-control" id="nominatimSearch" placeholder="e.g. Rivergate Vienna" oninput="debounceNominatim()" autocomplete="off">
+                <label>Search your stores or an address</label>
+                <input type="text" class="form-control" id="nominatimSearch" placeholder="e.g. Starbucks or Rivergate Vienna" oninput="debounceNominatim()" autocomplete="off">
                 <div class="nominatim-results" id="nominatimResults" style="display:none;"></div>
             </div>
-            <p style="font-size:0.78rem; color:var(--text-light); margin-bottom:0.75rem;"><i class="fa-solid fa-circle-info"></i> Search to auto-fill, or edit fields directly.</p>
+            <p style="font-size:0.78rem; color:var(--text-light); margin-bottom:0.75rem;"><i class="fa-solid fa-circle-info"></i> Pick an existing store or search to auto-fill fields.</p>
             <div class="form-group">
                 <label>Name</label>
                 <input type="text" class="form-control" id="csName" value="${esc(store.name || '')}">
@@ -80,6 +81,7 @@ async function openChangeStoreDialog(expenseId) {
         </div>`;
 
     document.body.appendChild(overlay);
+    _selectedDbStoreId = null;
     document.getElementById('nominatimSearch').focus();
     window._nominatimPlaceId = null;
     window._nominatimSnapshot = null;
@@ -120,8 +122,83 @@ function initChangeStoreMap(store) {
 function debounceNominatim() {
     clearTimeout(_nominatimTimer);
     const query = document.getElementById('nominatimSearch')?.value?.trim();
-    if (!query || query.length < 3) { document.getElementById('nominatimResults').style.display = 'none'; return; }
-    _nominatimTimer = setTimeout(() => searchNominatim(query), 1000);
+    const resultsEl = document.getElementById('nominatimResults');
+    if (!query || query.length < 2) { if (resultsEl) resultsEl.style.display = 'none'; return; }
+    _nominatimTimer = setTimeout(() => searchCombined(query), 400);
+}
+
+async function searchCombined(query) {
+    const resultsEl = document.getElementById('nominatimResults');
+    if (!resultsEl) return;
+    resultsEl.style.display = 'block';
+    resultsEl.innerHTML = '<div class="nominatim-loading"><i class="fa-solid fa-spinner fa-spin"></i> Searching...</div>';
+
+    // Fire both searches in parallel
+    const [dbResults, nominatimResults] = await Promise.all([
+        api(`/api/stores/search?q=${encodeURIComponent(query)}`).catch(() => []),
+        fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5`,
+            { headers: { 'Accept-Language': 'en', 'User-Agent': 'ExpenseTracker/1.0' } })
+            .then(r => r.json()).catch(() => [])
+    ]);
+
+    const safeDb = Array.isArray(dbResults) ? dbResults : [];
+    const safeNom = Array.isArray(nominatimResults) ? nominatimResults : [];
+
+    if (safeDb.length === 0 && safeNom.length === 0) {
+        resultsEl.innerHTML = '<div class="nominatim-loading">No results found</div>';
+        return;
+    }
+
+    window._dbStoreResults = safeDb;
+    window._nominatimResults = safeNom;
+
+    let html = '';
+    if (safeDb.length > 0) {
+        html += `<div class="nominatim-section-label"><i class="fa-solid fa-database"></i> Your stores</div>`;
+        html += safeDb.map((s, i) => {
+            const sub = [s.address, s.city, s.country].filter(Boolean).join(', ');
+            return `<div class="nominatim-result-item" onclick="selectDbStore(${i})">
+                <div class="nominatim-result-name">${esc(s.name)}</div>
+                ${sub ? `<div class="nominatim-result-sub">${esc(sub)}</div>` : ''}
+            </div>`;
+        }).join('');
+    }
+    if (safeNom.length > 0) {
+        html += `<div class="nominatim-section-label"><i class="fa-solid fa-map-location-dot"></i> Address search</div>`;
+        html += safeNom.map((r, i) => `
+            <div class="nominatim-result-item" onclick="selectNominatimResult(${i})">
+                <div class="nominatim-result-name">${esc(r.display_name || '')}</div>
+            </div>`).join('');
+    }
+    resultsEl.innerHTML = html;
+}
+
+async function searchDbStores(query) { /* legacy stub — searchCombined handles both now */ }
+
+function selectDbStore(index) {
+    const results = window._dbStoreResults;
+    if (!results || !results[index]) return;
+    const s = results[index];
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+    setVal('csName', s.name);
+    setVal('csAddress', s.address);
+    setVal('csCity', s.city);
+    setVal('csCountry', s.country);
+    setVal('csPostal', s.postalCode);
+    setVal('csPhone', s.phoneNumber);
+    setVal('csWebsite', s.website);
+    setVal('csLat', s.latitude != null ? String(s.latitude) : '');
+    setVal('csLng', s.longitude != null ? String(s.longitude) : '');
+    if (s.latitude && s.longitude && _changeStoreMap && _changeStoreMarker) {
+        _changeStoreMarker.setLatLng([s.latitude, s.longitude]);
+        _changeStoreMap.setView([s.latitude, s.longitude], 16);
+    }
+    document.getElementById('nominatimResults').style.display = 'none';
+    document.getElementById('nominatimSearch').value = s.name || '';
+    window._nominatimPlaceId = null;
+    window._nominatimSnapshot = null;
+    _selectedDbStoreId = s.id; // remember so saveChangeStore can reuse this store directly
+    toast('Store filled from your existing stores', 'success');
 }
 
 async function searchNominatim(query) {
@@ -192,8 +269,11 @@ function selectNominatimResult(index) {
 }
 
 async function saveChangeStore(expenseId, storeId) {
+    // If user picked from DB store list, reuse that store's ID directly
+    const effectiveStoreId = _selectedDbStoreId || storeId || null;
+
     let sourceId = null;
-    if (window._nominatimPlaceId && window._nominatimSnapshot) {
+    if (!_selectedDbStoreId && window._nominatimPlaceId && window._nominatimSnapshot) {
         const snap = window._nominatimSnapshot;
         const currentAddr = document.getElementById('csAddress')?.value || '';
         const currentCity = document.getElementById('csCity')?.value || '';
@@ -206,7 +286,7 @@ async function saveChangeStore(expenseId, storeId) {
     }
 
     const storeData = {
-        id: storeId || null,
+        id: effectiveStoreId || null,
         name: document.getElementById('csName')?.value || '',
         address: document.getElementById('csAddress')?.value || '',
         city: document.getElementById('csCity')?.value || '',

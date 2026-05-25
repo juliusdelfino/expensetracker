@@ -14,7 +14,7 @@ app:
 ocr:
   api:
     api-key: ${LLM_API_KEY:}  # Set via LLM_API_KEY environment variable or override here
-    disable-thinking: true
+    disable-thinking: false
     prompt: >
       Parse this receipt image/PDF and return a JSON object with these exact fields:
       {"transactionDatetime":"ISO 8601 yyyy-MM-ddTHH:mm:ss","amount":0,"currency":"ISO 4217 code",
@@ -22,10 +22,14 @@ ocr:
       "items":[{"itemName":"string","quantity":1.0,"unitPrice":0.0,"adjustment":0.0}],
       "store":{"name":"string","address":"string","city":"string","country":"ISO 3166-1 alpha-2",
       "postalCode":"string","phoneNumber":"string","website":"string"}}
+      Validate amount = sum of [(item.quantity * item.unitPrice) + item.adjustment].
       Return ONLY valid JSON. No markdown fences, no explanation, no extra text.
-      Validate amount = sum of [(item.quantity * item.unitPrice) + item.adjustment]
   batch:
     max-files: 20
+    queue-enabled: true  # true = queued with server-side delays; false = parallel immediate uploads
+
+logo-dev:
+  token: ${LOGO_DEV_TOKEN:}  # Set via LOGO_DEV_TOKEN environment variable
 
 chatbot:
   api:
@@ -49,7 +53,9 @@ chatbot:
       MODE 1 - LOGGING EXPENSES: When the user describes spending (e.g. "lunch 12.50 SGD", "coffee 5 USD"),
       parse them and return a JSON object with these fields:
       {"expenses":[{"transactionDatetime":"ISO 8601 yyyy-MM-ddTHH:mm:ss","amount":0,"currency":"USD",
-      "category":"best guess category","notes":"original user text for this entry","storeId":null}],
+      "category":"best guess category","notes":"original user text for this entry",
+      "items":[{"itemName":"string","quantity":1.0,"unitPrice":0.0,"adjustment":0.0}],
+      "storeId":null}],
       "summary":"A brief friendly summary of what was recorded"}
       If the user says "today" or "yesterday", compute the actual date from {today}.
       Default currency to {currency} if not specified.

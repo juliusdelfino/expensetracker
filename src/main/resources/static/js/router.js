@@ -48,6 +48,8 @@ async function router() {
 
     if (hash === '#/login') { hideMobileUI(); renderLogin(app); return; }
     if (hash === '#/register') { hideMobileUI(); renderRegister(app); return; }
+    if (hash === '#/terms') { hideMobileUI(); document.getElementById('navbar').style.display = 'none'; renderTerms(app); return; }
+    if (hash === '#/privacy') { hideMobileUI(); document.getElementById('navbar').style.display = 'none'; renderPrivacy(app); return; }
 
     // Expense detail pages are publicly accessible — try auth but never force redirect
     if (hash.match(/^#\/expenses\/[a-f0-9-]+$/)) {
@@ -87,7 +89,7 @@ async function router() {
 }
 
 window.addEventListener('hashchange', router);
-window.addEventListener('load', router);
+window.addEventListener('load', () => { loadAppConfig(); router(); });
 window.addEventListener('resize', () => {
     // If switching between mobile/desktop, re-route
     if (isMobile() && !document.getElementById('swipeWrapper').style.display !== 'none' && currentUser) {

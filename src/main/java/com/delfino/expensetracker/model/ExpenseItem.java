@@ -6,6 +6,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 
@@ -18,10 +20,18 @@ public class ExpenseItem {
     private long id;
 
     private long expenseId;
+
+    @Size(max = 100)
     private String itemName;
+
     @Column(precision = 38, scale = 4)
+    @Digits(integer = 4, fraction = 4)
     private BigDecimal quantity;
+
+    @Digits(integer = 10, fraction = 4)
     private BigDecimal unitPrice;
+
+    @Digits(integer = 10, fraction = 5)
     private BigDecimal adjustment;  // extra charge (+) or discount (-) on this line item
     private boolean deleted;
 

@@ -28,6 +28,9 @@
 
 /* Mobile */
 @media (max-width: 899px) {
+    /* Hide the page-level footer on mobile; a copy lives inside the home panel */
+    #siteFooter { display: none !important; }
+    .mobile-panel-footer { margin-top: 0; }
     .container { padding: 1rem; }
     .dashboard-grid { grid-template-columns: 1fr; }
     .discovery-section { grid-template-columns: 1fr; }

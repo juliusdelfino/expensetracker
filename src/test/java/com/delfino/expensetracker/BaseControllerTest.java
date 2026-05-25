@@ -57,7 +57,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <ul>
  *   <li>Frankfurter currency API  → {@code GET /currencies} and {@code GET /{date}?from=&to=}</li>
  *   <li>Ollama chat API           → {@code POST /api/chat}</li>
- *   <li>OCR (Ollama generate) API → {@code POST /api/generate}</li>
+ *   <li>OCR (Ollama /api/chat)    → {@code POST /api/chat} (matched by body containing "submit_receipt")</li>
  *   <li>Nominatim geocoding API   → {@code GET /search}</li>
  * </ul>
  */
@@ -127,7 +127,7 @@ public abstract class BaseControllerTest {
         // Frankfurter currency API (used by CurrencyService + SupportedCurrencyService)
         registry.add("currency.api.url", () -> base);
         // OCR API – full endpoint URL (used directly by OcrService)
-        registry.add("ocr.api.url", () -> base + "/api/generate");
+        registry.add("ocr.api.url", () -> base + "/api/chat");
         // Ollama base URL (used by Spring AI ChatClient → OllamaApi)
         registry.add("spring.ai.ollama.base-url", () -> base);
         // Nominatim geocoding API (used by GeocodingService)
@@ -193,18 +193,25 @@ public abstract class BaseControllerTest {
                         "\"CNY\":7.25,\"CAD\":1.36,\"HKD\":7.82}}")
                         .withHeader("Connection", "close")));
 
-        // -- OCR API: POST /api/generate → valid receipt JSON ---------------------
-        WIRE_MOCK.stubFor(WireMock.post(urlPathEqualTo("/api/generate"))
+        // -- OCR API: POST /api/chat with submit_receipt tool → tool_call response --
+        // Matches OCR requests (contain "submit_receipt" in body); higher priority than chatbot stub
+        WIRE_MOCK.stubFor(WireMock.post(urlPathEqualTo("/api/chat"))
+                .withRequestBody(containing("submit_receipt"))
+                .atPriority(1)
                 .willReturn(okJson(
-                        "{\"response\":\"{\\\"transactionDatetime\\\":\\\"2026-04-01T12:00:00\\\"," +
-                        "\\\"amount\\\":12.50,\\\"currency\\\":\\\"USD\\\",\\\"category\\\":\\\"Food\\\"," +
-                        "\\\"receiptNumber\\\":\\\"001\\\",\\\"items\\\":[]," +
-                        "\\\"store\\\":{\\\"name\\\":\\\"TestShop\\\",\\\"city\\\":\\\"Singapore\\\"," +
-                        "\\\"country\\\":\\\"SG\\\"}}\"}")
+                        ollamaToolCallResponse("submit_receipt",
+                                "{\"transactionDatetime\":\"2026-04-01T12:00:00\"," +
+                                "\"amount\":12.50,\"currency\":\"USD\",\"category\":\"Food\"," +
+                                "\"receiptNumber\":\"001\",\"items\":[{\"itemName\":\"Test Item\"," +
+                                "\"quantity\":1,\"unitPrice\":12.50,\"adjustment\":0}]," +
+                                "\"store\":{\"name\":\"TestShop\",\"city\":\"Singapore\"," +
+                                "\"country\":\"SG\"}}"))
                         .withHeader("Connection", "close")));
 
         // -- Ollama chat API: POST /api/chat → plain-text assistant reply ----------
+        // Lower priority — only matches chatbot requests (no "submit_receipt" in body)
         WIRE_MOCK.stubFor(WireMock.post(urlPathEqualTo("/api/chat"))
+                .atPriority(5)
                 .willReturn(okJson(ollamaChatResponse(
                         "I'm a helpful expense assistant. How can I help you today?"))
                         .withHeader("Connection", "close")));
@@ -252,6 +259,23 @@ public abstract class BaseControllerTest {
                "\"tool_calls\":[{\"function\":{\"name\":\"" + toolName + "\"," +
                "\"arguments\":" + argumentsJson + "}}]}," +
                "\"done_reason\":\"stop\",\"done\":true}";
+    }
+
+    /**
+     * Build an OpenAI /chat/completions style response with a tool_call.
+     * arguments is a JSON-escaped string (as OpenAI returns it).
+     */
+    protected static String openAiToolCallResponse(String toolName, String argumentsJson) {
+        // OpenAI returns arguments as a JSON string (escaped)
+        String escaped = argumentsJson
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"");
+        return "{\"id\":\"chatcmpl-test\"," +
+               "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null," +
+               "\"tool_calls\":[{\"id\":\"call_test_001\",\"type\":\"function\"," +
+               "\"function\":{\"name\":\"" + toolName + "\"," +
+               "\"arguments\":\"" + escaped + "\"}}]},\"finish_reason\":\"tool_calls\"}]," +
+               "\"model\":\"test-model\"}";
     }
 
     // -------------------------------------------------------------------------
