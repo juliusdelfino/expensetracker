@@ -10,6 +10,20 @@ let _changeStoreMap = null;
 let _changeStoreMarker = null;
 let _nominatimTimer = null;
 let _selectedDbStoreId = null; // tracks a DB store selected from the search dropdown
+let _userLocation = null; // cached user geolocation {lat, lon}
+
+// Try to get user location once; cache the result
+function _getUserLocation() {
+    if (_userLocation !== null) return Promise.resolve(_userLocation);
+    return new Promise(resolve => {
+        if (!navigator.geolocation) { resolve(false); return; }
+        navigator.geolocation.getCurrentPosition(
+            pos => { _userLocation = { lat: pos.coords.latitude, lon: pos.coords.longitude }; resolve(_userLocation); },
+            ()  => { _userLocation = false; resolve(false); },
+            { timeout: 5000, maximumAge: 300000 }
+        );
+    });
+}
 
 async function openChangeStoreDialog(expenseId) {
     if (!window._expenseIsOwner) return;
@@ -22,55 +36,57 @@ async function openChangeStoreDialog(expenseId) {
 
     overlay.innerHTML = `
         <div class="change-store-dialog" id="changeStoreDialog">
-            <div class="change-store-header">
+            <div class="change-store-header" style="padding-top:1.5rem; padding-left:1.5rem; padding-right:1.5rem; flex-shrink:0;">
                 <h3 class="item-dialog-title" style="margin-bottom:0"><i class="fa-solid fa-store"></i> Change Store</h3>
                 <button class="btn btn-outline btn-sm" onclick="closeChangeStoreDialog()"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="form-group" style="position:relative; margin-top:0.75rem;">
-                <label>Search your stores or an address</label>
-                <input type="text" class="form-control" id="nominatimSearch" placeholder="e.g. Starbucks or Rivergate Vienna" oninput="debounceNominatim()" autocomplete="off">
-                <div class="nominatim-results" id="nominatimResults" style="display:none;"></div>
-            </div>
-            <p style="font-size:0.78rem; color:var(--text-light); margin-bottom:0.75rem;"><i class="fa-solid fa-circle-info"></i> Pick an existing store or search to auto-fill fields.</p>
-            <div class="form-group">
-                <label>Name</label>
-                <input type="text" class="form-control" id="csName" value="${esc(store.name || '')}">
-            </div>
-            <div class="form-group">
-                <label>Address</label>
-                <input type="text" class="form-control" id="csAddress" value="${esc(store.address || '')}">
-            </div>
-            <div class="form-row-inline">
+            <div class="change-store-dialog-body">
+                <div class="form-group" style="position:relative; margin-top:0.75rem;">
+                    <label>Search your stores or an address</label>
+                    <input type="text" class="form-control" id="nominatimSearch" placeholder="e.g. Starbucks or Rivergate Vienna" oninput="debounceNominatim()" autocomplete="off">
+                    <div class="nominatim-results" id="nominatimResults" style="display:none;"></div>
+                </div>
+                <p style="font-size:0.78rem; color:var(--text-light); margin-bottom:0.75rem;"><i class="fa-solid fa-circle-info"></i> Pick an existing store or search to auto-fill fields.</p>
                 <div class="form-group">
-                    <label>City</label>
-                    <input type="text" class="form-control" id="csCity" value="${esc(store.city || '')}">
+                    <label>Name</label>
+                    <input type="text" class="form-control" id="csName" value="${esc(store.name || '')}">
                 </div>
                 <div class="form-group">
-                    <label>Country Code</label>
-                    <input type="text" class="form-control" id="csCountry" value="${esc(store.country || '')}" placeholder="e.g. AT">
+                    <label>Address</label>
+                    <input type="text" class="form-control" id="csAddress" value="${esc(store.address || '')}">
                 </div>
-            </div>
-            <div class="form-row-inline">
+                <div class="form-row-inline">
+                    <div class="form-group">
+                        <label>City</label>
+                        <input type="text" class="form-control" id="csCity" value="${esc(store.city || '')}">
+                    </div>
+                    <div class="form-group">
+                        <label>Country Code</label>
+                        <input type="text" class="form-control" id="csCountry" value="${esc(store.country || '')}" placeholder="e.g. AT">
+                    </div>
+                </div>
+                <div class="form-row-inline">
+                    <div class="form-group">
+                        <label>Postal Code</label>
+                        <input type="text" class="form-control" id="csPostal" value="${esc(store.postalCode || '')}">
+                    </div>
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <input type="text" class="form-control" id="csPhone" value="${esc(store.phoneNumber || '')}">
+                    </div>
+                </div>
                 <div class="form-group">
-                    <label>Postal Code</label>
-                    <input type="text" class="form-control" id="csPostal" value="${esc(store.postalCode || '')}">
+                    <label>Website</label>
+                    <input type="text" class="form-control" id="csWebsite" value="${esc(store.website || '')}">
                 </div>
                 <div class="form-group">
-                    <label>Phone</label>
-                    <input type="text" class="form-control" id="csPhone" value="${esc(store.phoneNumber || '')}">
+                    <label>Location <span style="font-weight:normal; color:var(--text-light); font-size:0.8rem;">(drag pin to adjust)</span></label>
+                    <div id="changeStoreMap" style="height:220px; border-radius:var(--radius); border:1px solid var(--border-color);"></div>
                 </div>
+                <input type="hidden" id="csLat" value="${store.latitude || ''}">
+                <input type="hidden" id="csLng" value="${store.longitude || ''}">
             </div>
-            <div class="form-group">
-                <label>Website</label>
-                <input type="text" class="form-control" id="csWebsite" value="${esc(store.website || '')}">
-            </div>
-            <div class="form-group">
-                <label>Location <span style="font-weight:normal; color:var(--text-light); font-size:0.8rem;">(drag pin to adjust)</span></label>
-                <div id="changeStoreMap" style="height:220px; border-radius:var(--radius); border:1px solid var(--border-color);"></div>
-            </div>
-            <input type="hidden" id="csLat" value="${store.latitude || ''}">
-            <input type="hidden" id="csLng" value="${store.longitude || ''}">
-            <div class="item-dialog-actions" style="margin-top:1rem;">
+            <div class="item-dialog-actions">
                 <button class="btn btn-primary" onclick="saveChangeStore('${expenseId}', '${store.id || ''}')">
                     <i class="fa-solid fa-save"></i> Save
                 </button>
@@ -85,6 +101,8 @@ async function openChangeStoreDialog(expenseId) {
     document.getElementById('nominatimSearch').focus();
     window._nominatimPlaceId = null;
     window._nominatimSnapshot = null;
+    _getUserLocation(); // warm up location cache
+    _registerEscHandler('changeStoreOverlay', closeChangeStoreDialog);
     setTimeout(() => initChangeStoreMap(store), 200);
 }
 
@@ -116,6 +134,42 @@ function initChangeStoreMap(store) {
         if (lngEl) lngEl.value = pos.lng.toFixed(6);
     });
 
+    // Custom "locate me" control — placed below the zoom buttons
+    const LocateControl = L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd() {
+            const btn = L.DomUtil.create('button', 'leaflet-bar leaflet-control leaflet-control-locate');
+            btn.type = 'button';
+            btn.title = 'Go to my location';
+            btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i>';
+            btn.style.cssText = 'width:34px;height:34px;line-height:30px;font-size:14px;cursor:pointer;background:#fff;display:flex;align-items:center;justify-content:center;';
+            L.DomEvent.on(btn, 'click', L.DomEvent.stopPropagation)
+                      .on(btn, 'click', L.DomEvent.preventDefault)
+                      .on(btn, 'click', () => {
+                          btn.disabled = true;
+                          btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+                          navigator.geolocation.getCurrentPosition(pos => {
+                              const { latitude, longitude } = pos.coords;
+                              _userLocation = { lat: latitude, lon: longitude };
+                              _changeStoreMarker.setLatLng([latitude, longitude]);
+                              _changeStoreMap.setView([latitude, longitude], 16);
+                              const latEl = document.getElementById('csLat');
+                              const lngEl = document.getElementById('csLng');
+                              if (latEl) latEl.value = latitude.toFixed(6);
+                              if (lngEl) lngEl.value = longitude.toFixed(6);
+                              btn.disabled = false;
+                              btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i>';
+                          }, () => {
+                              toast('Location unavailable', 'error');
+                              btn.disabled = false;
+                              btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i>';
+                          }, { timeout: 8000 });
+                      });
+            return btn;
+        }
+    });
+    new LocateControl().addTo(_changeStoreMap);
+
     setTimeout(() => _changeStoreMap && _changeStoreMap.invalidateSize(), 300);
 }
 
@@ -133,10 +187,21 @@ async function searchCombined(query) {
     resultsEl.style.display = 'block';
     resultsEl.innerHTML = '<div class="nominatim-loading"><i class="fa-solid fa-spinner fa-spin"></i> Searching...</div>';
 
+    // Resolve user location (non-blocking; falls back gracefully)
+    const loc = await _getUserLocation();
+
+    // Build Nominatim URL — add viewbox around user location to prioritize nearby results
+    let nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5`;
+    if (loc) {
+        // ~0.05° (~5 km) bounding box centred on user — prioritises nearby results without hard-restricting
+        const d = 0.05;
+        nominatimUrl += `&viewbox=${loc.lon - d},${loc.lat + d},${loc.lon + d},${loc.lat - d}&bounded=0`;
+    }
+
     // Fire both searches in parallel
     const [dbResults, nominatimResults] = await Promise.all([
         api(`/api/stores/search?q=${encodeURIComponent(query)}`).catch(() => []),
-        fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5`,
+        fetch(nominatimUrl,
             { headers: { 'Accept-Language': 'en', 'User-Agent': 'ExpenseTracker/1.0' } })
             .then(r => r.json()).catch(() => [])
     ]);
@@ -305,6 +370,7 @@ async function saveChangeStore(expenseId, storeId) {
 }
 
 function closeChangeStoreDialog() {
+    _unregisterEscHandler('changeStoreOverlay');
     if (_changeStoreMap) {
         try { _changeStoreMap.remove(); } catch(e) {}
         _changeStoreMap = null; _changeStoreMarker = null;
@@ -322,10 +388,10 @@ function openItemDialog(expenseId, itemId, itemName, quantity, unitPrice, adjust
     const overlay = document.createElement('div');
     overlay.className = 'item-dialog-overlay';
     overlay.id = 'itemDialogOverlay';
-    overlay.onclick = (ev) => { if (ev.target === overlay) overlay.remove(); };
     overlay.innerHTML = `
         <div class="item-dialog">
             <h3 class="item-dialog-title">${isEdit ? 'Edit Item' : 'Add Item'}</h3>
+            <div class="item-dialog-body">
             <div class="form-group">
                 <label>Item Name</label>
                 <input type="text" class="form-control" id="dlgItemName" value="${isEdit ? itemName : ''}" placeholder="Item name">
@@ -344,6 +410,7 @@ function openItemDialog(expenseId, itemId, itemName, quantity, unitPrice, adjust
                     <input type="number" step="0.01" class="form-control" id="dlgItemAdjustment" value="${isEdit && adjustment != null && adjustment != 0 ? adjustment : ''}" placeholder="0.00">
                 </div>
             </div>
+            </div>
             <div class="item-dialog-actions">
                 <button class="btn btn-primary btn-sm" onclick="saveItemDialog('${expenseId}','${itemId || ''}')">
                     <i class="fa-solid fa-save"></i> ${isEdit ? 'Save' : 'Add'}
@@ -358,6 +425,7 @@ function openItemDialog(expenseId, itemId, itemName, quantity, unitPrice, adjust
         </div>`;
     document.body.appendChild(overlay);
     document.getElementById('dlgItemName').focus();
+    _registerEscHandler('itemDialogOverlay', () => document.getElementById('itemDialogOverlay')?.remove());
 }
 
 async function saveItemDialog(expenseId, itemId) {
@@ -381,6 +449,7 @@ async function saveItemDialog(expenseId, itemId) {
         toast('Item added', 'success');
     }
     document.getElementById('itemDialogOverlay')?.remove();
+    _unregisterEscHandler('itemDialogOverlay');
     renderExpenseDetail(document.getElementById('app'), expenseId);
 }
 
@@ -389,6 +458,7 @@ async function deleteItemDialog(expenseId, itemId) {
     await api(`/api/expenses/${expenseId}/items/${itemId}`, { method: 'DELETE' });
     toast('Item deleted', 'success');
     document.getElementById('itemDialogOverlay')?.remove();
+    _unregisterEscHandler('itemDialogOverlay');
     renderExpenseDetail(document.getElementById('app'), expenseId);
 }
 
@@ -406,50 +476,51 @@ async function openExpenseDetailsDialog(expenseId) {
     const overlay = document.createElement('div');
     overlay.className = 'item-dialog-overlay';
     overlay.id = 'expenseDetailsOverlay';
-    overlay.onclick = (ev) => { if (ev.target === overlay) closeExpenseDetailsDialog(); };
 
     overlay.innerHTML = `
         <div class="change-store-dialog" id="expenseDetailsDialogInner">
-            <div class="change-store-header">
+            <div class="change-store-header" style="padding-top:1.5rem; padding-left:1.5rem; padding-right:1.5rem; flex-shrink:0;">
                 <h3 class="item-dialog-title" style="margin-bottom:0"><i class="fa-solid fa-pen-to-square"></i> Edit Expense Details</h3>
                 <button class="btn btn-outline btn-sm" onclick="closeExpenseDetailsDialog()"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="exp-dlg-fields-grid">
-                <div class="form-group exp-dlg-f-date"><label>Date &amp; Time</label>
-                    <input type="datetime-local" class="form-control" id="dlgExpDate" value="${e.transactionDatetime ? e.transactionDatetime.substring(0, 16) : ''}">
+            <div class="change-store-dialog-body">
+                <div class="exp-dlg-fields-grid" style="margin-top:0.75rem;">
+                    <div class="form-group exp-dlg-f-date"><label>Date &amp; Time</label>
+                        <input type="datetime-local" class="form-control" id="dlgExpDate" value="${e.transactionDatetime ? e.transactionDatetime.substring(0, 16) : ''}">
+                    </div>
+                    <div class="form-group exp-dlg-f-cat"><label>Category</label>
+                        <input type="text" class="form-control" id="dlgExpCategory" value="${esc(e.category)}" list="dlgExpCategoryList" autocomplete="off">
+                        <datalist id="dlgExpCategoryList">
+                            ${allCats.map(c => `<option value="${esc(c)}">`).join('')}
+                        </datalist>
+                    </div>
+                    <div class="form-group exp-dlg-f-amt"><label>Amount</label>
+                        <input type="number" step="0.01" class="form-control" id="dlgExpAmount" value="${e.amount || ''}">
+                    </div>
+                    <div class="form-group exp-dlg-f-curr"><label>Currency</label>
+                        <input type="text" class="form-control" id="dlgExpCurrency" list="dlgExpCurrencyList" value="${esc(e.currency)}" placeholder="e.g. USD">
+                        <datalist id="dlgExpCurrencyList">
+                            ${['USD','EUR','GBP','SGD','JPY','AUD','CAD','CHF'].map(c => `<option value="${c}"></option>`).join('')}
+                        </datalist>
+                    </div>
+                    <div class="form-group exp-dlg-f-exr"><label>Exchange Rate</label>
+                        <input type="number" step="0.000001" class="form-control" id="dlgExpExRate" value="${e.exchangeRate || ''}" placeholder="Auto">
+                    </div>
                 </div>
-                <div class="form-group exp-dlg-f-cat"><label>Category</label>
-                    <input type="text" class="form-control" id="dlgExpCategory" value="${esc(e.category)}" list="dlgExpCategoryList" autocomplete="off">
-                    <datalist id="dlgExpCategoryList">
-                        ${allCats.map(c => `<option value="${esc(c)}">`).join('')}
-                    </datalist>
+                <div class="form-group" style="margin-top:0.75rem;">
+                    <label>Receipt Number</label>
+                    <input type="text" class="form-control" id="dlgExpReceipt" value="${esc(e.receiptNumber)}">
                 </div>
-                <div class="form-group exp-dlg-f-amt"><label>Amount</label>
-                    <input type="number" step="0.01" class="form-control" id="dlgExpAmount" value="${e.amount || ''}">
+                <div class="form-group"><label>Tags</label>
+                    <div class="tags-container" id="dlgExpTagsContainer">
+                        <input type="text" class="tag-input" id="dlgExpTagInput" placeholder="Add tag...">
+                    </div>
                 </div>
-                <div class="form-group exp-dlg-f-curr"><label>Currency</label>
-                    <input type="text" class="form-control" id="dlgExpCurrency" list="dlgExpCurrencyList" value="${esc(e.currency)}" placeholder="e.g. USD">
-                    <datalist id="dlgExpCurrencyList">
-                        ${['USD','EUR','GBP','SGD','JPY','AUD','CAD','CHF'].map(c => `<option value="${c}"></option>`).join('')}
-                    </datalist>
-                </div>
-                <div class="form-group exp-dlg-f-exr"><label>Exchange Rate</label>
-                    <input type="number" step="0.000001" class="form-control" id="dlgExpExRate" value="${e.exchangeRate || ''}" placeholder="Auto">
+                <div class="form-group"><label>Notes</label>
+                    <textarea class="form-control" id="dlgExpNotes" rows="2">${esc(e.notes)}</textarea>
                 </div>
             </div>
-            <div class="form-group" style="margin-top:0.75rem;">
-                <label>Receipt Number</label>
-                <input type="text" class="form-control" id="dlgExpReceipt" value="${esc(e.receiptNumber)}">
-            </div>
-            <div class="form-group"><label>Tags</label>
-                <div class="tags-container" id="dlgExpTagsContainer">
-                    <input type="text" class="tag-input" id="dlgExpTagInput" placeholder="Add tag...">
-                </div>
-            </div>
-            <div class="form-group"><label>Notes</label>
-                <textarea class="form-control" id="dlgExpNotes" rows="2">${esc(e.notes)}</textarea>
-            </div>
-            <div class="item-dialog-actions" style="margin-top:1rem;">
+            <div class="item-dialog-actions">
                 <button class="btn btn-primary" onclick="saveExpenseDetailsDialog('${expenseId}')">
                     <i class="fa-solid fa-save"></i> Save
                 </button>
@@ -461,6 +532,7 @@ async function openExpenseDetailsDialog(expenseId) {
 
     document.body.appendChild(overlay);
     renderTags('dlgExpTagsContainer', 'dlgExpTagInput', window._dlgExpTags);
+    _registerEscHandler('expenseDetailsOverlay', closeExpenseDetailsDialog);
 }
 
 async function saveExpenseDetailsDialog(expenseId) {
@@ -485,6 +557,7 @@ async function saveExpenseDetailsDialog(expenseId) {
 }
 
 function closeExpenseDetailsDialog() {
+    _unregisterEscHandler('expenseDetailsOverlay');
     const overlay = document.getElementById('expenseDetailsOverlay');
     if (overlay) overlay.remove();
 }

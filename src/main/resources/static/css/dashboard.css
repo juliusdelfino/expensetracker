@@ -473,21 +473,37 @@
     background: var(--bg-card);
     border-radius: var(--radius);
     box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-    padding: 1.5rem;
     width: 100%;
     max-width: 420px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 .item-dialog-title {
+    padding: 1.5rem 1.5rem 0;
+    flex-shrink: 0;
     font-size: 1.1rem;
     font-weight: 600;
     color: var(--primary-dark);
     margin-bottom: 1rem;
 }
+.item-dialog-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 0 1.5rem 0.5rem;
+}
 .item-dialog-actions {
     display: flex;
     gap: 0.5rem;
-    margin-top: 1rem;
+    padding: 1rem 1.5rem;
+    margin-top: 0;
     justify-content: flex-end;
+    flex-shrink: 0;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-card);
+    position: sticky;
+    bottom: 0;
 }
 
 /* ===================== OTHER DETAILS (collapsed section) ===================== */

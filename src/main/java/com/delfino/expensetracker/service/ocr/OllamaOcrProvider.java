@@ -1,5 +1,6 @@
 package com.delfino.expensetracker.service.ocr;
 
+import com.delfino.expensetracker.dto.ocr.ParsedReceiptDto;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -72,16 +73,16 @@ public class OllamaOcrProvider implements OcrProvider {
     }
 
     @Override
-    public JsonNode extractToolCallArgs(JsonNode assistantMsg) throws JsonProcessingException {
+    public ParsedReceiptDto extractToolCallArgs(JsonNode assistantMsg) throws JsonProcessingException {
         JsonNode toolCalls = assistantMsg.path("tool_calls");
         if (toolCalls.isMissingNode() || !toolCalls.isArray() || toolCalls.isEmpty()) return null;
         JsonNode argsNode = toolCalls.get(0).path("function").path("arguments");
         if (argsNode.isMissingNode()) return null;
         // Ollama returns arguments as a JSON object (not a string)
         if (argsNode.isTextual()) {
-            return objectMapper.readTree(argsNode.asText());
+            return objectMapper.readValue(argsNode.asText(), ParsedReceiptDto.class);
         }
-        return argsNode;
+        return objectMapper.treeToValue(argsNode, ParsedReceiptDto.class);
     }
 
     @Override

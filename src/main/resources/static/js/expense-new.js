@@ -517,10 +517,10 @@ function addNewExpenseItem() {
     const overlay = document.createElement('div');
     overlay.className = 'item-dialog-overlay';
     overlay.id = 'newItemDialogOverlay';
-    overlay.onclick = (ev) => { if (ev.target === overlay) overlay.remove(); };
     overlay.innerHTML = `
         <div class="item-dialog">
             <h3 class="item-dialog-title">Add Item</h3>
+            <div class="item-dialog-body">
             <div class="form-group">
                 <label>Item Name</label>
                 <input type="text" class="form-control" id="newDlgItemName" maxlength="100" placeholder="Item name">
@@ -539,6 +539,7 @@ function addNewExpenseItem() {
                     <input type="number" step="0.01" max="9999999999" class="form-control" id="newDlgItemAdjustment" placeholder="0.00">
                 </div>
             </div>
+            </div>
             <div class="item-dialog-actions">
                 <button class="btn btn-primary btn-sm" onclick="saveNewExpenseItem()">
                     <i class="fa-solid fa-plus"></i> Add
@@ -550,6 +551,7 @@ function addNewExpenseItem() {
         </div>`;
     document.body.appendChild(overlay);
     document.getElementById('newDlgItemName').focus();
+    _registerEscHandler('newItemDialogOverlay', () => document.getElementById('newItemDialogOverlay')?.remove());
 }
 
 function editNewExpenseItem(index) {
@@ -558,10 +560,10 @@ function editNewExpenseItem(index) {
     const overlay = document.createElement('div');
     overlay.className = 'item-dialog-overlay';
     overlay.id = 'newItemDialogOverlay';
-    overlay.onclick = (ev) => { if (ev.target === overlay) overlay.remove(); };
     overlay.innerHTML = `
         <div class="item-dialog">
             <h3 class="item-dialog-title">Edit Item</h3>
+            <div class="item-dialog-body">
             <div class="form-group">
                 <label>Item Name</label>
                 <input type="text" class="form-control" id="newDlgItemName" maxlength="100" value="${esc(item.itemName)}">
@@ -580,6 +582,7 @@ function editNewExpenseItem(index) {
                     <input type="number" step="0.01" max="9999999999" class="form-control" id="newDlgItemAdjustment" value="${item.adjustment || ''}" placeholder="0.00">
                 </div>
             </div>
+            </div>
             <div class="item-dialog-actions">
                 <button class="btn btn-primary btn-sm" onclick="updateNewExpenseItem(${index})">
                     <i class="fa-solid fa-save"></i> Save
@@ -594,6 +597,7 @@ function editNewExpenseItem(index) {
         </div>`;
     document.body.appendChild(overlay);
     document.getElementById('newDlgItemName').focus();
+    _registerEscHandler('newItemDialogOverlay', () => document.getElementById('newItemDialogOverlay')?.remove());
 }
 
 function saveNewExpenseItem() {
@@ -668,10 +672,11 @@ function openNewExpenseStoreDialog() {
 
     overlay.innerHTML = `
         <div class="change-store-dialog" id="changeStoreDialog">
-            <div class="change-store-header">
+            <div class="change-store-header" style="padding-top:1.5rem; padding-left:1.5rem; padding-right:1.5rem; flex-shrink:0;">
                 <h3 class="item-dialog-title" style="margin-bottom:0"><i class="fa-solid fa-store"></i> Set Store</h3>
                 <button class="btn btn-outline btn-sm" onclick="closeNewExpenseStoreDialog()"><i class="fa-solid fa-xmark"></i></button>
             </div>
+            <div class="change-store-dialog-body">
             <div class="form-group" style="position:relative; margin-top:0.75rem;">
                 <label>Search your stores or an address</label>
                 <input type="text" class="form-control" id="nominatimSearch" placeholder="e.g. Starbucks or Rivergate Vienna" oninput="debounceNominatim()" autocomplete="off">
@@ -716,7 +721,8 @@ function openNewExpenseStoreDialog() {
             </div>
             <input type="hidden" id="csLat" value="${store.latitude || ''}">
             <input type="hidden" id="csLng" value="${store.longitude || ''}">
-            <div class="item-dialog-actions" style="margin-top:1rem;">
+            </div>
+            <div class="item-dialog-actions">
                 <button class="btn btn-primary" onclick="saveNewExpenseStore()">
                     <i class="fa-solid fa-save"></i> Save
                 </button>
@@ -733,6 +739,7 @@ function openNewExpenseStoreDialog() {
     document.getElementById('nominatimSearch').focus();
     window._nominatimPlaceId = null;
     window._nominatimSnapshot = null;
+    _registerEscHandler('changeStoreOverlay', closeNewExpenseStoreDialog);
     setTimeout(() => initChangeStoreMap(store), 200);
 }
 
@@ -775,6 +782,7 @@ function clearNewExpenseStore() {
 }
 
 function closeNewExpenseStoreDialog() {
+    _unregisterEscHandler('changeStoreOverlay');
     if (_changeStoreMap) {
         try { _changeStoreMap.remove(); } catch(e) {}
         _changeStoreMap = null; _changeStoreMarker = null;

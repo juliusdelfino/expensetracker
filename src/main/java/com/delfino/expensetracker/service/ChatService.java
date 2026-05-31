@@ -1,6 +1,9 @@
 package com.delfino.expensetracker.service;
 
 import com.delfino.expensetracker.config.ChatBotProperties;
+import com.delfino.expensetracker.dto.chat.ChatExpenseDto;
+import com.delfino.expensetracker.dto.chat.ChatExpenseItemDto;
+import com.delfino.expensetracker.dto.chat.ChatExpenseResponseDto;
 import com.delfino.expensetracker.model.ChatMessage;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.ExpenseItem;
@@ -9,7 +12,6 @@ import com.delfino.expensetracker.repository.ChatMessageRepository;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.UserRepository;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -99,7 +101,7 @@ public class ChatService {
 
             // Try to parse as JSON (expense-creation flow)
             ProcessedResponse result = processLlmResponse(llmResponse, userId, user);
-            return saveBotMessage(userId, result.botText, result.savedExpenseIds);
+            return saveBotMessage(userId, result.botText(), result.savedExpenseIds());
 
         } catch (Exception e) {
             log.error("Chatbot processing failed", e);
@@ -156,12 +158,11 @@ public class ChatService {
         if (looksLikeExpenseJson(llmResponse)) {
             try {
                 String cleaned = cleanJsonResponse(llmResponse);
-                JsonNode parsed = objectMapper.readTree(cleaned);
+                ChatExpenseResponseDto response = objectMapper.readValue(cleaned, ChatExpenseResponseDto.class);
 
-                if (parsed.has("expenses") && parsed.get("expenses").isArray()) {
-                    String summary = parsed.has("summary") ? parsed.get("summary").asText()
-                            : "Expenses recorded.";
-                    savedExpenseIds = saveExpensesFromJson(parsed.get("expenses"), userId, user);
+                if (response.expenses() != null && !response.expenses().isEmpty()) {
+                    String summary = response.summary() != null ? response.summary() : "Expenses recorded.";
+                    savedExpenseIds = saveExpensesFromDto(response.expenses(), userId, user);
                     BigDecimal dailyTotal = computeDailyTotal(userId);
                     botText = summary + "\n\n\uD83D\uDCB0 Today's total: "
                             + dailyTotal.setScale(2, RoundingMode.HALF_UP).toPlainString()
@@ -177,30 +178,29 @@ public class ChatService {
     }
 
     /**
-     * Save expenses from JSON array, including their line items.
+     * Save expenses from the DTO list, including their line items.
      */
-    private List<Long> saveExpensesFromJson(JsonNode expensesNode, Long userId, User user) {
+    private List<Long> saveExpensesFromDto(List<ChatExpenseDto> expenses, Long userId, User user) {
         List<Long> savedIds = new ArrayList<>();
-        for (JsonNode expNode : expensesNode) {
-            Expense expense = buildExpenseFromJson(expNode, user);
+        for (ChatExpenseDto expDto : expenses) {
+            Expense expense = buildExpenseFromDto(expDto, user);
             Expense saved = expenseService.createManualExpense(expense, userId);
             savedIds.add(saved.getId());
-            saveExpenseItems(expNode, saved.getId());
+            saveExpenseItemsFromDto(expDto, saved.getId());
         }
         return savedIds;
     }
 
     /**
-     * Build an Expense object from a JSON node.
+     * Build an Expense entity from a typed DTO.
      */
-    private Expense buildExpenseFromJson(JsonNode expNode, User user) {
+    private Expense buildExpenseFromDto(ChatExpenseDto dto, User user) {
         Expense expense = new Expense();
 
-        if (expNode.has("transactionDatetime")) {
+        if (dto.transactionDatetime() != null) {
             try {
                 expense.setTransactionDatetime(LocalDateTime.parse(
-                        expNode.get("transactionDatetime").asText(),
-                        DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+                        dto.transactionDatetime(), DateTimeFormatter.ISO_LOCAL_DATE_TIME));
             } catch (Exception e) {
                 expense.setTransactionDatetime(LocalDateTime.now());
             }
@@ -208,47 +208,36 @@ public class ChatService {
             expense.setTransactionDatetime(LocalDateTime.now());
         }
 
-        if (expNode.has("amount")) {
-            expense.setAmount(BigDecimal.valueOf(expNode.get("amount").asDouble()));
-        }
-        if (expNode.has("currency")) {
-            expense.setCurrency(expNode.get("currency").asText());
+        if (dto.amount() != null) expense.setAmount(dto.amount());
+        if (dto.currency() != null) {
+            expense.setCurrency(dto.currency());
         } else if (user.getBaseCurrency() != null) {
             expense.setCurrency(user.getBaseCurrency());
         }
-        if (expNode.has("category")) {
-            expense.setCategory(expNode.get("category").asText());
-        }
-        if (expNode.has("notes")) {
-            expense.setNotes(expNode.get("notes").asText());
-        }
-        if (expNode.has("storeId") && !expNode.get("storeId").isNull()) {
-            try {
-                expense.setStoreId(expNode.get("storeId").asLong());
-            } catch (Exception ignored) {}
-        }
+        if (dto.category() != null) expense.setCategory(dto.category());
+        if (dto.notes() != null) expense.setNotes(dto.notes());
+        if (dto.storeId() != null) expense.setStoreId(dto.storeId());
 
         return expense;
     }
 
     /**
-     * Save expense line items if present in JSON node.
+     * Persist expense line items from a typed DTO.
      */
-    private void saveExpenseItems(JsonNode expNode, Long expenseId) {
-        if (expNode.has("items") && expNode.get("items").isArray()) {
-            List<ExpenseItem> items = new ArrayList<>();
-            for (JsonNode itemNode : expNode.get("items")) {
-                ExpenseItem item = new ExpenseItem();
-                item.setExpenseId(expenseId);
-                item.setItemName(itemNode.has("itemName") ? itemNode.get("itemName").asText() : "");
-                item.setQuantity(itemNode.has("quantity") ? itemNode.get("quantity").decimalValue() : BigDecimal.ONE);
-                item.setUnitPrice(itemNode.has("unitPrice") ? itemNode.get("unitPrice").decimalValue() : BigDecimal.ZERO);
-                item.setAdjustment(itemNode.has("adjustment") ? itemNode.get("adjustment").decimalValue() : BigDecimal.ZERO);
-                item.setDeleted(false);
-                items.add(item);
-            }
-            expenseItemRepository.saveAll(items);
+    private void saveExpenseItemsFromDto(ChatExpenseDto expDto, Long expenseId) {
+        if (expDto.items() == null || expDto.items().isEmpty()) return;
+        List<ExpenseItem> items = new ArrayList<>();
+        for (ChatExpenseItemDto itemDto : expDto.items()) {
+            ExpenseItem item = new ExpenseItem();
+            item.setExpenseId(expenseId);
+            item.setItemName(itemDto.itemName() != null ? itemDto.itemName() : "");
+            item.setQuantity(itemDto.quantity() != null ? itemDto.quantity() : BigDecimal.ONE);
+            item.setUnitPrice(itemDto.unitPrice() != null ? itemDto.unitPrice() : BigDecimal.ZERO);
+            item.setAdjustment(itemDto.adjustment() != null ? itemDto.adjustment() : BigDecimal.ZERO);
+            item.setDeleted(false);
+            items.add(item);
         }
+        expenseItemRepository.saveAll(items);
     }
 
     /**
@@ -297,16 +286,8 @@ public class ChatService {
     }
 
     /**
-     * Helper class to hold the result of LLM response processing.
+     * Holds the result of LLM response processing.
      */
-    private static class ProcessedResponse {
-        final String botText;
-        final List<Long> savedExpenseIds;
-
-        ProcessedResponse(String botText, List<Long> savedExpenseIds) {
-            this.botText = botText;
-            this.savedExpenseIds = savedExpenseIds;
-        }
-    }
+    private record ProcessedResponse(String botText, List<Long> savedExpenseIds) {}
 }
 

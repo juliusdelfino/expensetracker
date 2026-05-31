@@ -1,5 +1,6 @@
 package com.delfino.expensetracker.service.ocr;
 
+import com.delfino.expensetracker.dto.ocr.ParsedReceiptDto;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -32,13 +33,19 @@ public interface OcrProvider {
 
     /**
      * Extract the assistant message node from the API response.
+     * Kept as {@link JsonNode} because the same node is passed back verbatim
+     * into the conversation history via {@code objectMapper.convertValue(assistantMsg, Map.class)}
+     * during the retry loop — converting to a DTO and re-serialising would risk
+     * dropping unknown vendor-specific fields.
      */
     JsonNode extractAssistantMessage(JsonNode responseRoot);
 
     /**
-     * Extract tool_call arguments as a JsonNode, or null if no tool call was made.
+     * Parse the tool-call arguments from the assistant message and deserialise
+     * them directly into a {@link ParsedReceiptDto}. Returns {@code null} if the
+     * assistant message contains no tool call.
      */
-    JsonNode extractToolCallArgs(JsonNode assistantMsg) throws JsonProcessingException;
+    ParsedReceiptDto extractToolCallArgs(JsonNode assistantMsg) throws JsonProcessingException;
 
     /**
      * Extract tool_call ID (OpenAI has one; Ollama returns a default).

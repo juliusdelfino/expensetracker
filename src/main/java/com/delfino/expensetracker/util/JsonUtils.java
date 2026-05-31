@@ -1,5 +1,6 @@
 package com.delfino.expensetracker.util;
 
+import com.delfino.expensetracker.dto.ocr.ParsedReceiptDto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -24,17 +25,19 @@ public final class JsonUtils {
 
     /**
      * Attempts to parse the assistant's content field as a receipt-like JSON object.
-     * Returns the parsed JsonNode if it contains amount+items, or null otherwise.
+     * Returns a {@link ParsedReceiptDto} if the content contains {@code amount} and
+     * {@code items} fields, or {@code null} otherwise.
      */
-    public static JsonNode extractJsonFromContent(JsonNode assistantMsg, ObjectMapper objectMapper) {
+    public static ParsedReceiptDto extractJsonFromContent(JsonNode assistantMsg, ObjectMapper objectMapper) {
         String content = assistantMsg.path("content").asText(null);
         if (content == null || content.isBlank()) return null;
         content = stripMarkdownFences(content);
         try {
             JsonNode node = objectMapper.readTree(content);
-            if (node.isObject() && node.has("amount") && node.has("items")) return node;
+            if (node.isObject() && node.has("amount") && node.has("items")) {
+                return objectMapper.treeToValue(node, ParsedReceiptDto.class);
+            }
         } catch (Exception ignored) {}
         return null;
     }
 }
-

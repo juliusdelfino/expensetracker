@@ -73,6 +73,12 @@ function renderRegister(app) {
                         <option value="CAD"></option><option value="CHF"></option>
                     </datalist>
                 </div>
+                <div class="form-group" style="margin-top:0.75rem;">
+                    <label style="display:flex; align-items:flex-start; gap:0.5rem; font-weight:normal; cursor:pointer;">
+                        <input type="checkbox" id="regAgree" required style="margin-top:3px; flex-shrink:0;">
+                        <span>I have read and agree to the <a href="#/terms" target="_blank">Terms of Service</a> and <a href="#/privacy" target="_blank">Privacy Policy</a></span>
+                    </label>
+                </div>
                 <button type="submit" class="btn btn-primary" style="width:100%">
                     <i class="fa-solid fa-user-plus"></i> Register
                 </button>
@@ -82,6 +88,10 @@ function renderRegister(app) {
     </div>`;
     document.getElementById('registerForm').onsubmit = async (e) => {
         e.preventDefault();
+        if (!document.getElementById('regAgree').checked) {
+            toast('You must agree to the Terms of Service and Privacy Policy to register.', 'error');
+            return;
+        }
         const data = await api('/api/auth/register', { method: 'POST', body: {
             username: document.getElementById('regUsername').value,
             password: document.getElementById('regPassword').value,

@@ -1,6 +1,9 @@
 package com.delfino.expensetracker.service;
 
 import com.delfino.expensetracker.dto.ocr.OcrRequest;
+import com.delfino.expensetracker.dto.ocr.ParsedItemDto;
+import com.delfino.expensetracker.dto.ocr.ParsedReceiptDto;
+import com.delfino.expensetracker.dto.ocr.ParsedStoreDto;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.ExpenseItem;
 import com.delfino.expensetracker.model.ExpenseStatus;
@@ -176,7 +179,7 @@ public class OcrService {
         for (int attempt = 0; attempt <= MAX_TOOL_RETRIES; attempt++) {
             JsonNode root = objectMapper.readTree(currentResponseBody);
             JsonNode assistantMsg = ocrProvider.extractAssistantMessage(root);
-            JsonNode args = ocrProvider.extractToolCallArgs(assistantMsg);
+            ParsedReceiptDto args = ocrProvider.extractToolCallArgs(assistantMsg);
             boolean usedToolCall = args != null;
 
             if (!usedToolCall) {
@@ -228,14 +231,14 @@ public class OcrService {
         return currentResponseBody;
     }
 
-    private String validateAmountFormula(JsonNode parsed) {
-        if (!parsed.has("amount") || !parsed.has("items") || !parsed.get("items").isArray()) return null;
-        BigDecimal amount = parsed.get("amount").decimalValue();
+    private String validateAmountFormula(ParsedReceiptDto parsed) {
+        if (parsed.amount() == null || parsed.items() == null || parsed.items().isEmpty()) return null;
+        BigDecimal amount = parsed.amount();
         BigDecimal sum = BigDecimal.ZERO;
-        for (JsonNode item : parsed.get("items")) {
-            BigDecimal qty = item.has("quantity") ? item.get("quantity").decimalValue() : BigDecimal.ONE;
-            BigDecimal unitPrice = item.has("unitPrice") ? item.get("unitPrice").decimalValue() : BigDecimal.ZERO;
-            BigDecimal adjustment = item.has("adjustment") ? item.get("adjustment").decimalValue() : BigDecimal.ZERO;
+        for (ParsedItemDto item : parsed.items()) {
+            BigDecimal qty        = item.quantity()   != null ? item.quantity()   : BigDecimal.ONE;
+            BigDecimal unitPrice  = item.unitPrice()  != null ? item.unitPrice()  : BigDecimal.ZERO;
+            BigDecimal adjustment = item.adjustment() != null ? item.adjustment() : BigDecimal.ZERO;
             sum = sum.add(qty.multiply(unitPrice).add(adjustment));
         }
         if (amount.subtract(sum).abs().compareTo(new BigDecimal("0.01")) > 0) {
@@ -272,14 +275,14 @@ public class OcrService {
         JsonNode root = objectMapper.readTree(responseBody);
         JsonNode assistantMsg = ocrProvider.extractAssistantMessage(root);
 
-        JsonNode args = ocrProvider.extractToolCallArgs(assistantMsg);
-        if (args != null) {
+        ParsedReceiptDto dto = ocrProvider.extractToolCallArgs(assistantMsg);
+        if (dto != null) {
             log.info("OCR parsed receipt for expense {} via tool_call: amount={}, currency={}, items={}",
                     expenseId,
-                    args.has("amount") ? args.get("amount").asText() : "N/A",
-                    args.has("currency") ? args.get("currency").asText() : "N/A",
-                    args.has("items") ? args.get("items").size() : 0);
-            saveExpenseFromParsed(expenseId, args);
+                    dto.amount() != null ? dto.amount().toPlainString() : "N/A",
+                    dto.currency() != null ? dto.currency() : "N/A",
+                    dto.items() != null ? dto.items().size() : 0);
+            saveExpenseFromParsed(expenseId, dto);
             return;
         }
 
@@ -293,34 +296,55 @@ public class OcrService {
         }
 
         responseText = JsonUtils.stripMarkdownFences(responseText);
-        JsonNode parsed = objectMapper.readTree(responseText);
+        dto = objectMapper.readValue(responseText, ParsedReceiptDto.class);
         log.info("OCR parsed receipt for expense {}: amount={}, currency={}, items={}",
                 expenseId,
-                parsed.has("amount") ? parsed.get("amount").asText() : "N/A",
-                parsed.has("currency") ? parsed.get("currency").asText() : "N/A",
-                parsed.has("items") ? parsed.get("items").size() : 0);
+                dto.amount() != null ? dto.amount().toPlainString() : "N/A",
+                dto.currency() != null ? dto.currency() : "N/A",
+                dto.items() != null ? dto.items().size() : 0);
 
-        saveExpenseFromParsed(expenseId, parsed);
+        saveExpenseFromParsed(expenseId, dto);
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // Persistence
     // ─────────────────────────────────────────────────────────────────────
 
-    private void saveExpenseFromParsed(Long expenseId, JsonNode parsed) {
+    /**
+     * Truncates a string to the given max length. Returns the truncated value,
+     * or the original if it is within the limit.
+     */
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) return value;
+        return value.substring(0, maxLength);
+    }
+
+    private void saveExpenseFromParsed(Long expenseId, ParsedReceiptDto parsed) {
         Expense expense = expenseRepository.findById(expenseId).orElse(null);
         if (expense == null) return;
 
-        if (parsed.has("transactionDatetime")) {
+        List<String> truncatedFields = new ArrayList<>();
+
+        if (parsed.transactionDatetime() != null) {
             try {
-                expense.setTransactionDatetime(LocalDateTime.parse(parsed.get("transactionDatetime").asText(),
+                expense.setTransactionDatetime(LocalDateTime.parse(parsed.transactionDatetime(),
                         DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {} // noinspection CommentedOutCode
         }
-        if (parsed.has("amount")) expense.setAmount(parsed.get("amount").decimalValue());
-        if (parsed.has("currency")) expense.setCurrency(parsed.get("currency").asText());
-        if (parsed.has("receiptNumber")) expense.setReceiptNumber(parsed.get("receiptNumber").asText());
-        if (parsed.has("category")) expense.setCategory(parsed.get("category").asText());
+        if (parsed.amount() != null) expense.setAmount(parsed.amount());
+        if (parsed.currency() != null) expense.setCurrency(parsed.currency());
+        if (parsed.receiptNumber() != null) {
+            String raw = parsed.receiptNumber();
+            String trimmed = truncate(raw, 50);
+            if (trimmed.length() < raw.length()) truncatedFields.add("receiptNumber");
+            expense.setReceiptNumber(trimmed);
+        }
+        if (parsed.category() != null) {
+            String raw = parsed.category();
+            String trimmed = truncate(raw, 50);
+            if (trimmed.length() < raw.length()) truncatedFields.add("category");
+            expense.setCategory(trimmed);
+        }
 
         User user = userRepository.findById(expense.getUserId()).orElse(null);
         if (!StringUtils.hasText(user.getBaseCurrency())) {
@@ -337,6 +361,16 @@ public class OcrService {
             }
         }
 
+        if (!truncatedFields.isEmpty()) {
+            String truncationNote = "Value of field " + String.join(", ", truncatedFields)
+                    + " has been truncated, refer to the scanned receipt.";
+            String existingNotes = expense.getNotes();
+            String combined = (existingNotes != null && !existingNotes.isBlank())
+                    ? existingNotes + " | " + truncationNote
+                    : truncationNote;
+            expense.setNotes(truncate(combined, 500));
+            log.warn("Truncated OCR fields for expense {}: {}", expenseId, truncatedFields);
+        }
         expense.setStatus(ExpenseStatus.COMPLETED);
         expense.setUpdatedAt(LocalDateTime.now());
         expenseRepository.save(expense);
@@ -348,28 +382,62 @@ public class OcrService {
             log.info("Deleted {} existing items for expense {} before re-processing", existingItems.size(), expenseId);
         }
 
-        if (parsed.has("items") && parsed.get("items").isArray()) {
+        if (parsed.items() != null && !parsed.items().isEmpty()) {
             List<ExpenseItem> items = new ArrayList<>();
-            for (JsonNode itemNode : parsed.get("items")) {
+            boolean itemNameTruncated = false;
+            for (ParsedItemDto itemDto : parsed.items()) {
                 ExpenseItem item = new ExpenseItem();
                 item.setExpenseId(expenseId);
-                item.setItemName(itemNode.has("itemName") ? itemNode.get("itemName").asText() : "");
-                item.setQuantity(itemNode.has("quantity") ? itemNode.get("quantity").decimalValue() : BigDecimal.ONE);
-                item.setUnitPrice(itemNode.has("unitPrice") ? itemNode.get("unitPrice").decimalValue() : BigDecimal.ZERO);
-                if (itemNode.has("adjustment")) item.setAdjustment(itemNode.get("adjustment").decimalValue());
+                String rawItemName = itemDto.itemName() != null ? itemDto.itemName() : "";
+                if (rawItemName.length() > 100) { itemNameTruncated = true; rawItemName = truncate(rawItemName, 100); }
+                item.setItemName(rawItemName);
+                item.setQuantity(itemDto.quantity() != null ? itemDto.quantity() : BigDecimal.ONE);
+                item.setUnitPrice(itemDto.unitPrice() != null ? itemDto.unitPrice() : BigDecimal.ZERO);
+                if (itemDto.adjustment() != null) item.setAdjustment(itemDto.adjustment());
                 item.setDeleted(false);
                 items.add(item);
+            }
+            if (itemNameTruncated) {
+                truncatedFields.add("item.itemName");
+                String truncationNote = "Value of field item.itemName has been truncated, refer to the scanned receipt.";
+                String existingNotes = expense.getNotes();
+                String combined = (existingNotes != null && !existingNotes.isBlank())
+                        ? existingNotes + " | " + truncationNote
+                        : truncationNote;
+                expense.setNotes(truncate(combined, 500));
+                expenseRepository.save(expense);
+                log.warn("Truncated OCR item.itemName fields for expense {}", expenseId);
             }
             expenseItemRepository.saveAll(items);
         }
 
-        if (parsed.has("store") && parsed.get("store").isObject()) {
-            JsonNode sn = parsed.get("store");
-            String sName = sn.has("name") ? sn.get("name").asText() : null;
-            String sAddress = sn.has("address") ? sn.get("address").asText() : null;
-            String sCity = sn.has("city") ? sn.get("city").asText() : null;
-            String sCountry = sn.has("country") ? sn.get("country").asText() : null;
-            String sPostal = sn.has("postalCode") ? sn.get("postalCode").asText() : null;
+        if (parsed.store() != null) {
+            ParsedStoreDto sn = parsed.store();
+            String sName = sn.name();
+            String sAddress = sn.address();
+            String sCity = sn.city();
+            String sCountry = sn.country();
+            String sPostal = sn.postalCode();
+
+            List<String> storeTruncated = new ArrayList<>();
+            if (sName != null && sName.length() > 100) { storeTruncated.add("store.name"); sName = truncate(sName, 100); }
+            if (sAddress != null && sAddress.length() > 200) { storeTruncated.add("store.address"); sAddress = truncate(sAddress, 200); }
+            if (sCity != null && sCity.length() > 100) { storeTruncated.add("store.city"); sCity = truncate(sCity, 100); }
+            if (sCountry != null && sCountry.length() > 2) { storeTruncated.add("store.country"); sCountry = truncate(sCountry, 2); }
+            if (sPostal != null && sPostal.length() > 20) { storeTruncated.add("store.postalCode"); sPostal = truncate(sPostal, 20); }
+
+            if (!storeTruncated.isEmpty()) {
+                truncatedFields.addAll(storeTruncated);
+                String truncationNote = "Value of field " + String.join(", ", storeTruncated)
+                        + " has been truncated, refer to the scanned receipt.";
+                String existingNotes = expense.getNotes();
+                String combined = (existingNotes != null && !existingNotes.isBlank())
+                        ? existingNotes + " | " + truncationNote
+                        : truncationNote;
+                expense.setNotes(truncate(combined, 500));
+                expenseRepository.save(expense);
+                log.warn("Truncated OCR store fields for expense {}: {}", expenseId, storeTruncated);
+            }
 
             Optional<Store> existingStore = storeRepository.findMatchingStore(
                     expense.getUserId(), sName, sAddress, sCity, sCountry, sPostal);
@@ -386,8 +454,8 @@ public class OcrService {
                 store.setCity(sCity);
                 store.setCountry(sCountry);
                 store.setPostalCode(sPostal);
-                store.setPhoneNumber(sn.has("phoneNumber") ? sn.get("phoneNumber").asText() : null);
-                store.setWebsite(sn.has("website") ? sn.get("website").asText() : null);
+                store.setPhoneNumber(sn.phoneNumber());
+                store.setWebsite(sn.website());
                 storeRepository.save(store);
                 expense.setStoreId(store.getId());
                 expenseRepository.save(expense);
