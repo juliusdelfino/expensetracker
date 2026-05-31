@@ -6,6 +6,24 @@ let currentUser = null;
 let chartInstances = {};
 let appConfig = {}; // populated by loadAppConfig() on startup
 
+// ---- ESC key handler registry for dialogs ----
+const _escHandlers = {}; // overlayId -> handler function
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    // Fire the most recently registered handler
+    const ids = Object.keys(_escHandlers);
+    if (ids.length === 0) return;
+    const lastId = ids[ids.length - 1];
+    e.stopPropagation();
+    _escHandlers[lastId]();
+});
+function _registerEscHandler(overlayId, fn) {
+    _escHandlers[overlayId] = fn;
+}
+function _unregisterEscHandler(overlayId) {
+    delete _escHandlers[overlayId];
+}
+
 async function loadAppConfig() {
     try {
         const cfg = await api('/api/config', { noAuthRedirect: true });
@@ -237,48 +255,142 @@ function checkFaviconDefault(img) {
     img.style.display = 'block';
 }
 
+const _legalPageStyle = `
+    <style>
+        .legal-page h2 { margin-bottom: 0.25rem; }
+        .legal-page hr { margin: 0.75rem 0 1.5rem; border: none; border-top: 2px solid var(--border-color); }
+        .legal-page .legal-meta { color: var(--text-light); font-size: 0.9rem; margin-bottom: 2rem; }
+        .legal-page h3 { margin-top: 2.25rem; margin-bottom: 0.6rem; font-size: 1.05rem; color: var(--primary-dark); }
+        .legal-page p { margin: 0 0 0.9rem; line-height: 1.75; color: var(--text); }
+        .legal-page ul { margin: 0.4rem 0 1rem 0; padding-left: 1.5rem; }
+        .legal-page ul li { margin-bottom: 0.6rem; line-height: 1.7; color: var(--text); }
+        .legal-page a { color: var(--primary); }
+    </style>`;
+
 function renderTerms(app) {
-    app.innerHTML = `
+    app.innerHTML = _legalPageStyle + `
     <div class="shared-header"><a href="/" class="brand"><img src="/images/logo192.png" alt="logo"> Expense Tracker</a></div>
-    <div class="container" style="max-width:700px; margin:2rem auto; padding:1rem;">
+    <div class="container legal-page" style="max-width:760px; margin:2rem auto; padding:1rem 1.5rem 4rem;">
         <h2>Terms of Service</h2>
         <hr/>
-        <p>Last updated: May 2026</p>
-        <h3>1. Acceptance</h3>
-        <p>By using Expense Tracker, you agree to these terms. If you do not agree, please do not use the application.</p>
-        <h3>2. Use of Service</h3>
-        <p>Expense Tracker is provided as-is for personal expense tracking. You are responsible for maintaining the confidentiality of your account.</p>
-        <h3>3. Data</h3>
-        <p>Your expense data is stored securely. We do not sell or share your personal data with third parties.</p>
-        <h3>4. Receipt Scanning</h3>
-        <p>Receipt images are processed by AI models to extract structured data. Images may be stored for processing but are not used for training purposes.</p>
-        <h3>5. Limitation of Liability</h3>
-        <p>Expense Tracker is not liable for any inaccuracies in expense data, OCR results, or currency conversions.</p>
-        <h3>6. Changes</h3>
-        <p>We may update these terms at any time. Continued use constitutes acceptance of updated terms.</p>
+        <p class="legal-meta"><strong>Last updated: May 2026</strong></p>
+
+        <h3>1. Acceptance of Terms</h3>
+        <p>By creating an account or using Expense Tracker ("the Service"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.</p>
+
+        <h3>2. Description of Service</h3>
+        <p>Expense Tracker is a personal expense management application that allows you to record, categorise, and analyse expenses, scan receipts using AI-powered OCR, and export your data. The Service is provided as-is for personal use.</p>
+
+        <h3>3. Account Responsibilities</h3>
+        <p>You are responsible for maintaining the confidentiality of your account credentials. You must not share your account with others or attempt to access another user's data. You agree to notify us immediately of any unauthorised access at <a href="mailto:admin@rizibo.com">admin@rizibo.com</a>.</p>
+
+        <h3>4. Receipt Scanning &amp; OCR Accuracy</h3>
+        <p>Receipt scanning uses AI-based optical character recognition (OCR) technology. <strong>The accuracy of extracted data depends entirely on the quality of the uploaded image.</strong> Factors such as poor lighting, blurriness, skewed angles, low resolution, or partial visibility of the receipt will reduce extraction accuracy. You are responsible for reviewing and correcting all scanned data before relying on it. Expense Tracker makes no warranty regarding OCR accuracy and is not liable for errors in extracted data.</p>
+
+        <h3>5. Third-Party AI &amp; OCR Processors</h3>
+        <p>To provide receipt scanning, your uploaded images may be sent to third-party AI API providers (such as OpenAI or similar large-language-model services). By using the receipt scanning feature, you consent to this processing. We enter into Data Processing Agreements (DPAs) with our AI providers where required. Receipt images may be processed on servers located outside your country of residence, including transfers to the United States or the European Union. These transfers occur under appropriate safeguards (e.g. Standard Contractual Clauses). Third-party providers do not use your data for model training.</p>
+
+        <h3>6. Data Retention &amp; Deletion</h3>
+        <p>Your expense records and receipt images are retained for as long as your account is active. You may delete individual receipts or expenses at any time within the application. Upon account deletion, all your personal data including expense records, receipt images, and attachments will be permanently deleted within <strong>30 days</strong>. To request full account deletion, contact us at <a href="mailto:admin@rizibo.com">admin@rizibo.com</a>. Backups may retain deleted data for up to <strong>30 additional days</strong> before being purged.</p>
+
+        <h3>7. Data Export</h3>
+        <p>You may export your expense data at any time in CSV or JSON format using the built-in export feature. To request a full data export including attachments and account information, contact <a href="mailto:admin@rizibo.com">admin@rizibo.com</a>.</p>
+
+        <h3>8. Prohibited Use</h3>
+        <p>You may not use the Service to upload illegal content, attempt to access other users' data, reverse-engineer the application, or conduct automated scraping or abuse of the API.</p>
+
+        <h3>9. Limitation of Liability</h3>
+        <p>Expense Tracker is provided "as is" without any warranty of any kind. We are not liable for any inaccuracies in expense data, OCR results, currency conversions, or any loss of data. Our total liability to you for any claim arising from use of the Service is limited to the amount you paid for the Service in the 12 months preceding the claim (if applicable).</p>
+
+        <h3>10. Changes to Terms</h3>
+        <p>We may update these Terms at any time. We will notify users of material changes via email or an in-app notice. Continued use of the Service after changes constitutes acceptance of the updated Terms.</p>
+
+        <h3>11. Contact</h3>
+        <p>Questions about these Terms? Email us at <a href="mailto:admin@rizibo.com">admin@rizibo.com</a>.</p>
     </div>`;
 }
 
 function renderPrivacy(app) {
-    app.innerHTML = `
+    app.innerHTML = _legalPageStyle + `
     <div class="shared-header"><a href="/" class="brand"><img src="/images/logo192.png" alt="logo"> Expense Tracker</a></div>
-    <div class="container" style="max-width:700px; margin:2rem auto; padding:1rem;">
+    <div class="container legal-page" style="max-width:760px; margin:2rem auto; padding:1rem 1.5rem 4rem;">
         <h2>Privacy Policy</h2>
         <hr/>
-        <p>Last updated: May 2026</p>
-        <h3>1. Information We Collect</h3>
-        <p>We collect account information (username, email) and expense data you enter including receipt images.</p>
-        <h3>2. How We Use Your Information</h3>
-        <p>Your data is used solely to provide expense tracking functionality including receipt OCR, currency conversion, and analytics.</p>
-        <h3>3. Camera Access</h3>
-        <p>The app requests camera permission to scan receipts. Camera access is used only for this purpose and images are processed on our servers.</p>
-        <h3>4. Data Storage</h3>
-        <p>Data is stored on secured servers. Receipt images are stored for processing and retrieval.</p>
-        <h3>5. Data Sharing</h3>
-        <p>We do not sell, trade, or share your personal information with third parties except as required by law.</p>
-        <h3>6. Cookies</h3>
-        <p>We use session cookies for authentication. No third-party tracking cookies are used.</p>
-        <h3>7. Contact</h3>
-        <p>For privacy concerns, please refer to the project wiki.</p>
+        <p class="legal-meta"><strong>Last updated: May 2026</strong></p>
+        <p>This Privacy Policy explains how Expense Tracker ("we", "us", "our") collects, uses, stores, and protects your personal data when you use our service.</p>
+
+        <h3>1. Data We Collect</h3>
+        <ul>
+            <li><strong>Account data:</strong> username, email address, phone number (optional), base currency.</li>
+            <li><strong>Expense data:</strong> amounts, dates, categories, notes, tags, currency, and exchange rates you enter.</li>
+            <li><strong>Receipt images &amp; attachments:</strong> images or PDFs you upload for OCR scanning or manual attachment.</li>
+            <li><strong>Usage data:</strong> session information and application logs for security and debugging purposes.</li>
+        </ul>
+
+        <h3>2. How We Use Your Data</h3>
+        <p>Your data is used solely to provide and improve the expense tracking functionality: storing and displaying your expenses, running OCR on receipt images, calculating currency conversions, and generating analytics dashboards. We do not use your data for advertising or sell it to third parties.</p>
+
+        <h3>3. Data Retention</h3>
+        <ul>
+            <li>Expense records and receipt images are kept for the lifetime of your account.</li>
+            <li>You can delete individual receipts, attachments, and expenses at any time within the app.</li>
+            <li>On <strong>account deletion</strong>, all personal data (expense records, receipt images, attachments, account information) is permanently deleted within <strong>30 days</strong>. Encrypted backups may hold the data for up to <strong>30 additional days</strong> before purge.</li>
+            <li>Application logs are retained for up to <strong>90 days</strong> for security and debugging, then automatically deleted.</li>
+        </ul>
+
+        <h3>4. Your Rights &amp; Controls</h3>
+        <ul>
+            <li><strong>Delete receipts/attachments:</strong> Available within the app on any expense detail page.</li>
+            <li><strong>Export your data:</strong> Use the built-in CSV/JSON export in the Expenses page. For a full data export including attachments, email <a href="mailto:admin@rizibo.com">admin@rizibo.com</a>.</li>
+            <li><strong>Delete your account:</strong> To permanently delete your account and all associated data, email <a href="mailto:admin@rizibo.com">admin@rizibo.com</a>. Deletion is completed within 30 days.</li>
+            <li><strong>Correction:</strong> You can edit or delete any expense record, note, or tag within the app at any time.</li>
+        </ul>
+
+        <h3>5. Access Control &amp; Security</h3>
+        <ul>
+            <li>Each user account is strictly isolated. Users can only access their own expenses and receipts.</li>
+            <li>Receipt file names are generated as non-guessable unique identifiers — they are not derived from your username, date, or any predictable pattern.</li>
+            <li>All data is transmitted over HTTPS. Passwords are stored as salted hashes (never in plaintext).</li>
+            <li>Session-based authentication with server-side session invalidation on logout.</li>
+        </ul>
+
+        <h3>6. Third-Party OCR &amp; AI Processing</h3>
+        <p>When you scan a receipt, the uploaded image is sent to a third-party AI/OCR provider (such as OpenAI or a similar LLM API service) to extract structured data. By using the scan feature, you consent to this. Key details:</p>
+        <ul>
+            <li><strong>Data processor agreements (DPAs):</strong> We maintain DPAs with our AI providers as required under applicable privacy law.</li>
+            <li><strong>Data location:</strong> Processing may occur in the United States or European Union, depending on the provider.</li>
+            <li><strong>International transfers:</strong> Covered by appropriate safeguards such as Standard Contractual Clauses (SCCs).</li>
+            <li><strong>Retention by third parties:</strong> Receipt images are used solely for the single OCR request and are not retained by the AI provider for training or any other purpose, per our agreements.</li>
+            <li><strong>No training use:</strong> Your data is not used to train AI models by any of our third-party providers.</li>
+        </ul>
+
+        <h3>7. Camera Access</h3>
+        <p>The app requests camera permission solely to capture receipt photos for scanning. Camera access is used only when you actively choose to use the camera feature. No video is recorded or stored; only the captured image is processed.</p>
+
+        <h3>8. Cookies &amp; Session Data</h3>
+        <p>We use a single session cookie for authentication purposes. No third-party tracking cookies, advertising pixels, or analytics cookies are used.</p>
+
+        <h3>9. Data Sharing</h3>
+        <p>We do not sell, rent, or share your personal data with third parties except: (a) third-party OCR/AI processors as described above under DPAs, (b) when required by law or a valid legal process, or (c) to protect the rights and safety of our users.</p>
+
+        <h3>10. Incident Response</h3>
+        <p>In the event of a data breach or security incident affecting your personal data, we will:</p>
+        <ul>
+            <li>Investigate and contain the incident within <strong>24 hours</strong> of discovery.</li>
+            <li>Notify affected users by email within <strong>72 hours</strong> of confirming a breach, where required by applicable law.</li>
+            <li>Provide details of what data was affected, the likely consequences, and the measures taken to address the breach.</li>
+            <li>Report to relevant supervisory authorities where legally required (e.g. under GDPR).</li>
+        </ul>
+        <p>To report a suspected security vulnerability, email <a href="mailto:admin@rizibo.com">admin@rizibo.com</a> with the subject "Security Incident".</p>
+
+        <h3>11. Children's Privacy</h3>
+        <p>The Service is not directed at children under 16. We do not knowingly collect data from children. If you believe a child has provided us with personal data, please contact us to have it removed.</p>
+
+        <h3>12. Changes to This Policy</h3>
+        <p>We may update this Privacy Policy from time to time. We will notify you of material changes via email or an in-app notice. The "last updated" date at the top of this page reflects the most recent revision.</p>
+
+        <h3>13. Contact &amp; Data Controller</h3>
+        <p>For any privacy questions, data access requests, or to exercise your rights, contact us at:<br>
+        <a href="mailto:admin@rizibo.com">admin@rizibo.com</a></p>
     </div>`;
 }
