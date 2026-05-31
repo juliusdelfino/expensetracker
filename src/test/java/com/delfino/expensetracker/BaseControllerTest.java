@@ -10,6 +10,7 @@ import com.delfino.expensetracker.repository.ChatMessageRepository;
 import com.delfino.expensetracker.repository.ExchangeRateCacheRepository;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
+import com.delfino.expensetracker.repository.ReportRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
 import com.delfino.expensetracker.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -145,6 +146,7 @@ public abstract class BaseControllerTest {
     @Autowired protected ObjectMapper objectMapper;
     @Autowired protected UserRepository userRepository;
     @Autowired protected ExpenseRepository expenseRepository;
+    @Autowired protected ReportRepository reportRepository;
     @Autowired protected ExpenseItemRepository expenseItemRepository;
     @Autowired protected StoreRepository storeRepository;
     @Autowired protected ChatMessageRepository chatMessageRepository;
@@ -160,6 +162,7 @@ public abstract class BaseControllerTest {
         chatMessageRepository.deleteAll();
         expenseItemRepository.deleteAll();
         expenseRepository.deleteAll();
+        reportRepository.deleteAll();
         storeRepository.deleteAll();
         exchangeRateCacheRepository.deleteAll();
         userRepository.deleteAll();

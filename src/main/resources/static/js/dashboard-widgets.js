@@ -395,11 +395,13 @@ function renderGeoMap(elementId, data) {
 // ============================================
 let _discoveryIndex = {};
 let _discoveryObserver = null;
+window._discoveryReportCardsByContainer = window._discoveryReportCardsByContainer || {};
 
 function renderDiscoveryCards(containerId, cards) {
     const el = document.getElementById(containerId);
     if (!el) return;
     _discoveryIndex[containerId] = 0;
+    window._discoveryReportCardsByContainer[containerId] = [];
     el.innerHTML = '';
     if (!cards || cards.length === 0) return;
     appendDiscoveryBatch(containerId, cards, 3);
@@ -431,6 +433,8 @@ function appendDiscoveryBatch(containerId, cards, count) {
 
         const flag = card.country ? countryCodeToFlag(card.country) : '';
         const topExp = card.topExpenses || [];
+        const reportCards = window._discoveryReportCardsByContainer[containerId] || (window._discoveryReportCardsByContainer[containerId] = []);
+        const reportCardIndex = reportCards.push(card) - 1;
         let topExpHtml = '';
         if (topExp.length > 0) {
             topExpHtml = `<div class="discovery-top-expenses">
@@ -446,6 +450,12 @@ function appendDiscoveryBatch(containerId, cards, count) {
                 }).join('')}
             </div>`;
         }
+
+        const reportActionHtml = `<div class="discovery-card-actions">
+                <button class="btn btn-primary btn-sm" onclick="createReportFromDiscoveryCard(window._discoveryReportCardsByContainer['${containerId}'][${reportCardIndex}])">
+                    <i class="fa-solid fa-chart-line"></i> View Report
+                </button>
+            </div>`;
 
         div.innerHTML = `
             <div class="discovery-header" style="border-left-color:${accentColor}">
@@ -472,10 +482,45 @@ function appendDiscoveryBatch(containerId, cards, count) {
                 </div>
             </div>
             ${topExpHtml}
-            ${shopList ? `<div class="discovery-shops"><i class="fa-solid fa-store"></i> ${shopList}</div>` : ''}`;
+            ${shopList ? `<div class="discovery-shops"><i class="fa-solid fa-store"></i> ${shopList}</div>` : ''}
+            ${reportActionHtml}`;
         el.appendChild(div);
     }
     _discoveryIndex[containerId] = startIdx + count;
+}
+
+async function createReportFromDiscoveryCard(card) {
+    if (!card || !card.yearMonth || !card.country) {
+        toast('This discovery card cannot generate a report yet.', 'error');
+        return;
+    }
+
+    const [year, month] = card.yearMonth.split('-');
+    if (!year || !month) {
+        toast('This discovery card has an invalid date range.', 'error');
+        return;
+    }
+
+    const lastDay = new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate();
+    const body = {
+        title: card.title || `Trip Report ${card.yearMonth}`,
+        description: `Generated from dashboard discovery card for ${card.locationLabel || card.countryName || card.country}.`,
+        groupBy: 'STORE_LOCATION',
+        startDate: `${card.yearMonth}-01`,
+        endDate: `${card.yearMonth}-${String(lastDay).padStart(2, '0')}`,
+        country: card.country
+    };
+
+    if (card.city) body.city = card.city;
+
+    const result = await api('/api/reports', { method: 'POST', body });
+    if (!result || result.error) {
+        toast(result?.error || 'Failed to create report', 'error');
+        return;
+    }
+
+    toast('Report generated', 'success');
+    navigate(`#/reports/${result.id}`);
 }
 
 function initDiscoveryScroll(scrollContainerId, cardsContainerId, loadingId, cards) {

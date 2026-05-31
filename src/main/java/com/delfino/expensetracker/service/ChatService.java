@@ -12,6 +12,7 @@ import com.delfino.expensetracker.repository.ChatMessageRepository;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.UserRepository;
+import com.delfino.expensetracker.service.mcp.ChatReportContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,13 +43,15 @@ public class ChatService {
     private final ChatClient chatClient;
     private final ChatBotProperties chatBotProperties;
     private final ExpenseItemRepository expenseItemRepository;
+    private final ChatReportContext chatReportContext;
 
     public ChatService(ChatMessageRepository chatMessageRepository, ExpenseService expenseService,
                        ExpenseRepository expenseRepository, UserRepository userRepository,
                        ObjectMapper objectMapper, ChatClient.Builder chatClientBuilder,
                        ToolCallbackProvider toolCallbackProvider,
                        ChatBotProperties chatBotProperties,
-                       ExpenseItemRepository expenseItemRepository) {
+                       ExpenseItemRepository expenseItemRepository,
+                       ChatReportContext chatReportContext) {
         this.chatMessageRepository = chatMessageRepository;
         this.expenseService = expenseService;
         this.expenseRepository = expenseRepository;
@@ -56,6 +59,7 @@ public class ChatService {
         this.objectMapper = objectMapper;
         this.chatBotProperties = chatBotProperties;
         this.expenseItemRepository = expenseItemRepository;
+        this.chatReportContext = chatReportContext;
 
         // Build the ChatClient with all registered tool callbacks
         this.chatClient = chatClientBuilder
@@ -77,6 +81,8 @@ public class ChatService {
     }
 
     public ChatMessage processUserMessage(Long userId, String messageText) {
+        chatReportContext.clear();
+
         // Save user message
         ChatMessage userMsg = new ChatMessage();
         userMsg.setUserId(userId);
@@ -101,13 +107,14 @@ public class ChatService {
 
             // Try to parse as JSON (expense-creation flow)
             ProcessedResponse result = processLlmResponse(llmResponse, userId, user);
-            return saveBotMessage(userId, result.botText(), result.savedExpenseIds());
+            return saveBotMessage(userId, result.botText(), result.savedExpenseIds(), chatReportContext.getLinkedReportIds());
 
         } catch (Exception e) {
             log.error("Chatbot processing failed", e);
             return saveBotMessage(userId,
                     "Sorry, I had trouble processing that. Could you try rephrasing? " +
                             "For example: \"lunch 12.50 SGD\" or \"How much did I spend on groceries last month?\"",
+                    List.of(),
                     List.of());
         }
     }
@@ -274,12 +281,13 @@ public class ChatService {
         return cleaned;
     }
 
-    private ChatMessage saveBotMessage(Long userId, String text, List<Long> linkedExpenseIds) {
+    private ChatMessage saveBotMessage(Long userId, String text, List<Long> linkedExpenseIds, List<Long> linkedReportIds) {
         ChatMessage botMsg = new ChatMessage();
         botMsg.setUserId(userId);
         botMsg.setRole("BOT");
         botMsg.setText(text);
         botMsg.setLinkedExpenseIds(linkedExpenseIds);
+        botMsg.setLinkedReportIds(linkedReportIds);
         botMsg.setCreatedAt(LocalDateTime.now());
         chatMessageRepository.save(botMsg);
         return botMsg;

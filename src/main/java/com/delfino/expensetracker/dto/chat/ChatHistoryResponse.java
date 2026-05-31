@@ -8,5 +8,6 @@ import java.util.Map;
 public record ChatHistoryResponse(
         List<ChatMessage> messages,
         Map<String, ExpenseCard> expenses,
+        Map<String, ReportCard> reports,
         boolean hasMore,
         long total) {}

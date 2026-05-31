@@ -37,6 +37,7 @@
     <div class="nav-inline" id="navInline">
         <a href="#/dashboard" onclick="if(isMobile()){ goToDashboard(); return false; }"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
         <a href="#/expenses"><i class="fa-solid fa-receipt"></i> Expenses</a>
+        <a href="#/reports"><i class="fa-solid fa-chart-line"></i> Reports</a>
         <a href="#/expenses/new"><i class="fa-solid fa-plus"></i> New Expense</a>
         <a href="#/chat" onclick="openChat(event)"><i class="fa-solid fa-comment"></i> Chat</a>
     </div>
@@ -46,6 +47,7 @@
     <div class="nav-drawer" id="navDrawer">
         <a href="#/dashboard" class="drawer-mobile-only" onclick="goToDashboard(); closeNavDrawer()"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
         <a href="#/expenses" class="drawer-mobile-only" onclick="closeNavDrawer()"><i class="fa-solid fa-receipt"></i> Expenses</a>
+        <a href="#/reports" onclick="closeNavDrawer()"><i class="fa-solid fa-chart-line"></i> Reports</a>
         <a href="#/expenses/new" class="drawer-mobile-only" onclick="closeNavDrawer()"><i class="fa-solid fa-plus"></i> New Expense</a>
         <a href="#/chat" class="drawer-mobile-only" onclick="openChat(event); closeNavDrawer()"><i class="fa-solid fa-comment"></i> Chat</a>
         <a href="#/profile" onclick="closeNavDrawer()"><i class="fa-solid fa-user-gear"></i> <span id="nav-username"></span></a>
@@ -116,6 +118,7 @@
 <script src="/js/chat.js"></script>
 <script src="/js/auth.js"></script>
 <script src="/js/expenses.js"></script>
+<script src="/js/reports.js"></script>
 <script src="/js/expense-new.js"></script>
 <script src="/js/expense-detail.js"></script>
 <script src="/js/expense-dialogs.js"></script>
