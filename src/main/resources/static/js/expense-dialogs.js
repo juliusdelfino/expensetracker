@@ -571,16 +571,18 @@ function openShareMenu(expenseId, btn) {
     menu.id = 'shareMenu';
     menu.className = 'share-menu';
 
-    const url = window.location.origin + '/view/expenses/' + expenseId;
     const hasNativeShare = typeof navigator.share === 'function';
 
     menu.innerHTML = `
-        <div class="share-menu-item" onclick="copyExpenseLink('${url}')">
+        <div class="share-menu-item" onclick="copyExpenseLink('${expenseId}')">
             <i class="fa-solid fa-link"></i> Copy link
         </div>
-        ${hasNativeShare ? `<div class="share-menu-item" onclick="nativeShareExpense('${url}')">
-            <i class="fa-solid fa-share-nodes"></i> Share\u2026
+        ${hasNativeShare ? `<div class="share-menu-item" onclick="nativeShareExpense('${expenseId}')">
+            <i class="fa-solid fa-share-nodes"></i> Share…
         </div>` : ''}
+        <div class="share-menu-item" onclick="revokeExpenseShare('${expenseId}')">
+            <i class="fa-solid fa-ban"></i> Revoke share link
+        </div>
     `;
 
     document.body.appendChild(menu);
@@ -601,22 +603,86 @@ function closeShareMenu() {
     if (menu) menu.remove();
 }
 
-async function copyExpenseLink(url) {
+function refreshExpenseShareUI(expenseId) {
+    if (window.location.hash === `#/expenses/${expenseId}`) {
+        renderExpenseDetail(document.getElementById('app'), expenseId);
+    }
+}
+
+async function copyTextToClipboard(text) {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const input = document.createElement('textarea');
+    input.value = text;
+    input.setAttribute('readonly', 'readonly');
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    input.remove();
+}
+
+async function createExpenseShare(expenseId, refreshAfter = false, ttlDays = null) {
+    const body = ttlDays ? { ttlDays } : {};
+    const created = await api(`/api/expenses/${expenseId}/share`, { method: 'POST', body });
+    if (created && created.active && created.shareUrl) {
+        toast('Share link ready', 'success');
+        if (refreshAfter) refreshExpenseShareUI(expenseId);
+        return created;
+    }
+
+    toast('Could not create share link', 'error');
+    return null;
+}
+
+async function getOrCreateExpenseShareLink(expenseId) {
+    const existing = await api(`/api/expenses/${expenseId}/share`, { noAuthRedirect: true });
+    if (existing && existing.active && existing.shareUrl) {
+        return { url: getAbsoluteShareUrl(existing.shareUrl), created: false };
+    }
+
+    const created = await createExpenseShare(expenseId, true);
+    return created && created.shareUrl
+        ? { url: getAbsoluteShareUrl(created.shareUrl), created: true }
+        : { url: null, created: false };
+}
+
+async function copyExpenseLink(expenseId, refreshAfter = false) {
     closeShareMenu();
     try {
-        await navigator.clipboard.writeText(url);
-        toast('Link copied!', 'success');
+        const { url, created } = await getOrCreateExpenseShareLink(expenseId);
+        if (!url) throw new Error('share-link-missing');
+        await copyTextToClipboard(url);
+        if (refreshAfter || created) refreshExpenseShareUI(expenseId);
+        toast(created ? 'Share link created and copied!' : 'Link copied!', 'success');
     } catch {
         toast('Could not copy link', 'error');
     }
 }
 
-async function nativeShareExpense(url) {
+async function nativeShareExpense(expenseId, refreshAfter = false) {
     closeShareMenu();
     try {
+        const { url, created } = await getOrCreateExpenseShareLink(expenseId);
+        if (!url) throw new Error('share-link-missing');
+        if (refreshAfter || created) refreshExpenseShareUI(expenseId);
         await navigator.share({ title: 'Expense', url });
     } catch (err) {
         if (err.name !== 'AbortError') toast('Share failed', 'error');
     }
 }
 
+async function revokeExpenseShare(expenseId, refreshAfter = false) {
+    closeShareMenu();
+    const result = await api(`/api/expenses/${expenseId}/share`, { method: 'DELETE' });
+    if (result && result.active === false) {
+        if (refreshAfter) refreshExpenseShareUI(expenseId);
+        toast('Share link revoked', 'success');
+    } else {
+        toast('No active share link', 'info');
+    }
+}

@@ -12,15 +12,20 @@ function _stopExpenseDetailPolling() {
     }
 }
 
-function _startExpenseDetailPolling(app, id) {
+function refreshExpenseDetail(id, shared = false, shareToken = null) {
+    const options = shared ? { shared: true, shareToken: shareToken || id } : {};
+    return renderExpenseDetail(document.getElementById('app'), id, options);
+}
+
+function _startExpenseDetailPolling(app, id, options = {}) {
     _stopExpenseDetailPolling();
     _expenseDetailPollTimer = setInterval(async () => {
         try {
-            const data = await api(`/api/expenses/${id}`, { noAuthRedirect: true });
+            const data = await loadExpenseDetail(id, options);
             const status = data && data.expense && data.expense.status;
             if (status && status !== 'PROCESSING') {
                 _stopExpenseDetailPolling();
-                renderExpenseDetail(app, id);
+                renderExpenseDetail(app, id, options);
             }
         } catch (e) {
             // ignore polling errors
@@ -28,29 +33,229 @@ function _startExpenseDetailPolling(app, id) {
     }, 5000);
 }
 
-async function renderExpenseDetail(app, id) {
+function getReceiptUrl(imagePath, options = {}) {
+    if (!imagePath) return '';
+    if (options.shared && options.shareToken) {
+        const filename = imagePath.replace(/\\/g, '/').split('/').pop();
+        return `/api/share/${options.shareToken}/receipts/${filename}`;
+    }
+    const normalized = imagePath.replace(/\\/g, '/');
+    const match = normalized.match(/(?:^|.*\/)?receipts\/(\d+)\/(\d{4}_\d{2})\/([^/]+)$/);
+    if (!match) return '';
+    const [, userId, yearMonth, filename] = match;
+    return `/api/attachments/receipts/${userId}/${yearMonth}/${filename}`;
+}
+
+async function loadExpenseDetail(id, options = {}) {
+    const url = options.shared ? `/api/share/${id}/expense` : `/api/expenses/${id}`;
+    return api(url, { noAuthRedirect: true });
+}
+
+async function loadExpenseShareStatus(expenseUrlId) {
+    const status = await api(`/api/expenses/${expenseUrlId}/share`, { noAuthRedirect: true });
+    return status && typeof status === 'object' && Object.prototype.hasOwnProperty.call(status, 'active')
+        ? status
+        : null;
+}
+
+function getAbsoluteShareUrl(shareUrl) {
+    if (!shareUrl) return '';
+    if (/^https?:\/\//i.test(shareUrl)) return shareUrl;
+    return `${window.location.origin}${shareUrl.startsWith('/') ? '' : '/'}${shareUrl}`;
+}
+
+function formatShareDateTime(dateValue) {
+    if (!dateValue) return '';
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+    });
+}
+
+function formatRelativeTimeFromNow(dateValue) {
+    if (!dateValue) return '';
+    const target = new Date(dateValue);
+    if (Number.isNaN(target.getTime())) return '';
+
+    let diffMs = target.getTime() - Date.now();
+    const isFuture = diffMs >= 0;
+    diffMs = Math.abs(diffMs);
+
+    const units = [
+        { label: 'day', ms: 24 * 60 * 60 * 1000 },
+        { label: 'hour', ms: 60 * 60 * 1000 },
+        { label: 'minute', ms: 60 * 1000 }
+    ];
+
+    for (const unit of units) {
+        if (diffMs >= unit.ms || unit.label === 'minute') {
+            const value = Math.max(1, Math.round(diffMs / unit.ms));
+            const suffix = value === 1 ? '' : 's';
+            return isFuture
+                ? `in ${value} ${unit.label}${suffix}`
+                : `${value} ${unit.label}${suffix} ago`;
+        }
+    }
+
+    return isFuture ? 'in moments' : 'moments ago';
+}
+
+function renderSharedExpenseBanner(options = {}) {
+    if (!options.shared) return '';
+
+    return `<div class="card shared-expense-banner">
+        <div class="shared-expense-banner-main">
+            <div class="shared-expense-banner-icon"><i class="fa-solid fa-share-nodes"></i></div>
+            <div>
+                <div class="shared-expense-banner-title">Shared expense link</div>
+                <div class="shared-expense-banner-text">
+                    You are viewing a shared expense. Anyone with this link can view the expense details and receipt files until the owner revokes access or the link expires.
+                </div>
+            </div>
+        </div>
+        ${!currentUser ? `<div class="shared-expense-banner-actions">
+            <a href="#/login" class="btn btn-primary btn-sm"><i class="fa-solid fa-right-to-bracket"></i> Sign in to track your own expenses</a>
+        </div>` : ''}
+    </div>`;
+}
+
+function getShareTtlSelectId(expenseUrlId) {
+    return `shareTtlDays_${expenseUrlId}`;
+}
+
+function getShareTtlOptions(defaultTtlDays) {
+    const values = [1, 7, defaultTtlDays]
+        .map(v => Number(v))
+        .filter(v => Number.isFinite(v) && v > 0);
+    return [...new Set(values)].sort((a, b) => a - b);
+}
+
+function getSelectedShareTtlDays(expenseUrlId) {
+    const select = document.getElementById(getShareTtlSelectId(expenseUrlId));
+    const value = Number(select?.value);
+    return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function renderOwnerSharePanel(expenseUrlId, shareStatus) {
+    const defaultTtlDays = Number(appConfig.sharingDefaultTtlDays) || 30;
+    const hasNativeShare = typeof navigator.share === 'function';
+
+    if (shareStatus && shareStatus.active && shareStatus.shareUrl) {
+        const absoluteUrl = getAbsoluteShareUrl(shareStatus.shareUrl);
+        const expiryRelative = formatRelativeTimeFromNow(shareStatus.expiresAt);
+        const expiryAbsolute = formatShareDateTime(shareStatus.expiresAt);
+        const expiryLabel = `Expires ${expiryRelative || `in ${defaultTtlDays} days`}`;
+
+        return `<div class="card share-status-card share-status-card-active">
+            <div class="share-status-header-row">
+                <div>
+                    <h3 class="card-title"><i class="fa-solid fa-share-nodes"></i> Share access</h3>
+                    <p class="share-status-subtitle">Anyone with the link below can open this expense and its receipts without signing in.</p>
+                </div>
+                <span class="share-status-pill share-status-pill-active"><i class="fa-solid fa-check"></i> Active</span>
+            </div>
+
+            <div class="share-status-link-row">
+                <input class="share-status-link-input" type="text" readonly value="${esc(absoluteUrl)}" onclick="this.select()" aria-label="Share link">
+                <button class="btn btn-outline btn-sm" onclick="copyExpenseLink('${expenseUrlId}', true)"><i class="fa-solid fa-copy"></i> Copy</button>
+                ${hasNativeShare ? `<button class="btn btn-primary btn-sm" onclick="nativeShareExpense('${expenseUrlId}', true)"><i class="fa-solid fa-paper-plane"></i> Share</button>` : ''}
+            </div>
+
+            <div class="share-status-meta-grid">
+                <div class="share-status-meta-item">
+                    <span class="share-status-meta-label">Access</span>
+                    <span class="share-status-meta-value">Anyone with the link</span>
+                </div>
+                <div class="share-status-meta-item">
+                    <span class="share-status-meta-label">Expiry</span>
+                    <span class="share-status-meta-value">${esc(expiryLabel)}</span>
+                    ${expiryAbsolute ? `<span class="share-status-meta-subvalue">${esc(expiryAbsolute)}</span>` : ''}
+                </div>
+                <div class="share-status-meta-item">
+                    <span class="share-status-meta-label">Preview</span>
+                    <a class="share-status-preview-link" href="${esc(absoluteUrl)}" target="_blank" rel="noopener noreferrer">Open shared view</a>
+                </div>
+            </div>
+
+            <div class="share-status-actions">
+                <button class="btn btn-danger btn-sm" onclick="revokeExpenseShare('${expenseUrlId}', true)"><i class="fa-solid fa-ban"></i> Revoke link</button>
+            </div>
+        </div>`;
+    }
+
+    let statusHint = `New share links expire automatically after ${defaultTtlDays} day${defaultTtlDays === 1 ? '' : 's'}.`;
+    if (shareStatus && shareStatus.revokedAt) {
+        statusHint = `Your last share link was revoked on ${formatShareDateTime(shareStatus.revokedAt) || 'a previous date'}.`;
+    } else if (shareStatus && shareStatus.expiresAt) {
+        statusHint = `Your last share link expired on ${formatShareDateTime(shareStatus.expiresAt) || 'a previous date'}.`;
+    }
+
+    const ttlSelectId = getShareTtlSelectId(expenseUrlId);
+    const ttlOptions = getShareTtlOptions(defaultTtlDays);
+
+    return `<div class="card share-status-card share-status-card-inactive">
+        <div class="share-status-header-row">
+            <div>
+                <h3 class="card-title"><i class="fa-solid fa-share-nodes"></i> Share access</h3>
+                <p class="share-status-subtitle">Create a temporary link so someone can view this expense and its receipt files.</p>
+            </div>
+            <span class="share-status-pill share-status-pill-inactive"><i class="fa-solid fa-lock"></i> Not shared</span>
+        </div>
+
+        <div class="share-status-empty-state">
+            <div class="share-status-empty-copy">
+                <p>${esc(statusHint)}</p>
+                <div class="share-status-ttl-row">
+                    <label class="share-status-ttl-label" for="${ttlSelectId}">Link expiry</label>
+                    <select id="${ttlSelectId}" class="share-status-ttl-select">
+                        ${ttlOptions.map(days => `<option value="${days}" ${days === defaultTtlDays ? 'selected' : ''}>${days === 1 ? '24 hours' : `${days} days`}</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="createExpenseShare('${expenseUrlId}', true, getSelectedShareTtlDays('${expenseUrlId}'))"><i class="fa-solid fa-link"></i> Create share link</button>
+        </div>
+    </div>`;
+}
+
+async function renderExpenseDetail(app, id, options = {}) {
+    const resolvedOptions = options.shared && !options.shareToken
+        ? { ...options, shareToken: id }
+        : options;
     _stopExpenseDetailPolling();
-    const data = await api(`/api/expenses/${id}`, { noAuthRedirect: true });
+    const data = await loadExpenseDetail(id, resolvedOptions);
     if (!data || !data.expense) {
-        app.innerHTML = `<div class="container"><div class="card" style="text-align:center; padding:2rem;">
-            <i class="fa-solid fa-receipt" style="font-size:2rem; color:var(--text-light)"></i>
-            <p style="margin-top:1rem">Expense not found.</p>
-            ${currentUser
-                ? `<a href="#/expenses" class="btn btn-outline" style="margin-top:1rem;"><i class="fa-solid fa-arrow-left"></i> Back to Expenses</a>`
-                : `<a href="#/login" class="btn btn-primary" style="margin-top:1rem;"><i class="fa-solid fa-right-to-bracket"></i> Login</a>`}
-        </div></div>`;
+        const expiredMessage = resolvedOptions.shared
+            ? 'This link has expired or was revoked.'
+            : 'Expense not found.';
+        app.innerHTML = `${!currentUser ? `<div class="shared-header"><a href="/" class="brand"><img src="/images/logo192.png" alt="logo"> Expense Tracker</a></div>` : ''}
+            <div class="container"><div class="card shared-expense-empty-state">
+                <div class="shared-expense-empty-icon"><i class="fa-solid fa-link-slash"></i></div>
+                <h2>${resolvedOptions.shared ? 'Shared link unavailable' : 'Expense not found'}</h2>
+                <p>${expiredMessage}</p>
+                <div class="shared-expense-empty-actions">
+                    ${currentUser
+                        ? `<a href="#/expenses" class="btn btn-outline"><i class="fa-solid fa-arrow-left"></i> Back to Expenses</a>`
+                        : `<a href="#/login" class="btn btn-primary"><i class="fa-solid fa-right-to-bracket"></i> Sign in</a>`}
+                    ${!currentUser ? `<a href="/" class="btn btn-outline"><i class="fa-solid fa-house"></i> Go to home page</a>` : ''}
+                </div>
+            </div></div>`;
         return;
     }
     const e = data.expense;
     const items = data.items || [];
     const store = data.store;
     const isOwner = !!data.isOwner;
+    const shareStatus = isOwner && e.urlId ? await loadExpenseShareStatus(e.urlId) : null;
     window._expenseIsOwner = isOwner;
 
     const isReceiptScan = e.type === 'RECEIPT_SCAN';
     const isCompleted = e.status === 'COMPLETED';
     const isProcessing = e.status === 'PROCESSING';
-    const isFailed = e.status === 'FAILED';
 
     if (isOwner && (!window._allExpenseCategories || window._allExpenseCategories.length === 0)) {
         window._allExpenseCategories = (await api('/api/expenses/categories')) || [];
@@ -72,7 +277,7 @@ async function renderExpenseDetail(app, id) {
                     <button class="btn btn-outline btn-sm btn-icon" onclick="toggleActionMenu()" title="Actions"><i class="fa-solid fa-ellipsis-vertical"></i></button>
                     <div class="action-dropdown" id="actionDropdown" style="display:none;">
                         ${isOwner && isReceiptScan && !isProcessing ? `<button class="action-dropdown-item" onclick="toggleActionMenu(); retryExpenseWithConfirm('${e.urlId}', '${e.status}')"><i class="fa-solid fa-rotate"></i> Retry Scan</button>` : ''}
-                        ${!isProcessing ? `<button class="action-dropdown-item" onclick="toggleActionMenu(); openShareMenu('${e.urlId}', document.getElementById('actionMenuWrap'))"><i class="fa-solid fa-share-nodes"></i> Share</button>` : ''}
+                        ${isOwner && !isProcessing ? `<button class="action-dropdown-item" onclick="toggleActionMenu(); openShareMenu('${e.urlId}', document.getElementById('actionMenuWrap'))"><i class="fa-solid fa-share-nodes"></i> Share</button>` : ''}
                         ${isOwner && !isProcessing ? `<button class="action-dropdown-item" onclick="toggleActionMenu(); duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i> Duplicate</button>` : ''}
                         ${isOwner ? `<button class="action-dropdown-item action-dropdown-danger" onclick="toggleActionMenu(); deleteExpense('${e.urlId}'); navigate('#/expenses')"><i class="fa-solid fa-trash"></i> Delete</button>` : ''}
                     </div>
@@ -80,7 +285,13 @@ async function renderExpenseDetail(app, id) {
             </div>
         </div>`;
 
+    html += renderSharedExpenseBanner(resolvedOptions);
+    if (isOwner && !isProcessing) {
+        html += renderOwnerSharePanel(e.urlId, shareStatus);
+    }
+
     if (isProcessing && isReceiptScan && e.imagePath) {
+        const receiptUrl = getReceiptUrl(e.imagePath, resolvedOptions);
         const imgFilename = e.imagePath.replace(/\\/g, '/').split('/').pop();
         const ext = (imgFilename.split('.').pop() || '').toLowerCase();
         const isPdf = ext === 'pdf';
@@ -96,12 +307,12 @@ async function renderExpenseDetail(app, id) {
                     <i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--primary)"></i>
                     <p style="margin-top:1rem; color:var(--text-light)">Processing receipt...<br>This may take less than a minute.</p>
                     <div style="display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap; margin-top:1rem;">
-                        <button class="btn btn-primary btn-sm" onclick="renderExpenseDetail(document.getElementById('app'),'${e.urlId}')">
+                        <button class="btn btn-primary btn-sm" onclick="refreshExpenseDetail('${id}', ${resolvedOptions.shared ? 'true' : 'false'}, ${resolvedOptions.shareToken ? `'${resolvedOptions.shareToken}'` : 'null'})">
                             <i class="fa-solid fa-rotate"></i> Refresh
                         </button>
-                        <button class="btn btn-outline btn-sm" onclick="navigate('#/expenses/new?tab=scan')">
+                        ${isOwner ? `<button class="btn btn-outline btn-sm" onclick="navigate('#/expenses/new?tab=scan')">
                             <i class="fa-solid fa-camera"></i> Scan another
-                        </button>
+                        </button>` : ''}
                     </div>
                 </div>
             </div>
@@ -113,10 +324,10 @@ async function renderExpenseDetail(app, id) {
                     </button>
                 </div>
                 ${isPdf ? `
-                    <iframe src="/pdfjs-5.6.205-dist/web/viewer.html?file=/api/attachments/receipts/${imgFilename}" style="width:100%; height:600px; border:0;"></iframe>
+                    <iframe src="/pdfjs-5.6.205-dist/web/viewer.html?file=${encodeURIComponent(receiptUrl)}" style="width:100%; height:600px; border:0;"></iframe>
                 ` : `
                     <div class="receipt-zoom-container" id="receiptZoomContainer">
-                        <img src="/api/attachments/receipts/${imgFilename}" class="receipt-image" id="receiptImg" alt="Receipt">
+                        <img src="${receiptUrl}" class="receipt-image" id="receiptImg" alt="Receipt">
                     </div>
                 `}
             </div>
@@ -124,7 +335,7 @@ async function renderExpenseDetail(app, id) {
         html += '</div>';
         app.innerHTML = html;
         initReceiptZoom();
-        _startExpenseDetailPolling(app, id);
+        _startExpenseDetailPolling(app, id, resolvedOptions);
         return;
     }
 
@@ -133,20 +344,21 @@ async function renderExpenseDetail(app, id) {
             <i class="fa-solid fa-spinner fa-spin" style="font-size:3rem; color:var(--primary)"></i>
             <p style="margin-top:1rem; color:var(--text-light)">Processing receipt... This may take less than a minute.</p>
             <div style="display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap; margin-top:1rem;">
-                <button class="btn btn-primary" onclick="renderExpenseDetail(document.getElementById('app'),'${e.urlId}')">
+                <button class="btn btn-primary" onclick="refreshExpenseDetail('${id}', ${resolvedOptions.shared ? 'true' : 'false'}, ${resolvedOptions.shareToken ? `'${resolvedOptions.shareToken}'` : 'null'})">
                     <i class="fa-solid fa-rotate"></i> Refresh
                 </button>
-                <button class="btn btn-outline" onclick="navigate('#/expenses/new?tab=scan')">
+                ${isOwner ? `<button class="btn btn-outline" onclick="navigate('#/expenses/new?tab=scan')">
                     <i class="fa-solid fa-camera"></i> Scan another receipt
-                </button>
+                </button>` : ''}
             </div>
         </div></div>`;
         app.innerHTML = html;
-        _startExpenseDetailPolling(app, id);
+        _startExpenseDetailPolling(app, id, resolvedOptions);
         return;
     }
 
     if (isReceiptScan && isCompleted && e.imagePath) {
+        const receiptUrl = getReceiptUrl(e.imagePath, resolvedOptions);
         const imgFilename = e.imagePath.replace(/\\/g, '/').split('/').pop();
         const ext = (imgFilename.split('.').pop() || '').toLowerCase();
         const isPdf = ext === 'pdf';
@@ -168,10 +380,10 @@ async function renderExpenseDetail(app, id) {
                     </button>
                 </div>
                 ${isPdf ? `
-                    <iframe src="/pdfjs-5.6.205-dist/web/viewer.html?file=/api/attachments/receipts/${imgFilename}" style="width:100%; height:600px; border:0;"></iframe>
+                    <iframe src="/pdfjs-5.6.205-dist/web/viewer.html?file=${encodeURIComponent(receiptUrl)}" style="width:100%; height:600px; border:0;"></iframe>
                 ` : `
                     <div class="receipt-zoom-container" id="receiptZoomContainer">
-                        <img src="/api/attachments/receipts/${imgFilename}" class="receipt-image" id="receiptImg" alt="Receipt">
+                        <img src="${receiptUrl}" class="receipt-image" id="receiptImg" alt="Receipt">
                     </div>
                 `}
             </div>
@@ -189,8 +401,11 @@ async function renderExpenseDetail(app, id) {
         <ul class="attachment-list" id="attachmentList">
             ${attachments.map(a => {
                 const fname = a.replace(/\\/g, '/').split('/').pop();
+                const attachmentUrl = resolvedOptions.shared && resolvedOptions.shareToken
+                    ? `/api/share/${resolvedOptions.shareToken}/receipts/${fname}`
+                    : `/api/attachments/${e.urlId}/${fname}`;
                 return `<li>
-                    <a href="/api/attachments/${e.id}/${fname}" target="_blank"><i class="fa-solid fa-file"></i> ${fname}</a>
+                    <a href="${attachmentUrl}" target="_blank"><i class="fa-solid fa-file"></i> ${fname}</a>
                     ${isOwner ? `<button class="btn btn-danger btn-sm btn-icon" onclick="removeAttachment('${e.id}','${fname}')"><i class="fa-solid fa-xmark"></i></button>` : ''}
                 </li>`;
             }).join('')}

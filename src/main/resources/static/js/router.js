@@ -51,11 +51,20 @@ async function router() {
     if (hash === '#/terms') { hideMobileUI(); document.getElementById('navbar').style.display = 'none'; renderTerms(app); return; }
     if (hash === '#/privacy') { hideMobileUI(); document.getElementById('navbar').style.display = 'none'; renderPrivacy(app); return; }
 
-    // Expense detail pages are publicly accessible — try auth but never force redirect
+    // Owner expense detail pages require authentication
     if (hash.match(/^#\/expenses\/[a-f0-9-]+$/)) {
         hideMobileUI();
-        await tryCheckAuth();
+        const authed = await checkAuth();
+        if (!authed) { navigate('#/login'); return; }
         renderExpenseDetail(app, hash.split('/')[2]);
+        return;
+    }
+
+    // Shared expense detail pages are publicly accessible — try auth but never force redirect
+    if (hash.match(/^#\/share\/[A-Za-z0-9-]+$/)) {
+        hideMobileUI();
+        await tryCheckAuth();
+        renderExpenseDetail(app, hash.split('/')[2], { shared: true });
         return;
     }
 
