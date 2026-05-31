@@ -16,6 +16,7 @@ import com.delfino.expensetracker.repository.StoreRepository;
 import com.delfino.expensetracker.service.ocr.OcrProvider;
 import com.delfino.expensetracker.util.JsonUtils;
 import com.delfino.expensetracker.util.MediaUtils;
+import com.delfino.expensetracker.util.ReceiptStorageUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -83,6 +84,9 @@ public class OcrService {
     @Value("${ocr.api.prompt:Parse this receipt image and return a JSON object. Return ONLY valid JSON.}")
     private String ocrPrompt;
 
+    @Value("${app.data.dir:data}")
+    private String dataDir;
+
     public OcrService(ExpenseRepository expenseRepository, ExpenseItemRepository expenseItemRepository,
                       StoreRepository storeRepository, UserRepository userRepository,
                       CurrencyService currencyService, GeocodingService geocodingService,
@@ -105,8 +109,9 @@ public class OcrService {
 
     public OcrRequest buildRequestBody(String ocrModel, String ocrPrompt,
                                        String imagePath, Long expenseId) throws IOException {
-        log.info("Processing receipt for expense {}: reading image from {}", expenseId, imagePath);
-        byte[] imageBytes = Files.readAllBytes(Path.of(imagePath));
+        Path resolvedImagePath = ReceiptStorageUtils.resolveStoredPath(dataDir, imagePath);
+        log.info("Processing receipt for expense {}: reading image from {}", expenseId, resolvedImagePath);
+        byte[] imageBytes = Files.readAllBytes(resolvedImagePath);
         String mediaType = MediaUtils.detectMediaType(imageBytes);
 
         Map<String, Object> requestBody;

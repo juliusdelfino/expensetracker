@@ -19,6 +19,7 @@ import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
 import com.delfino.expensetracker.service.ExpenseService;
 import com.delfino.expensetracker.service.SupportedCurrencyService;
+import com.delfino.expensetracker.util.ReceiptStorageUtils;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,8 +33,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.*;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -126,11 +125,15 @@ public class ExpenseController {
     }
 
     @GetMapping("/{expenseUrlId}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> get(@PathVariable String expenseUrlId, UserToken userToken) {
         Long userId = userToken != null ? userToken.getUserId() : null;
         return expenseRepository.findByUrlId(expenseUrlId)
                 .map(expense -> {
                     boolean isOwner = userId != null && expense.getUserId() == userId;
+                    if (!isOwner) {
+                        return ResponseEntity.status(403).body((Object) new ErrorResponse("Access denied"));
+                    }
                     return ResponseEntity.ok((Object) new ExpenseDetailResponse(
                             expense,
                             expenseItemRepository.findByExpenseId(expense.getId()),
@@ -158,12 +161,9 @@ public class ExpenseController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> uploadReceipt(@RequestParam("file") MultipartFile file, UserToken userToken) throws IOException {
         long userId = userToken.getUserId();
-        Path uploadDir = Path.of(dataDir, "receipts");
-        Files.createDirectories(uploadDir);
-        String filename = getDateString() + "_" + userId + "_" + file.getOriginalFilename();
-        Path filePath = uploadDir.resolve(filename);
-        Files.write(filePath, file.getBytes());
-        Expense expense = expenseService.createReceiptScanExpense(userId, filePath.toString());
+        Path filePath = storeReceiptFile(userId, file);
+        Expense expense = expenseService.createReceiptScanExpense(userId,
+                ReceiptStorageUtils.relativizeToDataDir(dataDir, filePath));
         return ResponseEntity.ok(expense);
     }
 
@@ -174,17 +174,14 @@ public class ExpenseController {
         if (files.size() > batchMaxFiles) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Maximum " + batchMaxFiles + " files allowed per batch"));
         }
-        Path uploadDir = Path.of(dataDir, "receipts");
-        Files.createDirectories(uploadDir);
         List<Expense> expenses = new ArrayList<>();
         for (MultipartFile file : files) {
-            String filename = getDateString() + "_" + userId + "_" + file.getOriginalFilename();
-            Path filePath = uploadDir.resolve(filename);
-            Files.write(filePath, file.getBytes());
+            Path filePath = storeReceiptFile(userId, file);
+            String storedPath = ReceiptStorageUtils.relativizeToDataDir(dataDir, filePath);
             if (batchQueueEnabled) {
-                expenses.add(expenseService.createReceiptScanExpenseQueued(userId, filePath.toString()));
+                expenses.add(expenseService.createReceiptScanExpenseQueued(userId, storedPath));
             } else {
-                expenses.add(expenseService.createReceiptScanExpense(userId, filePath.toString()));
+                expenses.add(expenseService.createReceiptScanExpense(userId, storedPath));
             }
         }
         if (batchQueueEnabled) {
@@ -193,8 +190,16 @@ public class ExpenseController {
         return ResponseEntity.ok(expenses);
     }
 
-    private String getDateString() {
-        return ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS"));
+    static String buildReceiptStoragePath(long userId, String originalFilename) {
+        return ReceiptStorageUtils.buildRelativePath(userId, LocalDate.now(), UUID.randomUUID(), originalFilename);
+    }
+
+    private Path storeReceiptFile(long userId, MultipartFile file) throws IOException {
+        String relativePath = buildReceiptStoragePath(userId, file.getOriginalFilename());
+        Path filePath = Path.of(dataDir).resolve(relativePath);
+        Files.createDirectories(filePath.getParent());
+        Files.write(filePath, file.getBytes(), StandardOpenOption.CREATE_NEW);
+        return filePath;
     }
 
     @PutMapping("/{expenseUrlId}")

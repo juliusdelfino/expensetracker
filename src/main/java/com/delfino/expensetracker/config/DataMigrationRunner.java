@@ -3,6 +3,7 @@ package com.delfino.expensetracker.config;
 import com.delfino.expensetracker.model.*;
 import com.delfino.expensetracker.repository.*;
 import com.delfino.expensetracker.service.GeocodingService;
+import com.delfino.expensetracker.util.ReceiptStorageUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -22,8 +23,11 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * One-time migration runner that reads existing JSON data files
@@ -85,6 +89,9 @@ public class DataMigrationRunner implements ApplicationRunner {
 
         // Migrate store-expense relationship: move expenseId from Store to storeId on Expense
         migrateStoreExpenseRelationship();
+
+        // Reorganize legacy flat receipt files into the per-user/month UUID layout
+        migrateReceiptStorageLayout();
 
         // Always retroactively geocode stores without coordinates
         try {
@@ -245,6 +252,64 @@ public class DataMigrationRunner implements ApplicationRunner {
         } catch (Exception e) {
             log.warn("Store-expense relationship migration warning: {}", e.getMessage());
         }
+    }
+
+    public void migrateReceiptStorageLayout() {
+        List<Expense> expenses = expenseRepository.findAll();
+        if (expenses.isEmpty()) {
+            log.debug("No expenses found — skipping receipt storage migration");
+            return;
+        }
+
+        int migrated = 0;
+        for (Expense expense : expenses) {
+            String imagePath = expense.getImagePath();
+            if (imagePath == null || imagePath.isBlank() || ReceiptStorageUtils.isNewReceiptLayout(imagePath)) {
+                continue;
+            }
+
+            Path source = ReceiptStorageUtils.resolveStoredPath(dataDir, imagePath);
+            if (!Files.exists(source) || Files.isDirectory(source)) {
+                log.debug("Skipping receipt migration for expense {} — source file missing: {}", expense.getId(), source);
+                continue;
+            }
+
+            String newRelativePath = ReceiptStorageUtils.buildRelativePath(
+                    expense.getUserId(),
+                    resolveReceiptBucketDate(expense),
+                    UUID.randomUUID(),
+                    source.getFileName().toString());
+            Path target = Path.of(dataDir).resolve(newRelativePath);
+
+            try {
+                Files.createDirectories(target.getParent());
+                Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+                expense.setImagePath(ReceiptStorageUtils.normalizeSeparators(newRelativePath));
+                expense.setUpdatedAt(LocalDateTime.now());
+                expenseRepository.save(expense);
+                migrated++;
+                log.info("Migrated receipt for expense {} to {}", expense.getId(), newRelativePath);
+            } catch (IOException e) {
+                log.warn("Failed to migrate receipt for expense {}: {}", expense.getId(), e.getMessage());
+            }
+        }
+
+        if (migrated > 0) {
+            log.info("Receipt storage migration moved {} files to the new layout", migrated);
+        }
+    }
+
+    private LocalDate resolveReceiptBucketDate(Expense expense) {
+        if (expense.getScannedAt() != null) {
+            return expense.getScannedAt().toLocalDate();
+        }
+        if (expense.getCreatedAt() != null) {
+            return expense.getCreatedAt().toLocalDate();
+        }
+        if (expense.getUpdatedAt() != null) {
+            return expense.getUpdatedAt().toLocalDate();
+        }
+        return LocalDate.now();
     }
 
     private void runMigration() {

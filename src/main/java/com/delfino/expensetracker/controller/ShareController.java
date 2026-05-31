@@ -1,13 +1,18 @@
 package com.delfino.expensetracker.controller;
 
+import com.delfino.expensetracker.dto.auth.UserToken;
 import com.delfino.expensetracker.model.ExpenseItem;
+import com.delfino.expensetracker.model.ExpenseShare;
 import com.delfino.expensetracker.model.Store;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
+import com.delfino.expensetracker.service.ExpenseShareService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,19 +30,26 @@ public class ShareController {
     private final ExpenseRepository expenseRepository;
     private final ExpenseItemRepository expenseItemRepository;
     private final StoreRepository storeRepository;
+    private final ExpenseShareService expenseShareService;
 
     public ShareController(ExpenseRepository expenseRepository,
                            ExpenseItemRepository expenseItemRepository,
-                           StoreRepository storeRepository) {
+                           StoreRepository storeRepository,
+                           ExpenseShareService expenseShareService) {
         this.expenseRepository = expenseRepository;
         this.expenseItemRepository = expenseItemRepository;
         this.storeRepository = storeRepository;
+        this.expenseShareService = expenseShareService;
     }
 
     @GetMapping(value = "/view/expenses/{urlId}", produces = MediaType.TEXT_HTML_VALUE)
-    public ResponseEntity<String> shareExpense(@PathVariable String urlId, HttpServletRequest request) {
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<String> shareExpense(@PathVariable String urlId, HttpServletRequest request, UserToken userToken) {
         return expenseRepository.findByUrlId(urlId)
                 .map(expense -> {
+                    if (userToken == null || expense.getUserId() != userToken.getUserId()) {
+                        throw new AuthorizationDeniedException("Not authorized");
+                    }
                     Store store = expense.getStoreId() != null
                             ? storeRepository.findById(expense.getStoreId()).orElse(null) : null;
                     List<ExpenseItem> items = expenseItemRepository.findByExpenseIdAndDeletedFalse(expense.getId());
@@ -73,6 +85,58 @@ public class ShareController {
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
+
+    @GetMapping(value = "/view/share/{shareToken}", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> sharePublicExpense(@PathVariable String shareToken, HttpServletRequest request) {
+        return expenseShareService.resolveActiveShare(shareToken)
+                .flatMap(this::loadExpenseForShare)
+                .map(expenseView -> {
+                    String baseUrl = request.getScheme() + "://" + request.getServerName()
+                            + (request.getServerPort() == 80 || request.getServerPort() == 443
+                            ? "" : ":" + request.getServerPort());
+                    String shareUrl = baseUrl + "/view/share/" + shareToken;
+                    String appUrl = baseUrl + "/#/share/" + shareToken;
+                    String html = buildOgHtml(expenseView.title(), expenseView.description(), shareUrl, appUrl);
+                    return ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(html);
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    private java.util.Optional<ExpenseView> loadExpenseForShare(ExpenseShare share) {
+        return expenseRepository.findById(share.getExpenseId())
+                .map(expense -> {
+                    Store store = expense.getStoreId() != null
+                            ? storeRepository.findById(expense.getStoreId()).orElse(null) : null;
+                    List<ExpenseItem> items = expenseItemRepository.findByExpenseIdAndDeletedFalse(expense.getId());
+                    return buildExpenseView(expense, store, items);
+                });
+    }
+
+    private ExpenseView buildExpenseView(com.delfino.expensetracker.model.Expense expense,
+                                         Store store,
+                                         List<ExpenseItem> items) {
+        String storeName = (store != null && store.getName() != null && !store.getName().isBlank())
+                ? store.getName() : "Expense";
+        String amount = expense.getAmount() != null ? expense.getAmount().toPlainString() : "";
+        String currency = expense.getCurrency() != null ? expense.getCurrency() : "";
+        String date = expense.getTransactionDatetime() != null
+                ? expense.getTransactionDatetime().toLocalDate().toString() : "";
+        String category = expense.getCategory() != null ? expense.getCategory() : "";
+        int itemCount = items.size();
+
+        String title = storeName + (amount.isEmpty() ? "" : " — " + amount + " " + currency);
+
+        StringBuilder desc = new StringBuilder();
+        if (!date.isEmpty()) desc.append(date).append(" · ");
+        if (!category.isEmpty()) desc.append(category).append(" · ");
+        if (itemCount > 0) desc.append(itemCount).append(itemCount == 1 ? " item · " : " items · ");
+        desc.append(amount).append(" ").append(currency);
+        String description = desc.toString().trim().replaceAll("( · )$", "");
+
+        return new ExpenseView(title, description);
+    }
+
+    private record ExpenseView(String title, String description) {}
 
     private String buildOgHtml(String title, String description, String url, String redirectUrl) {
         String t = esc(title);
