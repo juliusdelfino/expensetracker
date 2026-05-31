@@ -11,7 +11,9 @@ function debounceFilters(fn, delay = 400) {
 
 // Store last loaded data for chart period switching
 let _homeData = null;
+let _filteredHomeData = null;
 let _desktopData = null;
+let _filteredDesktopData = null;
 
 // --- HOME PANEL (social-scroll feed) ---
 function renderHomePanel() {
@@ -67,7 +69,13 @@ function renderHomePanel() {
             <div class="chart-status-bar" id="homeTimelineChartStatus"></div>
         </div>
         <div class="feed-card">
-            <h3 class="card-title"><i class="fa-solid fa-chart-pie"></i> By Category</h3>
+            <div class="card-title-row">
+                <h3 class="card-title"><i class="fa-solid fa-chart-pie"></i> By Category</h3>
+                <div class="chart-view-toggle" id="homeCategoryToggle">
+                    <button class="active" onclick="switchCategoryView('homeCategoryChart','homeCategory','pie',this)" title="Pie chart"><i class="fa-solid fa-chart-pie"></i></button>
+                    <button onclick="switchCategoryView('homeCategoryChart','homeCategory','bar',this)" title="Bar chart"><i class="fa-solid fa-chart-bar"></i></button>
+                </div>
+            </div>
             <div class="chart-container-sm"><canvas id="homeCategoryChart"></canvas></div>
             <div class="chart-status-bar" id="homeCategoryChartStatus"></div>
         </div>
@@ -99,6 +107,8 @@ async function loadHomeFeed() {
     // Cache country names + categories for expense detail use
     cacheCountryNames(data.geoByCountry);
     if (data.categories) window._allExpenseCategories = data.categories;
+    if (data.countries) window._allDashCountries = Array.isArray(data.countries) ? data.countries : Array.from(data.countries || []);
+    if (data.storeNames) window._allDashStoreNames = Array.isArray(data.storeNames) ? data.storeNames : Array.from(data.storeNames || []);
 
     // Hero card (acts as global filter)
     renderHeroCard('heroCard', data, 'homeHeroPeriod', 'home');
@@ -109,7 +119,7 @@ async function loadHomeFeed() {
 
     // Now load filtered data for current/latest month
     const currentMonth = getCurrentOrLatestMonth(data);
-    const params = buildParamsFromPeriod('month:' + currentMonth);
+    const params = buildFullFilterParams('month:' + currentMonth);
     const filtered = await api('/api/dashboard' + (params ? '?' + params : ''));
     if (!filtered) return;
 
@@ -125,6 +135,7 @@ async function loadHomeFeed() {
  * Used by both initial load and hero-period filter changes.
  */
 function renderHomeData(data) {
+    _filteredHomeData = data;
 
     updateHomeCharts();
     createTimelineChart('homeTimelineChart', 'homeTimeline', data);
@@ -134,7 +145,7 @@ function renderHomeData(data) {
 
     // Get current hero period params for filtering recent expenses
     const heroPeriod = document.getElementById('homeHeroPeriod')?.value;
-    const recentParams = heroPeriod ? buildParamsFromPeriod(heroPeriod) : '';
+    const recentParams = heroPeriod ? buildFullFilterParams(heroPeriod) : '';
     renderRecentExpenses('homeRecentExpenses', 5, recentParams);
     renderGeoMap('homeGeoMap', data);
 }
@@ -184,6 +195,7 @@ async function reloadHomeWithFilter(params) {
     if (chartInstances.homeCategory) { chartInstances.homeCategory.destroy(); delete chartInstances.homeCategory; }
 
     renderHomeData(data);
+    updateHeroFromFilteredData('heroCard', 'homeHeroPeriod', data);
 }
 
 // ============================================
@@ -215,7 +227,13 @@ async function renderDashboard(app) {
                 <div class="chart-status-bar" id="monthlyChartStatus"></div>
             </div>
             <div class="card">
-                <h3 class="card-title"><i class="fa-solid fa-chart-pie"></i> By Category</h3>
+                <div class="card-title-row">
+                    <h3 class="card-title"><i class="fa-solid fa-chart-pie"></i> By Category</h3>
+                    <div class="chart-view-toggle" id="deskCategoryToggle">
+                        <button class="active" onclick="switchCategoryView('categoryChart','category','pie',this)" title="Pie chart"><i class="fa-solid fa-chart-pie"></i></button>
+                        <button onclick="switchCategoryView('categoryChart','category','bar',this)" title="Bar chart"><i class="fa-solid fa-chart-bar"></i></button>
+                    </div>
+                </div>
                 <div class="chart-container"><canvas id="categoryChart"></canvas></div>
                 <div class="chart-status-bar" id="categoryChartStatus"></div>
             </div>
@@ -247,6 +265,9 @@ async function loadDashboardDesktop() {
     const data = await api('/api/dashboard');
     if (!data) return;
     _desktopData = data;
+    if (data.categories) window._allExpenseCategories = data.categories;
+    if (data.countries) window._allDashCountries = Array.isArray(data.countries) ? data.countries : Array.from(data.countries || []);
+    if (data.storeNames) window._allDashStoreNames = Array.isArray(data.storeNames) ? data.storeNames : Array.from(data.storeNames || []);
 
     // Desktop hero card (global filter)
     renderHeroCard('desktopHeroCard', data, 'deskHeroPeriod', 'desktop');
@@ -256,7 +277,7 @@ async function loadDashboardDesktop() {
 
     // Load filtered data for current/latest month
     const currentMonth = getCurrentOrLatestMonth(data);
-    const params = buildParamsFromPeriod('month:' + currentMonth);
+    const params = buildFullFilterParams('month:' + currentMonth);
     const filtered = await api('/api/dashboard' + (params ? '?' + params : ''));
     if (!filtered) return;
 
@@ -272,6 +293,7 @@ async function loadDashboardDesktop() {
  * Used by both initial load and hero-period filter changes.
  */
 function renderDesktopData(data) {
+    _filteredDesktopData = data;
     updateDesktopCharts();
     createCategoryChart('categoryChart', 'category', data);
     createTimelineChart('timelineChart', 'timeline', data);
@@ -281,7 +303,7 @@ function renderDesktopData(data) {
 
     // Get current hero period params for filtering recent expenses
     const heroPeriod = document.getElementById('deskHeroPeriod')?.value;
-    const recentParams = heroPeriod ? buildParamsFromPeriod(heroPeriod) : '';
+    const recentParams = heroPeriod ? buildFullFilterParams(heroPeriod) : '';
     renderRecentExpenses('deskRecentExpenses', 8, recentParams);
 }
 
@@ -329,6 +351,7 @@ async function reloadDesktopWithFilter(params) {
     if (chartInstances.category) { chartInstances.category.destroy(); delete chartInstances.category; }
 
     renderDesktopData(data);
+    updateHeroFromFilteredData('desktopHeroCard', 'deskHeroPeriod', data);
 }
 
 /**

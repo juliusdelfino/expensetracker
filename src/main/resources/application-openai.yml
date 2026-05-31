@@ -9,13 +9,13 @@ spring:
       chat:
         enabled: true
         options:
-          model: qwen3.5-plus
+          model: qwen3.5-397b-a17b
           temperature: 0.3
 
 ocr:
   api:
     url: https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
-    model: qwen3.5-plus
+    model: qwen3.5-397b-a17b
     format: openai
 
 chatbot:

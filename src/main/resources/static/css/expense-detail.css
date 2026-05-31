@@ -44,11 +44,24 @@
     background: var(--bg-card);
     border-radius: var(--radius);
     box-shadow: 0 8px 32px rgba(0,0,0,0.25);
-    padding: 1.5rem;
     width: 100%;
     max-width: 560px;
     max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.change-store-dialog > .item-dialog-actions {
+    padding: 1rem 1.5rem;
+    margin-top: 0;
+    flex-shrink: 0;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-card);
+}
+.change-store-dialog-body {
     overflow-y: auto;
+    flex: 1;
+    padding: 0.5rem 1.5rem;
 }
 .change-store-header {
     display: flex;
@@ -70,6 +83,21 @@
     z-index: 1000;
     max-height: 260px;
     overflow-y: auto;
+}
+.nominatim-section-label {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-light);
+    background: var(--bg);
+    border-bottom: 1px solid var(--border-color);
+}
+.nominatim-result-sub {
+    font-size: 0.75rem;
+    color: var(--text-light);
+    margin-top: 0.1rem;
 }
 .nominatim-result-item {
     padding: 0.6rem 0.75rem;
@@ -193,6 +221,15 @@
 .receipt-store-section {
     text-align: center;
     padding: 0.5rem 0;
+}
+.receipt-store-favicon {
+    width: 80px;
+    height: 80px;
+    border-radius: 8px;
+    object-fit: contain;
+    margin: 0 auto 0.4rem;
+    display: none; /* shown by checkFaviconDefault if not the globe */
+    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
 }
 .receipt-store-name {
     font-weight: 700;

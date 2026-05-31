@@ -4,6 +4,14 @@
 
 let currentUser = null;
 let chartInstances = {};
+let appConfig = {}; // populated by loadAppConfig() on startup
+
+async function loadAppConfig() {
+    try {
+        const cfg = await api('/api/config', { noAuthRedirect: true });
+        if (cfg) Object.assign(appConfig, cfg);
+    } catch { /* keep defaults */ }
+}
 
 /**
  * Format a quantity value: whole numbers show no decimals,
@@ -194,3 +202,83 @@ async function populateCurrencyDatalist(datalistId, inputId, fallback) {
     } catch (err) { /* ignore */ }
 }
 
+/**
+ * Extract the root domain from a URL string, stripping subdomains and query strings.
+ * e.g. "https://shop.apple.com/path?foo=1" → "apple.com"
+ */
+function getRootDomain(websiteStr) {
+    try {
+        const url = new URL(websiteStr.startsWith('http') ? websiteStr : 'https://' + websiteStr);
+        const parts = url.hostname.split('.');
+        // Keep last two parts for most domains (e.g. apple.com), three for co.uk-style
+        if (parts.length > 2) {
+            const twoLD = parts.slice(-2).join('.');
+            const knownSecondLevel = ['co.uk','com.au','co.nz','co.jp','co.in','com.br','com.sg'];
+            if (knownSecondLevel.includes(twoLD)) {
+                return parts.slice(-3).join('.');
+            }
+        }
+        return parts.slice(-2).join('.');
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Called after a logo.dev image loads.
+ * Hides the image on error (onerror handles network failures;
+ * this handles the case where logo.dev returns a fallback placeholder).
+ * logo.dev returns a proper 404 / transparent image for unknown domains,
+ * so we simply show on load and hide on error.
+ */
+function checkFaviconDefault(img) {
+    // logo.dev returns a styled placeholder for unknown domains — just show it.
+    // If the image truly failed to load, onerror already hides it.
+    img.style.display = 'block';
+}
+
+function renderTerms(app) {
+    app.innerHTML = `
+    <div class="shared-header"><a href="/" class="brand"><img src="/images/logo192.png" alt="logo"> Expense Tracker</a></div>
+    <div class="container" style="max-width:700px; margin:2rem auto; padding:1rem;">
+        <h2>Terms of Service</h2>
+        <hr/>
+        <p>Last updated: May 2026</p>
+        <h3>1. Acceptance</h3>
+        <p>By using Expense Tracker, you agree to these terms. If you do not agree, please do not use the application.</p>
+        <h3>2. Use of Service</h3>
+        <p>Expense Tracker is provided as-is for personal expense tracking. You are responsible for maintaining the confidentiality of your account.</p>
+        <h3>3. Data</h3>
+        <p>Your expense data is stored securely. We do not sell or share your personal data with third parties.</p>
+        <h3>4. Receipt Scanning</h3>
+        <p>Receipt images are processed by AI models to extract structured data. Images may be stored for processing but are not used for training purposes.</p>
+        <h3>5. Limitation of Liability</h3>
+        <p>Expense Tracker is not liable for any inaccuracies in expense data, OCR results, or currency conversions.</p>
+        <h3>6. Changes</h3>
+        <p>We may update these terms at any time. Continued use constitutes acceptance of updated terms.</p>
+    </div>`;
+}
+
+function renderPrivacy(app) {
+    app.innerHTML = `
+    <div class="shared-header"><a href="/" class="brand"><img src="/images/logo192.png" alt="logo"> Expense Tracker</a></div>
+    <div class="container" style="max-width:700px; margin:2rem auto; padding:1rem;">
+        <h2>Privacy Policy</h2>
+        <hr/>
+        <p>Last updated: May 2026</p>
+        <h3>1. Information We Collect</h3>
+        <p>We collect account information (username, email) and expense data you enter including receipt images.</p>
+        <h3>2. How We Use Your Information</h3>
+        <p>Your data is used solely to provide expense tracking functionality including receipt OCR, currency conversion, and analytics.</p>
+        <h3>3. Camera Access</h3>
+        <p>The app requests camera permission to scan receipts. Camera access is used only for this purpose and images are processed on our servers.</p>
+        <h3>4. Data Storage</h3>
+        <p>Data is stored on secured servers. Receipt images are stored for processing and retrieval.</p>
+        <h3>5. Data Sharing</h3>
+        <p>We do not sell, trade, or share your personal information with third parties except as required by law.</p>
+        <h3>6. Cookies</h3>
+        <p>We use session cookies for authentication. No third-party tracking cookies are used.</p>
+        <h3>7. Contact</h3>
+        <p>For privacy concerns, please refer to the project wiki.</p>
+    </div>`;
+}

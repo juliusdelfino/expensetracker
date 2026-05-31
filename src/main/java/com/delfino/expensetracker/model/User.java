@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
 
@@ -18,13 +19,24 @@ public class User {
     private long id;
 
     @Column(unique = true, nullable = false)
+    @Size(max = 100)
     private String username;
 
     private String passwordHash;
+
+    @Size(max = 100)
     private String email;
+
+    @Size(max = 30)
     private String phoneNumber;
+
+    @Size(max = 3)
     private String baseCurrency;
+
+    @Size(max = 100)
     private String baseCity;
+
+    @Size(max = 2)
     private String baseCountry;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

@@ -7,7 +7,10 @@ import com.delfino.expensetracker.dto.common.MessageResponse;
 import com.delfino.expensetracker.dto.expense.AttachmentPathResponse;
 import com.delfino.expensetracker.dto.expense.EnrichedExpense;
 import com.delfino.expensetracker.dto.expense.ExpenseDetailResponse;
+import com.delfino.expensetracker.dto.expense.ExpenseItemRequest;
+import com.delfino.expensetracker.dto.expense.ExpenseRequest;
 import com.delfino.expensetracker.dto.expense.MatchingItem;
+import com.delfino.expensetracker.dto.expense.StoreRequest;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.ExpenseItem;
 import com.delfino.expensetracker.model.Store;
@@ -16,10 +19,13 @@ import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
 import com.delfino.expensetracker.service.ExpenseService;
 import com.delfino.expensetracker.service.SupportedCurrencyService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.StringUtils;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -33,6 +39,7 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/api/expenses")
+@Validated
 public class ExpenseController {
 
     private final ExpenseService expenseService;
@@ -48,6 +55,9 @@ public class ExpenseController {
     @Value("${ocr.batch.max-files:20}")
     private int batchMaxFiles;
 
+    @Value("${ocr.batch.queue-enabled:true}")
+    private boolean batchQueueEnabled;
+
     public ExpenseController(ExpenseService expenseService, ExpenseRepository expenseRepository,
                              ExpenseItemRepository expenseItemRepository, StoreRepository storeRepository,
                              SupportedCurrencyService supportedCurrencyService, CountryService countryService) {
@@ -61,7 +71,7 @@ public class ExpenseController {
 
     @GetMapping
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> list(@RequestParam(required = false) String search,
+    public ResponseEntity<?> list(@RequestParam(required = false) @Size(max = 100) String search,
                                   @RequestParam(required = false, defaultValue = "false") boolean includeDeleted,
                                   @RequestParam(required = false) String startDate,
                                   @RequestParam(required = false) String endDate,
@@ -133,12 +143,13 @@ public class ExpenseController {
 
     @PostMapping("/manual")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> createManual(@RequestBody Expense expense, UserToken userToken) {
+    public ResponseEntity<?> createManual(@RequestBody @Valid ExpenseRequest request, UserToken userToken) {
         long userId = userToken.getUserId();
-        if (!supportedCurrencyService.isSupported(expense.getCurrency())) {
-            return ResponseEntity.badRequest().body(new ErrorResponse("Unsupported currency: " + expense.getCurrency()));
+        if (!supportedCurrencyService.isSupported(request.getCurrency())) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("Unsupported currency: " + request.getCurrency()));
         }
-        expense.setCurrency(expense.getCurrency().toUpperCase());
+        request.setCurrency(request.getCurrency().toUpperCase());
+        Expense expense = toExpense(request);
         Expense saved = expenseService.createManualExpense(expense, userId);
         return ResponseEntity.ok(saved);
     }
@@ -170,11 +181,15 @@ public class ExpenseController {
             String filename = getDateString() + "_" + userId + "_" + file.getOriginalFilename();
             Path filePath = uploadDir.resolve(filename);
             Files.write(filePath, file.getBytes());
-            Expense expense = expenseService.createReceiptScanExpenseQueued(userId, filePath.toString());
-            expenses.add(expense);
+            if (batchQueueEnabled) {
+                expenses.add(expenseService.createReceiptScanExpenseQueued(userId, filePath.toString()));
+            } else {
+                expenses.add(expenseService.createReceiptScanExpense(userId, filePath.toString()));
+            }
         }
-        // Start queued OCR processing with intervals
-        expenseService.processOcrQueue(expenses);
+        if (batchQueueEnabled) {
+            expenseService.processOcrQueue(expenses);
+        }
         return ResponseEntity.ok(expenses);
     }
 
@@ -184,15 +199,16 @@ public class ExpenseController {
 
     @PutMapping("/{expenseUrlId}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> update(@PathVariable String expenseUrlId, @RequestBody Expense updates, UserToken userToken) {
+    public ResponseEntity<?> update(@PathVariable String expenseUrlId, @RequestBody @Valid ExpenseRequest request,
+                                    UserToken userToken) {
         long userId = userToken.getUserId();
-        if (StringUtils.hasText(updates.getCurrency())) {
-            if (!supportedCurrencyService.isSupported(updates.getCurrency())) {
-                return ResponseEntity.badRequest().body(new ErrorResponse("Unsupported currency: " + updates.getCurrency()));
+        if (StringUtils.hasText(request.getCurrency())) {
+            if (!supportedCurrencyService.isSupported(request.getCurrency())) {
+                return ResponseEntity.badRequest().body(new ErrorResponse("Unsupported currency: " + request.getCurrency()));
             }
-            updates.setCurrency(updates.getCurrency().toUpperCase());
+            request.setCurrency(request.getCurrency().toUpperCase());
         }
-        Expense updated = expenseService.updateExpense(expenseUrlId, updates, userId);
+        Expense updated = expenseService.updateExpense(expenseUrlId, toExpense(request), userId);
         return ResponseEntity.ok(updated);
     }
 
@@ -227,15 +243,16 @@ public class ExpenseController {
     // --- Items ---
     @PostMapping("/{expenseUrlId}/items")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> addItem(@PathVariable String expenseUrlId, @RequestBody ExpenseItem item) {
-        ExpenseItem saved = expenseService.saveItem(expenseUrlId, item);
+    public ResponseEntity<?> addItem(@PathVariable String expenseUrlId, @RequestBody @Valid ExpenseItemRequest request) {
+        ExpenseItem saved = expenseService.saveItem(expenseUrlId, toExpenseItem(request));
         return ResponseEntity.ok(saved);
     }
 
     @PutMapping("/{expenseUrlId}/items/{itemId}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> updateItem(@PathVariable String expenseUrlId, @PathVariable Long itemId,
-                                        @RequestBody ExpenseItem item) {
+                                        @RequestBody @Valid ExpenseItemRequest request) {
+        ExpenseItem item = toExpenseItem(request);
         item.setId(itemId);
         ExpenseItem saved = expenseService.saveItem(expenseUrlId, item);
         return ResponseEntity.ok(saved);
@@ -252,9 +269,9 @@ public class ExpenseController {
     // --- Store ---
     @PutMapping("/{expenseUrlId}/store")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> updateStore(@PathVariable String expenseUrlId, @RequestBody Store store,
+    public ResponseEntity<?> updateStore(@PathVariable String expenseUrlId, @RequestBody @Valid StoreRequest request,
                                          UserToken userToken) {
-        Store saved = expenseService.saveStore(expenseUrlId, store, userToken.getUserId());
+        Store saved = expenseService.saveStore(expenseUrlId, toStore(request), userToken.getUserId());
         return ResponseEntity.ok(saved);
     }
 
@@ -333,7 +350,7 @@ public class ExpenseController {
     }
 
     /** Filter expenses by country (supports both code and name). */
-    private List<Expense> filterByCountry(List<Expense> expenses, String country, Map<Long, Store> storeMap) {
+    List<Expense> filterByCountry(List<Expense> expenses, String country, Map<Long, Store> storeMap) {
         final String countryFilter = country.toLowerCase();
         final String resolvedCode = countryService.findCodeByName(country);
         return expenses.stream()
@@ -414,6 +431,47 @@ public class ExpenseController {
                 .filter(i -> i.getItemName() != null && i.getItemName().toLowerCase().contains(searchLower))
                 .map(i -> new MatchingItem(i.getItemName(), i.getUnitPrice(), i.getQuantity(), i.getTotalPrice()))
                 .toList();
+    }
+
+    // --- DTO → Entity mappers ---
+
+    private static Expense toExpense(ExpenseRequest r) {
+        Expense e = new Expense();
+        e.setTransactionDatetime(r.getTransactionDatetime());
+        e.setAmount(r.getAmount());
+        e.setCurrency(r.getCurrency());
+        e.setReceiptNumber(r.getReceiptNumber());
+        e.setCategory(r.getCategory());
+        e.setTags(r.getTags());
+        e.setNotes(r.getNotes());
+        e.setExchangeRate(r.getExchangeRate());
+        if (r.getAttachments() != null) e.setAttachments(r.getAttachments());
+        return e;
+    }
+
+    private static ExpenseItem toExpenseItem(ExpenseItemRequest r) {
+        ExpenseItem item = new ExpenseItem();
+        item.setItemName(r.getItemName());
+        item.setQuantity(r.getQuantity());
+        item.setUnitPrice(r.getUnitPrice());
+        if (r.getAdjustment() != null) item.setAdjustment(r.getAdjustment());
+        return item;
+    }
+
+    private static Store toStore(StoreRequest r) {
+        Store s = new Store();
+        s.setId(r.getId());
+        s.setName(r.getName());
+        s.setAddress(r.getAddress());
+        s.setCity(r.getCity());
+        s.setCountry(r.getCountry());
+        s.setPostalCode(r.getPostalCode());
+        s.setPhoneNumber(r.getPhoneNumber());
+        s.setWebsite(r.getWebsite());
+        s.setLatitude(r.getLatitude());
+        s.setLongitude(r.getLongitude());
+        s.setSourceId(r.getSourceId());
+        return s;
     }
 
     private String escapeCsv(String val) {

@@ -1,6 +1,7 @@
 package com.delfino.expensetracker.model;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Size;
 import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
@@ -23,9 +24,14 @@ public class Expense {
     private LocalDateTime transactionDatetime;
     private BigDecimal amount;
     private String currency;
+
     private BigDecimal amountInBase;
     private BigDecimal exchangeRate;
+
+    @Size(max = 50)
     private String receiptNumber;
+
+    @Size(max = 50)
     private String category;
 
     @ElementCollection(fetch = FetchType.LAZY)
@@ -35,6 +41,7 @@ public class Expense {
     private List<String> tags = new ArrayList<>();
 
     @Column(length = 2000)
+    @Size(max = 500)
     private String notes;
 
     @Enumerated(EnumType.STRING)

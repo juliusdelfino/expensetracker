@@ -1,26 +1,32 @@
 package com.delfino.expensetracker.service;
 
 import com.delfino.expensetracker.dto.ocr.OcrRequest;
+import com.delfino.expensetracker.dto.ocr.ParsedItemDto;
+import com.delfino.expensetracker.dto.ocr.ParsedReceiptDto;
+import com.delfino.expensetracker.dto.ocr.ParsedStoreDto;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.ExpenseItem;
 import com.delfino.expensetracker.model.ExpenseStatus;
 import com.delfino.expensetracker.model.Store;
 import com.delfino.expensetracker.model.User;
 import com.delfino.expensetracker.repository.UserRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
+import com.delfino.expensetracker.service.ocr.OcrProvider;
+import com.delfino.expensetracker.util.JsonUtils;
+import com.delfino.expensetracker.util.MediaUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -32,29 +38,22 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Base64;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Collections;
-import javax.imageio.ImageIO;
-
-// PDFBox imports
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.rendering.PDFRenderer;
-import org.apache.pdfbox.rendering.ImageType;
-import org.apache.pdfbox.text.PDFTextStripper;
-import org.springframework.util.StringUtils;
 
 @Service
 public class OcrService {
 
     private static final Logger log = LoggerFactory.getLogger(OcrService.class);
+    private static final int MAX_TOOL_RETRIES = 3;
+    private static final Set<String> IMAGE_MEDIA_TYPES = Set.of(
+            "image/jpeg", "image/png", "image/gif", "image/webp");
+
     private final ExpenseRepository expenseRepository;
     private final ExpenseItemRepository expenseItemRepository;
     private final StoreRepository storeRepository;
@@ -62,9 +61,11 @@ public class OcrService {
     private final CurrencyService currencyService;
     private final GeocodingService geocodingService;
     private final ObjectMapper objectMapper;
+    private final OcrProvider ocrProvider;
+    private final Map<String, Object> toolSchema;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
-    @Value("${ocr.api.url:http://localhost:11434/api/generate}")
+    @Value("${ocr.api.url:http://localhost:11434/api/chat}")
     private String ocrApiUrl;
 
     @Value("${ocr.api.model:llava}")
@@ -73,18 +74,20 @@ public class OcrService {
     @Value("${ocr.api.api-key:}")
     private String ocrApiKey;
 
-    @Value("${ocr.api.format:ollama}")
-    private String ocrApiFormat;
-
     @Value("${ocr.api.disable-thinking:false}")
     private boolean ocrDisableThinking;
 
-    @Value("${ocr.api.prompt:Parse this receipt image and return a JSON object with these fields: {\"transactionDatetime\":\"ISO 8601\",\"amount\":0,\"currency\":\"USD\",\"receiptNumber\":\"\",\"category\":\"\",\"items\":[{\"itemName\":\"\",\"quantity\":1,\"unitPrice\":0,\"totalPrice\":0}],\"store\":{\"name\":\"\",\"address\":\"\",\"city\":\"\",\"country\":\"\",\"postalCode\":\"\",\"phoneNumber\":\"\",\"website\":\"\"}} Return ONLY valid JSON.}")
+    @Value("${ocr.api.use-tools:true}")
+    private boolean ocrUseTools;
+
+    @Value("${ocr.api.prompt:Parse this receipt image and return a JSON object. Return ONLY valid JSON.}")
     private String ocrPrompt;
 
     public OcrService(ExpenseRepository expenseRepository, ExpenseItemRepository expenseItemRepository,
-                      StoreRepository storeRepository, UserRepository userRepository, CurrencyService currencyService,
-                      GeocodingService geocodingService, ObjectMapper objectMapper) {
+                      StoreRepository storeRepository, UserRepository userRepository,
+                      CurrencyService currencyService, GeocodingService geocodingService,
+                      ObjectMapper objectMapper, OcrProvider ocrProvider,
+                      @Qualifier("ocrToolSchema") Map<String, Object> toolSchema) {
         this.expenseRepository = expenseRepository;
         this.expenseItemRepository = expenseItemRepository;
         this.storeRepository = storeRepository;
@@ -92,41 +95,40 @@ public class OcrService {
         this.currencyService = currencyService;
         this.geocodingService = geocodingService;
         this.objectMapper = objectMapper;
+        this.ocrProvider = ocrProvider;
+        this.toolSchema = toolSchema;
     }
 
-    private static final Set<String> IMAGE_MEDIA_TYPES = new HashSet<>(Arrays.asList(
-            "image/jpeg", "image/png", "image/gif", "image/webp"
-    ));
+    // ─────────────────────────────────────────────────────────────────────
+    // Request body builders
+    // ─────────────────────────────────────────────────────────────────────
 
     public OcrRequest buildRequestBody(String ocrModel, String ocrPrompt,
-                                                String imagePath, Long expenseId) throws IOException {
+                                       String imagePath, Long expenseId) throws IOException {
         log.info("Processing receipt for expense {}: reading image from {}", expenseId, imagePath);
         byte[] imageBytes = Files.readAllBytes(Path.of(imagePath));
+        String mediaType = MediaUtils.detectMediaType(imageBytes);
 
-        String mediaType = detectMediaType(imageBytes);
-
-        Map requestBody;
-        if (mediaType.equals("application/pdf")) {
-            // Try to extract text from PDF first (cheaper than vision)
-            String pdfText = extractPdfText(imageBytes);
-            if (hasUsableText(pdfText)) {
+        Map<String, Object> requestBody;
+        if ("application/pdf".equals(mediaType)) {
+            String pdfText = MediaUtils.extractPdfText(imageBytes);
+            if (MediaUtils.hasUsableText(pdfText)) {
                 log.info("PDF for expense {} contains extractable text ({} chars) — using text-only LLM path",
                         expenseId, pdfText.length());
-                requestBody = buildTextRequestBody(ocrModel, ocrPrompt, pdfText);
+                requestBody = ocrProvider.buildTextRequestBody(ocrModel, ocrPrompt, pdfText, toolSchema, ocrUseTools, ocrDisableThinking);
                 return new OcrRequest(imageBytes, "application/pdf", requestBody);
             }
-            // No usable text — fall back to rendering PDF pages as images
             log.info("PDF for expense {} appears image-based — falling back to vision path", expenseId);
-            List<byte[]> imgs = convertPdfToImages(imageBytes);
+            List<byte[]> imgs = MediaUtils.convertPdfToImages(imageBytes);
             if (imgs.isEmpty()) throw new IOException("PDF contained no renderable pages");
             imageBytes = imgs.get(0);
             mediaType = "image/jpeg";
-            requestBody = buildRequestBody(ocrModel, ocrPrompt, imgs, mediaType);
+            requestBody = ocrProvider.buildVisionRequestBody(ocrModel, ocrPrompt, imgs, mediaType, toolSchema, ocrUseTools, ocrDisableThinking);
         } else {
-            requestBody = buildRequestBody(ocrModel, ocrPrompt, Collections.singletonList(imageBytes), mediaType);
+            requestBody = ocrProvider.buildVisionRequestBody(ocrModel, ocrPrompt,
+                    Collections.singletonList(imageBytes), mediaType, toolSchema, ocrUseTools, ocrDisableThinking);
         }
         return new OcrRequest(imageBytes, mediaType, requestBody);
-
     }
 
     public Map<String, Object> buildRequestBody(String ocrModel, String ocrPrompt,
@@ -137,198 +139,29 @@ public class OcrService {
         if (!IMAGE_MEDIA_TYPES.contains(mediaType)) {
             throw new IllegalArgumentException("Unsupported media type: " + mediaType);
         }
-
-        if ("openai".equalsIgnoreCase(ocrApiFormat)) {
-            return buildOpenAiRequestBody(ocrModel, ocrPrompt, imageBytesList, mediaType);
-        } else {
-            return buildOllamaRequestBody(ocrModel, ocrPrompt, imageBytesList);
-        }
+        return ocrProvider.buildVisionRequestBody(ocrModel, ocrPrompt, imageBytesList, mediaType, toolSchema, ocrUseTools, ocrDisableThinking);
     }
 
-    /**
-     * Extract all text from a PDF using PDFBox's text stripper.
-     * Returns empty string if extraction fails.
-     */
-    private String extractPdfText(byte[] pdfBytes) {
-        try (PDDocument doc = PDDocument.load(pdfBytes)) {
-            PDFTextStripper stripper = new PDFTextStripper();
-            String text = stripper.getText(doc);
-            return text != null ? text.trim() : "";
-        } catch (Exception e) {
-            log.warn("PDF text extraction failed: {}", e.getMessage());
-            return "";
-        }
-    }
-
-    /**
-     * Determine whether extracted PDF text is rich enough to contain receipt details.
-     * Returns false for image-only PDFs that produce no or garbage text.
-     */
-    private boolean hasUsableText(String text) {
-        if (text == null || text.isBlank()) return false;
-
-        // Must have at least 50 meaningful characters
-        String stripped = text.replaceAll("\\s+", " ").trim();
-        if (stripped.length() < 50) return false;
-
-        // Count alphanumeric tokens (words/numbers) — image PDFs often produce very few
-        long wordCount = Arrays.stream(stripped.split("\\s+"))
-                .filter(w -> w.matches(".*[a-zA-Z0-9].*"))
-                .count();
-        if (wordCount < 5) return false;
-
-        // Check for at least one digit sequence (likely price or date)
-        if (!stripped.matches(".*\\d+.*")) return false;
-
-        // Ratio of printable ASCII to total — image PDFs produce lots of garbage characters
-        long printable = stripped.chars().filter(c -> c >= 32 && c < 127).count();
-        double ratio = (double) printable / stripped.length();
-        return ratio >= 0.85;
-    }
-
-    /**
-     * Build a text-only LLM request body (no image data) for PDFs with extractable text.
-     * Cheaper and faster than vision — skips base64 encoding entirely.
-     */
-    private Map<String, Object> buildTextRequestBody(String ocrModel, String ocrPrompt, String pdfText) {
-        // Truncate to avoid exceeding typical context windows (~12 000 chars ≈ ~3 000 tokens)
-        String truncated = pdfText.length() > 12_000 ? pdfText.substring(0, 12_000) + "\n[truncated]" : pdfText;
-        String fullPrompt = ocrPrompt + "\n\nReceipt text:\n" + truncated;
-
-        if ("openai".equalsIgnoreCase(ocrApiFormat)) {
-            Map<String, Object> message = new LinkedHashMap<>();
-            message.put("role", "user");
-            message.put("content", fullPrompt);
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("model", ocrModel);
-            body.put("messages", List.of(message));
-            if (ocrDisableThinking) {
-                body.put("enable_thinking", false);
-            }
-            return body;
-        } else {
-            // Ollama text-only (no images array)
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("model", ocrModel);
-            body.put("prompt", fullPrompt);
-            body.put("stream", false);
-            return body;
-        }
-    }
-
-    /** Ollama /api/generate format */
-    private Map<String, Object> buildOllamaRequestBody(String ocrModel, String ocrPrompt,
-                                                        List<byte[]> imageBytesList) {
-        Map<String, Object> requestBody = new LinkedHashMap<>();
-        requestBody.put("model", ocrModel);
-        requestBody.put("prompt", ocrPrompt);
-        requestBody.put("stream", false);
-        List<String> base64Images = new ArrayList<>();
-        for (byte[] b : imageBytesList) {
-            base64Images.add(Base64.getEncoder().encodeToString(b));
-        }
-        requestBody.put("images", base64Images);
-        return requestBody;
-    }
-
-    /** OpenAI /chat/completions format with vision content parts */
-    private Map<String, Object> buildOpenAiRequestBody(String ocrModel, String ocrPrompt,
-                                                        List<byte[]> imageBytesList, String mediaType) {
-        List<Object> contentParts = new ArrayList<>();
-        contentParts.add(Map.of("type", "text", "text", ocrPrompt));
-        for (byte[] b : imageBytesList) {
-            String dataUrl = "data:" + mediaType + ";base64," + Base64.getEncoder().encodeToString(b);
-            contentParts.add(Map.of(
-                    "type", "image_url",
-                    "image_url", Map.of("url", dataUrl)
-            ));
-        }
-        Map<String, Object> message = new LinkedHashMap<>();
-        message.put("role", "user");
-        message.put("content", contentParts);
-
-        Map<String, Object> requestBody = new LinkedHashMap<>();
-        requestBody.put("model", ocrModel);
-        requestBody.put("messages", List.of(message));
-        if (ocrDisableThinking) {
-            requestBody.put("enable_thinking", false);
-        }
-        return requestBody;
-    }
-
-    private String detectMediaType(byte[] bytes) {
-        if (bytes.length >= 4
-                && bytes[0] == 0x25 && bytes[1] == 0x50   // %P
-                && bytes[2] == 0x44 && bytes[3] == 0x46) { // DF
-            return "application/pdf";
-        }
-        if (bytes.length >= 3
-                && bytes[0] == (byte) 0xFF && bytes[1] == (byte) 0xD8) {
-            return "image/jpeg";
-        }
-        if (bytes.length >= 8
-                && bytes[0] == (byte) 0x89 && bytes[1] == 0x50) { // .PNG
-            return "image/png";
-        }
-        // Add GIF (0x47 0x49) and WEBP (RIFF....WEBP) as needed
-        throw new IllegalArgumentException("Cannot detect media type from file bytes");
-    }
-
-    private List<byte[]> convertPdfToImages(byte[] pdfBytes) throws IOException {
-        List<byte[]> pages = new ArrayList<>();
-        try (PDDocument doc = PDDocument.load(pdfBytes)) {
-            PDFRenderer renderer = new PDFRenderer(doc);
-            final int pageCount = doc.getNumberOfPages();
-            for (int p = 0; p < pageCount; p++) {
-                BufferedImage bim = renderer.renderImageWithDPI(p, 300, ImageType.RGB);
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                ImageIO.write(bim, "jpg", baos);
-                pages.add(baos.toByteArray());
-            }
-        }
-        return pages;
-    }
+    // ─────────────────────────────────────────────────────────────────────
+    // Receipt processing — unified tool-calling loop
+    // ─────────────────────────────────────────────────────────────────────
 
     @Async
     public void processReceipt(Long expenseId, String imagePath) {
         processReceiptSync(expenseId, imagePath);
     }
 
-    /**
-     * Synchronous receipt processing (used by batch queue).
-     */
     public void processReceiptSync(Long expenseId, String imagePath) {
         try {
-
             OcrRequest ocrRequest = buildRequestBody(ocrModel, ocrPrompt, imagePath, expenseId);
 
-            String jsonBody = objectMapper.writeValueAsString(ocrRequest.requestBody());
-            log.info("Calling OCR API: POST {} with model={}, fileSize={}KB, mediaType={}",
-                    ocrApiUrl, ocrModel, ocrRequest.fileBytes().length / 1024, ocrRequest.mediaType());
-            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                    .uri(URI.create(ocrApiUrl))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody));
+            String currentResponseBody = callOcrApi(objectMapper.writeValueAsString(ocrRequest.requestBody()), expenseId);
+            if (currentResponseBody == null) return;
 
-            // Add API key if configured
-            if (ocrApiKey != null && !ocrApiKey.isBlank()) {
-                requestBuilder.header("Authorization", "Bearer " + ocrApiKey);
-            }
+            currentResponseBody = validateAndRetryToolCall(currentResponseBody, ocrRequest, expenseId);
+            if (currentResponseBody == null) return;
 
-            HttpRequest request = requestBuilder.build();
-
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            String responseBody = response.body();
-            log.info("OCR API response: status={}, body={}", response.statusCode(), responseBody);
-
-            if (response.statusCode() != 200) {
-                log.error("OCR API returned non-200 status {} for expense {}. Body: {}", response.statusCode(), expenseId, responseBody);
-                markFailed(expenseId, new Exception(responseBody));
-                return;
-            }
-
-            processOcrResponse(expenseId, responseBody);
-
+            processOcrResponse(expenseId, currentResponseBody);
             log.info("Successfully processed receipt for expense {}", expenseId);
 
         } catch (IOException | InterruptedException e) {
@@ -337,50 +170,181 @@ public class OcrService {
         }
     }
 
-    private void processOcrResponse(Long expenseId, String responseBody) throws JsonProcessingException {
-        JsonNode responseNode = objectMapper.readTree(responseBody);
+    @SuppressWarnings("unchecked")
+    private String validateAndRetryToolCall(String currentResponseBody, OcrRequest ocrRequest,
+                                            Long expenseId) throws IOException, InterruptedException {
+        List<Map<String, Object>> messages = new ArrayList<>(
+                (List<Map<String, Object>>) ocrRequest.requestBody().get("messages"));
 
-        String responseText;
-        if ("openai".equalsIgnoreCase(ocrApiFormat)) {
-            // OpenAI: choices[0].message.content
-            responseText = responseNode
-                    .path("choices").path(0)
-                    .path("message").path("content").asText(null);
-            if (responseText == null || responseText.isBlank()) {
-                throw new IllegalStateException("OpenAI OCR response missing choices[0].message.content: " + responseBody);
+        for (int attempt = 0; attempt <= MAX_TOOL_RETRIES; attempt++) {
+            JsonNode root = objectMapper.readTree(currentResponseBody);
+            JsonNode assistantMsg = ocrProvider.extractAssistantMessage(root);
+            ParsedReceiptDto args = ocrProvider.extractToolCallArgs(assistantMsg);
+            boolean usedToolCall = args != null;
+
+            if (!usedToolCall) {
+                args = JsonUtils.extractJsonFromContent(assistantMsg, objectMapper);
+                if (args == null) break;
             }
-        } else {
-            // Ollama: response field, fall back to raw body
-            responseText = responseNode.has("response") ? responseNode.get("response").asText() : responseBody;
+
+            String validationError = validateAmountFormula(args);
+
+            if (validationError == null || attempt == MAX_TOOL_RETRIES) {
+                if (validationError != null) {
+                    log.warn("Amount validation still failing for expense {} after {} retries: {}",
+                            expenseId, MAX_TOOL_RETRIES, validationError);
+                }
+                break;
+            }
+
+            log.warn("Amount validation failed for expense {} (via {}): {}. Sending correction (attempt {}/{})",
+                    expenseId, usedToolCall ? "tool_call" : "content", validationError, attempt + 1, MAX_TOOL_RETRIES);
+
+            messages.add(objectMapper.convertValue(assistantMsg, Map.class));
+
+            if (usedToolCall) {
+                Map<String, Object> toolResultMsg = new LinkedHashMap<>();
+                toolResultMsg.put("role", "tool");
+                toolResultMsg.put("content", "Validation failed: " + validationError +
+                        ". Please recalculate so that amount equals the exact sum of" +
+                        " (quantity * unitPrice + adjustment) for every item, then call submit_receipt again.");
+                if (ocrProvider.requiresToolCallId()) {
+                    toolResultMsg.put("tool_call_id", ocrProvider.extractToolCallId(assistantMsg));
+                }
+                messages.add(toolResultMsg);
+            } else {
+                Map<String, Object> correctionMsg = new LinkedHashMap<>();
+                correctionMsg.put("role", "user");
+                correctionMsg.put("content", "Validation failed: " + validationError +
+                        ". Please fix it so that 'amount' equals the exact sum of" +
+                        " (quantity * unitPrice + adjustment) for every item." +
+                        " Call submit_receipt with the corrected values.");
+                messages.add(correctionMsg);
+            }
+
+            Map<String, Object> correctionBody = new LinkedHashMap<>(ocrRequest.requestBody());
+            correctionBody.put("messages", messages);
+            String nextResponse = callOcrApi(objectMapper.writeValueAsString(correctionBody), expenseId);
+            if (nextResponse == null) return null;
+            currentResponseBody = nextResponse;
+        }
+        return currentResponseBody;
+    }
+
+    private String validateAmountFormula(ParsedReceiptDto parsed) {
+        if (parsed.amount() == null || parsed.items() == null || parsed.items().isEmpty()) return null;
+        BigDecimal amount = parsed.amount();
+        BigDecimal sum = BigDecimal.ZERO;
+        for (ParsedItemDto item : parsed.items()) {
+            BigDecimal qty        = item.quantity()   != null ? item.quantity()   : BigDecimal.ONE;
+            BigDecimal unitPrice  = item.unitPrice()  != null ? item.unitPrice()  : BigDecimal.ZERO;
+            BigDecimal adjustment = item.adjustment() != null ? item.adjustment() : BigDecimal.ZERO;
+            sum = sum.add(qty.multiply(unitPrice).add(adjustment));
+        }
+        if (amount.subtract(sum).abs().compareTo(new BigDecimal("0.01")) > 0) {
+            return "correct amount=" + amount.toPlainString() + " but sum of items=" + sum.toPlainString();
+        }
+        return null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // HTTP & response processing
+    // ─────────────────────────────────────────────────────────────────────
+
+    private String callOcrApi(String jsonBody, Long expenseId) throws IOException, InterruptedException {
+        log.info("Calling OCR API: POST {} with model={}", ocrApiUrl, ocrModel);
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                .uri(URI.create(ocrApiUrl))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody));
+        if (ocrApiKey != null && !ocrApiKey.isBlank()) {
+            requestBuilder.header("Authorization", "Bearer " + ocrApiKey);
+        }
+        HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+        String responseBody = response.body();
+        log.info("OCR API response: status={}, body={}", response.statusCode(), responseBody);
+        if (response.statusCode() != 200) {
+            log.error("OCR API returned non-200 status {} for expense {}. Body: {}", response.statusCode(), expenseId, responseBody);
+            markFailed(expenseId, new Exception(responseBody));
+            return null;
+        }
+        return responseBody;
+    }
+
+    private void processOcrResponse(Long expenseId, String responseBody) throws JsonProcessingException {
+        JsonNode root = objectMapper.readTree(responseBody);
+        JsonNode assistantMsg = ocrProvider.extractAssistantMessage(root);
+
+        ParsedReceiptDto dto = ocrProvider.extractToolCallArgs(assistantMsg);
+        if (dto != null) {
+            log.info("OCR parsed receipt for expense {} via tool_call: amount={}, currency={}, items={}",
+                    expenseId,
+                    dto.amount() != null ? dto.amount().toPlainString() : "N/A",
+                    dto.currency() != null ? dto.currency() : "N/A",
+                    dto.items() != null ? dto.items().size() : 0);
+            saveExpenseFromParsed(expenseId, dto);
+            return;
         }
 
-        // Strip markdown code fences if present
-        responseText = responseText.strip();
-        if (responseText.startsWith("```")) {
-            responseText = responseText.replaceAll("^```[a-zA-Z]*\\n?", "").replaceAll("```$", "").strip();
+        // Fallback: parse content as JSON
+        String responseText = assistantMsg.path("content").asText(null);
+        if (responseText == null || responseText.isBlank()) {
+            responseText = root.has("response") ? root.get("response").asText() : null;
+        }
+        if (responseText == null || responseText.isBlank()) {
+            throw new IllegalStateException("OCR response missing both tool_calls and content: " + responseBody);
         }
 
-        JsonNode parsed = objectMapper.readTree(responseText);
+        responseText = JsonUtils.stripMarkdownFences(responseText);
+        dto = objectMapper.readValue(responseText, ParsedReceiptDto.class);
         log.info("OCR parsed receipt for expense {}: amount={}, currency={}, items={}",
                 expenseId,
-                parsed.has("amount") ? parsed.get("amount").asText() : "N/A",
-                parsed.has("currency") ? parsed.get("currency").asText() : "N/A",
-                parsed.has("items") ? parsed.get("items").size() : 0);
+                dto.amount() != null ? dto.amount().toPlainString() : "N/A",
+                dto.currency() != null ? dto.currency() : "N/A",
+                dto.items() != null ? dto.items().size() : 0);
 
+        saveExpenseFromParsed(expenseId, dto);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Persistence
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Truncates a string to the given max length. Returns the truncated value,
+     * or the original if it is within the limit.
+     */
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) return value;
+        return value.substring(0, maxLength);
+    }
+
+    private void saveExpenseFromParsed(Long expenseId, ParsedReceiptDto parsed) {
         Expense expense = expenseRepository.findById(expenseId).orElse(null);
         if (expense == null) return;
 
-        // Update expense fields
-        if (parsed.has("transactionDatetime")) {
+        List<String> truncatedFields = new ArrayList<>();
+
+        if (parsed.transactionDatetime() != null) {
             try {
-                expense.setTransactionDatetime(LocalDateTime.parse(parsed.get("transactionDatetime").asText(),
+                expense.setTransactionDatetime(LocalDateTime.parse(parsed.transactionDatetime(),
                         DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {} // noinspection CommentedOutCode
         }
-        if (parsed.has("amount")) expense.setAmount(parsed.get("amount").decimalValue());
-        if (parsed.has("currency")) expense.setCurrency(parsed.get("currency").asText());
-        if (parsed.has("receiptNumber")) expense.setReceiptNumber(parsed.get("receiptNumber").asText());
-        if (parsed.has("category")) expense.setCategory(parsed.get("category").asText());
+        if (parsed.amount() != null) expense.setAmount(parsed.amount());
+        if (parsed.currency() != null) expense.setCurrency(parsed.currency());
+        if (parsed.receiptNumber() != null) {
+            String raw = parsed.receiptNumber();
+            String trimmed = truncate(raw, 50);
+            if (trimmed.length() < raw.length()) truncatedFields.add("receiptNumber");
+            expense.setReceiptNumber(trimmed);
+        }
+        if (parsed.category() != null) {
+            String raw = parsed.category();
+            String trimmed = truncate(raw, 50);
+            if (trimmed.length() < raw.length()) truncatedFields.add("category");
+            expense.setCategory(trimmed);
+        }
 
         User user = userRepository.findById(expense.getUserId()).orElse(null);
         if (!StringUtils.hasText(user.getBaseCurrency())) {
@@ -388,7 +352,6 @@ public class OcrService {
             userRepository.save(user);
             log.info("Set base currency for the first time for user {} to {}", user.getId(), user.getBaseCurrency());
         }
-        // Currency conversion
         if (expense.getCurrency() != null && user.getBaseCurrency() != null && expense.getAmount() != null) {
             BigDecimal rate = currencyService.getRate(expense.getCurrency(), user.getBaseCurrency(),
                     expense.getTransactionDatetime() != null ? expense.getTransactionDatetime().toLocalDate() : LocalDate.now());
@@ -398,11 +361,20 @@ public class OcrService {
             }
         }
 
+        if (!truncatedFields.isEmpty()) {
+            String truncationNote = "Value of field " + String.join(", ", truncatedFields)
+                    + " has been truncated, refer to the scanned receipt.";
+            String existingNotes = expense.getNotes();
+            String combined = (existingNotes != null && !existingNotes.isBlank())
+                    ? existingNotes + " | " + truncationNote
+                    : truncationNote;
+            expense.setNotes(truncate(combined, 500));
+            log.warn("Truncated OCR fields for expense {}: {}", expenseId, truncatedFields);
+        }
         expense.setStatus(ExpenseStatus.COMPLETED);
         expense.setUpdatedAt(LocalDateTime.now());
         expenseRepository.save(expense);
 
-        // Delete previous items before inserting new ones (handles retry scenario)
         List<ExpenseItem> existingItems = expenseItemRepository.findByExpenseIdAndDeletedFalse(expenseId);
         if (!existingItems.isEmpty()) {
             existingItems.forEach(i -> i.setDeleted(true));
@@ -410,43 +382,71 @@ public class OcrService {
             log.info("Deleted {} existing items for expense {} before re-processing", existingItems.size(), expenseId);
         }
 
-        // Parse items
-        if (parsed.has("items") && parsed.get("items").isArray()) {
+        if (parsed.items() != null && !parsed.items().isEmpty()) {
             List<ExpenseItem> items = new ArrayList<>();
-            for (JsonNode itemNode : parsed.get("items")) {
+            boolean itemNameTruncated = false;
+            for (ParsedItemDto itemDto : parsed.items()) {
                 ExpenseItem item = new ExpenseItem();
                 item.setExpenseId(expenseId);
-                item.setItemName(itemNode.has("itemName") ? itemNode.get("itemName").asText() : "");
-                item.setQuantity(itemNode.has("quantity") ? itemNode.get("quantity").decimalValue() : BigDecimal.ONE);
-                item.setUnitPrice(itemNode.has("unitPrice") ? itemNode.get("unitPrice").decimalValue() : BigDecimal.ZERO);
-                if (itemNode.has("adjustment")) item.setAdjustment(itemNode.get("adjustment").decimalValue());
+                String rawItemName = itemDto.itemName() != null ? itemDto.itemName() : "";
+                if (rawItemName.length() > 100) { itemNameTruncated = true; rawItemName = truncate(rawItemName, 100); }
+                item.setItemName(rawItemName);
+                item.setQuantity(itemDto.quantity() != null ? itemDto.quantity() : BigDecimal.ONE);
+                item.setUnitPrice(itemDto.unitPrice() != null ? itemDto.unitPrice() : BigDecimal.ZERO);
+                if (itemDto.adjustment() != null) item.setAdjustment(itemDto.adjustment());
                 item.setDeleted(false);
                 items.add(item);
+            }
+            if (itemNameTruncated) {
+                truncatedFields.add("item.itemName");
+                String truncationNote = "Value of field item.itemName has been truncated, refer to the scanned receipt.";
+                String existingNotes = expense.getNotes();
+                String combined = (existingNotes != null && !existingNotes.isBlank())
+                        ? existingNotes + " | " + truncationNote
+                        : truncationNote;
+                expense.setNotes(truncate(combined, 500));
+                expenseRepository.save(expense);
+                log.warn("Truncated OCR item.itemName fields for expense {}", expenseId);
             }
             expenseItemRepository.saveAll(items);
         }
 
-        // Parse store
-        if (parsed.has("store") && parsed.get("store").isObject()) {
-            JsonNode sn = parsed.get("store");
-            String sName = sn.has("name") ? sn.get("name").asText() : null;
-            String sAddress = sn.has("address") ? sn.get("address").asText() : null;
-            String sCity = sn.has("city") ? sn.get("city").asText() : null;
-            String sCountry = sn.has("country") ? sn.get("country").asText() : null;
-            String sPostal = sn.has("postalCode") ? sn.get("postalCode").asText() : null;
+        if (parsed.store() != null) {
+            ParsedStoreDto sn = parsed.store();
+            String sName = sn.name();
+            String sAddress = sn.address();
+            String sCity = sn.city();
+            String sCountry = sn.country();
+            String sPostal = sn.postalCode();
 
-            // Try to find an existing store for this user with matching key fields
+            List<String> storeTruncated = new ArrayList<>();
+            if (sName != null && sName.length() > 100) { storeTruncated.add("store.name"); sName = truncate(sName, 100); }
+            if (sAddress != null && sAddress.length() > 200) { storeTruncated.add("store.address"); sAddress = truncate(sAddress, 200); }
+            if (sCity != null && sCity.length() > 100) { storeTruncated.add("store.city"); sCity = truncate(sCity, 100); }
+            if (sCountry != null && sCountry.length() > 2) { storeTruncated.add("store.country"); sCountry = truncate(sCountry, 2); }
+            if (sPostal != null && sPostal.length() > 20) { storeTruncated.add("store.postalCode"); sPostal = truncate(sPostal, 20); }
+
+            if (!storeTruncated.isEmpty()) {
+                truncatedFields.addAll(storeTruncated);
+                String truncationNote = "Value of field " + String.join(", ", storeTruncated)
+                        + " has been truncated, refer to the scanned receipt.";
+                String existingNotes = expense.getNotes();
+                String combined = (existingNotes != null && !existingNotes.isBlank())
+                        ? existingNotes + " | " + truncationNote
+                        : truncationNote;
+                expense.setNotes(truncate(combined, 500));
+                expenseRepository.save(expense);
+                log.warn("Truncated OCR store fields for expense {}: {}", expenseId, storeTruncated);
+            }
+
             Optional<Store> existingStore = storeRepository.findMatchingStore(
                     expense.getUserId(), sName, sAddress, sCity, sCountry, sPostal);
 
             if (existingStore.isPresent()) {
-                // Reuse existing store
-                Store matched = existingStore.get();
-                expense.setStoreId(matched.getId());
+                expense.setStoreId(existingStore.get().getId());
                 expenseRepository.save(expense);
-                log.info("Reused existing store {} for expense {}", matched.getId(), expenseId);
+                log.info("Reused existing store {} for expense {}", existingStore.get().getId(), expenseId);
             } else {
-                // Create new store
                 Store store = new Store();
                 store.setUserId(expense.getUserId());
                 store.setName(sName);
@@ -454,13 +454,11 @@ public class OcrService {
                 store.setCity(sCity);
                 store.setCountry(sCountry);
                 store.setPostalCode(sPostal);
-                store.setPhoneNumber(sn.has("phoneNumber") ? sn.get("phoneNumber").asText() : null);
-                store.setWebsite(sn.has("website") ? sn.get("website").asText() : null);
+                store.setPhoneNumber(sn.phoneNumber());
+                store.setWebsite(sn.website());
                 storeRepository.save(store);
                 expense.setStoreId(store.getId());
                 expenseRepository.save(expense);
-
-                // Async geocode the store address to fill lat/long + save place_id
                 geocodingService.geocodeStoreAsync(store);
             }
         }

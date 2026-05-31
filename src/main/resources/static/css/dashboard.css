@@ -175,6 +175,21 @@
 .receipt-file-actions {
     display: flex; gap: 0.75rem; margin-top: 0.75rem; flex-wrap: wrap;
 }
+.batch-queue-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-light);
+    cursor: pointer;
+    padding: 0.4rem 0.5rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-color);
+    margin-top: 0.5rem;
+    user-select: none;
+}
+.batch-queue-toggle input[type="checkbox"] { accent-color: var(--primary); cursor: pointer; }
+.batch-queue-toggle:hover { background: var(--table-stripe); }
 
 /* ===================== ATTACHMENTS ===================== */
 .attachment-list { list-style: none; }
@@ -458,21 +473,37 @@
     background: var(--bg-card);
     border-radius: var(--radius);
     box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-    padding: 1.5rem;
     width: 100%;
     max-width: 420px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 .item-dialog-title {
+    padding: 1.5rem 1.5rem 0;
+    flex-shrink: 0;
     font-size: 1.1rem;
     font-weight: 600;
     color: var(--primary-dark);
     margin-bottom: 1rem;
 }
+.item-dialog-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 0 1.5rem 0.5rem;
+}
 .item-dialog-actions {
     display: flex;
     gap: 0.5rem;
-    margin-top: 1rem;
+    padding: 1rem 1.5rem;
+    margin-top: 0;
     justify-content: flex-end;
+    flex-shrink: 0;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-card);
+    position: sticky;
+    bottom: 0;
 }
 
 /* ===================== OTHER DETAILS (collapsed section) ===================== */

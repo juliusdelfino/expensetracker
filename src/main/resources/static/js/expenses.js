@@ -135,6 +135,11 @@ function sortExpenses(field) {
 function getSortedExpenses() {
     const sorted = [..._allExpenses];
     sorted.sort((a, b) => {
+        // PROCESSING always floats to the top
+        const aProc = a.status === 'PROCESSING';
+        const bProc = b.status === 'PROCESSING';
+        if (aProc !== bProc) return aProc ? -1 : 1;
+
         let va = a[_expenseSortField];
         let vb = b[_expenseSortField];
         if (va == null && vb == null) return 0;
@@ -198,7 +203,7 @@ function renderExpenseTable() {
         <tr class="${e.deleted ? 'deleted' : ''} expense-row ${isFailed ? 'row-failed' : ''}"
             onclick="navigate('#/expenses/${e.urlId}')"
             ${isFailed ? `title="${failTitle}"` : ''}>
-            <td class="td-status">${statusBadge(e.status)}</td>
+            <td class="td-status">${statusBadge(e.status, e.category)}</td>
             <td>${e.transactionDatetime ? new Date(e.transactionDatetime).toLocaleDateString() : '-'}</td>
             <td class="td-description">${e.displayName || e.category || '-'}</td>
             <td class="amount-primary">${e.amount != null ? Number(e.amount).toFixed(2) : '-'} ${e.currency || ''}</td>
@@ -235,10 +240,10 @@ function renderExpenseTable() {
     renderPagination(totalPages);
 }
 
-function statusBadge(status) {
+function statusBadge(status, category) {
     switch(status) {
         case 'PROCESSING': return '<span class="status-dot status-processing" title="Processing"><i class="fa-solid fa-spinner fa-spin"></i></span>';
-        case 'COMPLETED': return '<span class="status-dot status-completed" title="Completed"><i class="fa-solid fa-check"></i></span>';
+        case 'COMPLETED': return `<span class="status-dot status-completed" title="Completed"><i class="fa-solid fa-${categoryIcon(category)}"></i></span>`;
         case 'FAILED': return '<span class="status-dot status-failed" title="Failed"><i class="fa-solid fa-xmark"></i></span>';
         default: return '<span class="status-dot"></span>';
     }

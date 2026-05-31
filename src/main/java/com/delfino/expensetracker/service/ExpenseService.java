@@ -121,7 +121,7 @@ public class ExpenseService {
     }
 
     /**
-     * Processes a queue of expenses through OCR with configurable interval delays between each call.
+     * Processes a queue of expenses through OCR.
      */
     @Async
     public void processOcrQueue(List<Expense> expenses) {
@@ -409,7 +409,31 @@ public class ExpenseService {
                 .orElseThrow(() -> new IllegalStateException("Expense not found"));
         store.setUserId(userId);
 
-        // Try to find an existing matching store for this user
+        // If the client sends a known store ID, update that store directly
+        if (store.getId() > 0) {
+            Optional<Store> byId = storeRepository.findById(store.getId());
+            if (byId.isPresent()) {
+                Store existing = byId.get();
+                // Update all mutable fields (not just phone/website)
+                if (store.getName() != null) existing.setName(store.getName());
+                if (store.getAddress() != null) existing.setAddress(store.getAddress());
+                if (store.getCity() != null) existing.setCity(store.getCity());
+                if (store.getCountry() != null) existing.setCountry(store.getCountry());
+                if (store.getPostalCode() != null) existing.setPostalCode(store.getPostalCode());
+                if (store.getPhoneNumber() != null) existing.setPhoneNumber(store.getPhoneNumber());
+                if (store.getWebsite() != null) existing.setWebsite(store.getWebsite());
+                if (store.getLatitude() != null) existing.setLatitude(store.getLatitude());
+                if (store.getLongitude() != null) existing.setLongitude(store.getLongitude());
+                if (store.getSourceId() != null) existing.setSourceId(store.getSourceId());
+                Store saved = storeRepository.save(existing);
+                expense.setStoreId(saved.getId());
+                expense.setUpdatedAt(LocalDateTime.now());
+                expenseRepository.save(expense);
+                return saved;
+            }
+        }
+
+        // No id provided — try to find an existing matching store for this user
         Optional<Store> existing = storeRepository.findMatchingStore(
                 userId,
                 store.getName(), store.getAddress(), store.getCity(),
@@ -418,7 +442,6 @@ public class ExpenseService {
         if (existing.isPresent()) {
             Store matched = getMatched(store, existing);
             storeRepository.save(matched);
-            // Link expense to this store
             expense.setStoreId(matched.getId());
             expense.setUpdatedAt(LocalDateTime.now());
             expenseRepository.save(expense);

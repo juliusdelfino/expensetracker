@@ -16,7 +16,6 @@ import com.delfino.expensetracker.model.ExpenseStatus;
 import com.delfino.expensetracker.model.Store;
 import com.delfino.expensetracker.model.User;
 import com.delfino.expensetracker.repository.ExpenseRepository;
-import com.delfino.expensetracker.repository.StoreRepository;
 import com.delfino.expensetracker.service.ExpenseService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -49,7 +48,10 @@ public class DashboardController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<DashboardResponse> dashboard(@RequestParam(required = false) String startDate,
                                                        @RequestParam(required = false) String endDate,
-                                                       @RequestParam(required = false) String category,
+                                                       @RequestParam(required = false) List<String> category,
+                                                       @RequestParam(required = false) List<String> country,
+                                                       @RequestParam(required = false) List<String> storeName,
+                                                       @RequestParam(required = false) String search,
                                                        UserToken userToken) {
         long userId = userToken.getUserId();
 
@@ -58,12 +60,43 @@ public class DashboardController {
 
         Map<Long, Store> storeMap = expenseService.getStoreMapForUser(userId);
 
-        // Apply filters
+        // Apply filters (OR within each field, AND across fields)
         expenses = ExpenseController.filterByDateRange(expenses, startDate, endDate);
-        if (category != null && !category.isBlank()) {
+        List<String> categories = nonBlank(category);
+        if (!categories.isEmpty()) {
             expenses = expenses.stream()
-                    .filter(e -> category.equalsIgnoreCase(e.getCategory()))
+                    .filter(e -> categories.stream().anyMatch(c -> c.equalsIgnoreCase(e.getCategory())))
                     .toList();
+        }
+        List<String> countries = nonBlank(country);
+        if (!countries.isEmpty()) {
+            expenses = expenses.stream()
+                    .filter(e -> {
+                        if (e.getStoreId() == null) return false;
+                        Store s = storeMap.get(e.getStoreId());
+                        if (s == null || s.getCountry() == null) return false;
+                        String sc = s.getCountry().toLowerCase();
+                        return countries.stream().anyMatch(c -> sc.contains(c.toLowerCase()));
+                    }).toList();
+        }
+        List<String> storeNames = nonBlank(storeName);
+        if (!storeNames.isEmpty()) {
+            expenses = expenses.stream()
+                    .filter(e -> {
+                        if (e.getStoreId() == null) return false;
+                        Store s = storeMap.get(e.getStoreId());
+                        if (s == null || s.getName() == null) return false;
+                        String sn = s.getName().toLowerCase();
+                        return storeNames.stream().anyMatch(n -> sn.contains(n.toLowerCase()));
+                    }).toList();
+        }
+        if (search != null && !search.isBlank()) {
+            String q = search.toLowerCase();
+            expenses = expenses.stream()
+                    .filter(e -> {
+                        if (e.getNotes() != null && e.getNotes().toLowerCase().contains(q)) return true;
+                        return e.getTags() != null && e.getTags().stream().anyMatch(t -> t.toLowerCase().contains(q));
+                    }).toList();
         }
 
         TimeTotals timeTotals = computeTimeTotals(expenses);
@@ -71,6 +104,20 @@ public class DashboardController {
 
         Set<String> allCategories = allExpenses.stream()
                 .map(Expense::getCategory).filter(Objects::nonNull)
+                .collect(Collectors.toCollection(TreeSet::new));
+
+        Set<String> allCountries = allExpenses.stream()
+                .filter(e -> e.getStoreId() != null)
+                .map(e -> storeMap.get(e.getStoreId()))
+                .filter(s -> s != null && s.getCountry() != null && !s.getCountry().isBlank())
+                .map(Store::getCountry)
+                .collect(Collectors.toCollection(TreeSet::new));
+
+        Set<String> allStoreNames = allExpenses.stream()
+                .filter(e -> e.getStoreId() != null)
+                .map(e -> storeMap.get(e.getStoreId()))
+                .filter(s -> s != null && s.getName() != null && !s.getName().isBlank())
+                .map(Store::getName)
                 .collect(Collectors.toCollection(TreeSet::new));
 
         String minDate = allExpenses.stream().map(Expense::getTransactionDatetime).filter(Objects::nonNull)
@@ -92,6 +139,8 @@ public class DashboardController {
                 .topItems(buildTopItems(expenses, storeMap))
                 .discoveryCards(buildDiscoveryCards(allExpenses, user, storeMap))
                 .categories(allCategories)
+                .countries(allCountries)
+                .storeNames(allStoreNames)
                 .totalExpenses(expenses.size())
                 .minDate(minDate)
                 .maxDate(maxDate)
@@ -103,6 +152,12 @@ public class DashboardController {
                 .build();
 
         return ResponseEntity.ok(response);
+    }
+
+    /** Filters nulls and blank strings from a list param, returning a non-null list. */
+    private static List<String> nonBlank(List<String> values) {
+        if (values == null) return List.of();
+        return values.stream().filter(v -> v != null && !v.isBlank()).toList();
     }
 
     // --- Private helper records for internal decomposition ---

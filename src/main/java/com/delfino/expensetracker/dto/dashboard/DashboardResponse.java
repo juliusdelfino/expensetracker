@@ -17,6 +17,8 @@ public record DashboardResponse(
         List<TopItem> topItems,
         List<DiscoveryCard> discoveryCards,
         Set<String> categories,
+        Set<String> countries,
+        Set<String> storeNames,
         int totalExpenses,
         String minDate,
         String maxDate,
@@ -42,6 +44,8 @@ public record DashboardResponse(
         private List<TopItem> topItems;
         private List<DiscoveryCard> discoveryCards;
         private Set<String> categories;
+        private Set<String> countries;
+        private Set<String> storeNames;
         private int totalExpenses;
         private String minDate;
         private String maxDate;
@@ -62,6 +66,8 @@ public record DashboardResponse(
         public Builder topItems(List<TopItem> v) { this.topItems = v; return this; }
         public Builder discoveryCards(List<DiscoveryCard> v) { this.discoveryCards = v; return this; }
         public Builder categories(Set<String> v) { this.categories = v; return this; }
+        public Builder countries(Set<String> v) { this.countries = v; return this; }
+        public Builder storeNames(Set<String> v) { this.storeNames = v; return this; }
         public Builder totalExpenses(int v) { this.totalExpenses = v; return this; }
         public Builder minDate(String v) { this.minDate = v; return this; }
         public Builder maxDate(String v) { this.maxDate = v; return this; }
@@ -74,7 +80,7 @@ public record DashboardResponse(
         public DashboardResponse build() {
             return new DashboardResponse(monthlyTotals, weeklyTotals, annualTotals, categoryTotals,
                     timeline, geoData, geoByCountry, topShops, topItems, discoveryCards, categories,
-                    totalExpenses, minDate, maxDate, topExpenses, perMonthTxCount, perMonthTopCategory,
+                    countries, storeNames, totalExpenses, minDate, maxDate, topExpenses, perMonthTxCount, perMonthTopCategory,
                     perYearTxCount, perYearTopCategory);
         }
     }

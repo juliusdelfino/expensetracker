@@ -32,6 +32,22 @@ See https://github.com/adobe-type-tools/cmap-resources
 <script src="../build/pdf.mjs" type="module"></script>
 
     <link rel="stylesheet" href="viewer.css" />
+    <style>
+      /* Hide annotation/editing toolbar buttons */
+      #editorModeButtons,
+      #editorModeSeparator,
+      #editorComment,
+      #editorSignature,
+      #editorHighlight,
+      #editorFreeText,
+      #editorInk,
+      #editorStamp,
+      #editorUndoBar,
+      /* Hide Open File from secondary toolbar */
+      #secondaryOpenFile {
+        display: none !important;
+      }
+    </style>
 
   <script src="viewer.mjs" type="module"></script>
   </head>

@@ -1,13 +1,17 @@
 package com.delfino.expensetracker.service;
 
 import com.delfino.expensetracker.config.ChatBotProperties;
+import com.delfino.expensetracker.dto.chat.ChatExpenseDto;
+import com.delfino.expensetracker.dto.chat.ChatExpenseItemDto;
+import com.delfino.expensetracker.dto.chat.ChatExpenseResponseDto;
 import com.delfino.expensetracker.model.ChatMessage;
 import com.delfino.expensetracker.model.Expense;
+import com.delfino.expensetracker.model.ExpenseItem;
 import com.delfino.expensetracker.model.User;
 import com.delfino.expensetracker.repository.ChatMessageRepository;
+import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.UserRepository;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,18 +41,21 @@ public class ChatService {
     private final ObjectMapper objectMapper;
     private final ChatClient chatClient;
     private final ChatBotProperties chatBotProperties;
+    private final ExpenseItemRepository expenseItemRepository;
 
     public ChatService(ChatMessageRepository chatMessageRepository, ExpenseService expenseService,
                        ExpenseRepository expenseRepository, UserRepository userRepository,
                        ObjectMapper objectMapper, ChatClient.Builder chatClientBuilder,
                        ToolCallbackProvider toolCallbackProvider,
-                       ChatBotProperties chatBotProperties) {
+                       ChatBotProperties chatBotProperties,
+                       ExpenseItemRepository expenseItemRepository) {
         this.chatMessageRepository = chatMessageRepository;
         this.expenseService = expenseService;
         this.expenseRepository = expenseRepository;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
         this.chatBotProperties = chatBotProperties;
+        this.expenseItemRepository = expenseItemRepository;
 
         // Build the ChatClient with all registered tool callbacks
         this.chatClient = chatClientBuilder
@@ -87,108 +94,14 @@ public class ChatService {
 
             log.info("Processing chat message for user {}: '{}'", userId, messageText);
 
-            // Build conversation history for context (last 10 messages before current)
-            List<ChatMessage> recentHistory = chatMessageRepository.findTop50ByUserIdOrderByCreatedAtDesc(userId);
-            Collections.reverse(recentHistory);
-            // Take the last 10 messages (excluding the user message we just saved, which is the last one)
-            int historySize = Math.min(recentHistory.size() - 1, 10);
-            List<Message> conversationMessages = new ArrayList<>();
-            if (historySize > 0) {
-                List<ChatMessage> historySlice = recentHistory.subList(
-                        Math.max(0, recentHistory.size() - 1 - historySize),
-                        recentHistory.size() - 1);
-                for (ChatMessage cm : historySlice) {
-                    if ("USER".equals(cm.getRole())) {
-                        conversationMessages.add(new UserMessage(cm.getText()));
-                    } else {
-                        conversationMessages.add(new AssistantMessage(cm.getText()));
-                    }
-                }
-            }
-
-            // Call the LLM via Spring AI ChatClient — tool calls are handled automatically.
-            // Include conversation history so the model has context of the ongoing conversation.
-            String llmResponse = chatClient.prompt()
-                    .system(resolvedSystemPrompt)
-                    .messages(conversationMessages)
-                    .user(messageText)
-                    .call()
-                    .content();
+            List<Message> conversationMessages = buildConversationHistory(userId);
+            String llmResponse = callLlm(resolvedSystemPrompt, conversationMessages, messageText);
 
             log.info("LLM response for user {}: {}", userId, llmResponse);
 
-            // Try to parse as JSON (expense-creation flow) — the LLM may still return
-            // structured JSON when the user wants to log new expenses.
-            List<Long> savedExpenseIds = new ArrayList<>();
-            String botText = llmResponse;
-
-            if (looksLikeExpenseJson(llmResponse)) {
-                try {
-                    String cleaned = cleanJsonResponse(llmResponse);
-                    JsonNode parsed = objectMapper.readTree(cleaned);
-
-                    if (parsed.has("expenses") && parsed.get("expenses").isArray()) {
-                        String summary = parsed.has("summary") ? parsed.get("summary").asText()
-                                : "Expenses recorded.";
-
-                        for (JsonNode expNode : parsed.get("expenses")) {
-                            Expense expense = new Expense();
-                            if (expNode.has("transactionDatetime")) {
-                                try {
-                                    expense.setTransactionDatetime(LocalDateTime.parse(
-                                            expNode.get("transactionDatetime").asText(),
-                                            DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-                                } catch (Exception e) {
-                                    expense.setTransactionDatetime(LocalDateTime.now());
-                                }
-                            } else {
-                                expense.setTransactionDatetime(LocalDateTime.now());
-                            }
-                            if (expNode.has("amount")) {
-                                expense.setAmount(BigDecimal.valueOf(expNode.get("amount").asDouble()));
-                            }
-                            if (expNode.has("currency")) {
-                                expense.setCurrency(expNode.get("currency").asText());
-                            } else if (user.getBaseCurrency() != null) {
-                                expense.setCurrency(user.getBaseCurrency());
-                            }
-                            if (expNode.has("category")) {
-                                expense.setCategory(expNode.get("category").asText());
-                            }
-                            if (expNode.has("notes")) {
-                                expense.setNotes(expNode.get("notes").asText());
-                            }
-                            if (expNode.has("storeId") && !expNode.get("storeId").isNull()) {
-                                try {
-                                    expense.setStoreId(expNode.get("storeId").asLong());
-                                } catch (Exception ignored) {}
-                            }
-
-                            Expense saved = expenseService.createManualExpense(expense, userId);
-                            savedExpenseIds.add(saved.getId());
-                        }
-
-                        // Compute daily total
-                        LocalDate today = LocalDate.now();
-                        List<Expense> todaysExpenses = expenseRepository.findByUserIdAndDeletedFalse(userId);
-                        BigDecimal dailyTotal = todaysExpenses.stream()
-                                .filter(e -> e.getTransactionDatetime() != null
-                                        && e.getTransactionDatetime().toLocalDate().equals(today))
-                                .map(e -> e.getAmountInBase() != null ? e.getAmountInBase()
-                                        : (e.getAmount() != null ? e.getAmount() : BigDecimal.ZERO))
-                                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-                        botText = summary + "\n\n\uD83D\uDCB0 Today's total: "
-                                + dailyTotal.setScale(2, RoundingMode.HALF_UP).toPlainString()
-                                + " " + user.getBaseCurrency();
-                    }
-                } catch (Exception e) {
-                    // Not valid JSON — treat llmResponse as plain text (likely a query answer)
-                    log.debug("LLM response is not parseable as expense JSON, treating as plain text reply");
-                }
-            }
-
-            return saveBotMessage(userId, botText, savedExpenseIds);
+            // Try to parse as JSON (expense-creation flow)
+            ProcessedResponse result = processLlmResponse(llmResponse, userId, user);
+            return saveBotMessage(userId, result.botText(), result.savedExpenseIds());
 
         } catch (Exception e) {
             log.error("Chatbot processing failed", e);
@@ -197,6 +110,148 @@ public class ChatService {
                             "For example: \"lunch 12.50 SGD\" or \"How much did I spend on groceries last month?\"",
                     List.of());
         }
+    }
+
+    /**
+     * Build conversation history for LLM context (last 10 messages before current).
+     */
+    private List<Message> buildConversationHistory(Long userId) {
+        List<ChatMessage> recentHistory = chatMessageRepository.findTop50ByUserIdOrderByCreatedAtDesc(userId);
+        Collections.reverse(recentHistory);
+        // Take the last 10 messages (excluding the user message we just saved, which is the last one)
+        int historySize = Math.min(recentHistory.size() - 1, 10);
+        List<Message> conversationMessages = new ArrayList<>();
+        if (historySize > 0) {
+            List<ChatMessage> historySlice = recentHistory.subList(
+                    Math.max(0, recentHistory.size() - 1 - historySize),
+                    recentHistory.size() - 1);
+            for (ChatMessage cm : historySlice) {
+                if ("USER".equals(cm.getRole())) {
+                    conversationMessages.add(new UserMessage(cm.getText()));
+                } else {
+                    conversationMessages.add(new AssistantMessage(cm.getText()));
+                }
+            }
+        }
+        return conversationMessages;
+    }
+
+    /**
+     * Call the LLM with system prompt, conversation history, and user message.
+     */
+    private String callLlm(String systemPrompt, List<Message> conversationMessages, String userMessage) {
+        return chatClient.prompt()
+                .system(systemPrompt)
+                .messages(conversationMessages)
+                .user(userMessage)
+                .call()
+                .content();
+    }
+
+    /**
+     * Process LLM response: parse JSON if it looks like expense data, otherwise treat as plain text.
+     */
+    private ProcessedResponse processLlmResponse(String llmResponse, Long userId, User user) {
+        List<Long> savedExpenseIds = new ArrayList<>();
+        String botText = llmResponse;
+
+        if (looksLikeExpenseJson(llmResponse)) {
+            try {
+                String cleaned = cleanJsonResponse(llmResponse);
+                ChatExpenseResponseDto response = objectMapper.readValue(cleaned, ChatExpenseResponseDto.class);
+
+                if (response.expenses() != null && !response.expenses().isEmpty()) {
+                    String summary = response.summary() != null ? response.summary() : "Expenses recorded.";
+                    savedExpenseIds = saveExpensesFromDto(response.expenses(), userId, user);
+                    BigDecimal dailyTotal = computeDailyTotal(userId);
+                    botText = summary + "\n\n\uD83D\uDCB0 Today's total: "
+                            + dailyTotal.setScale(2, RoundingMode.HALF_UP).toPlainString()
+                            + " " + user.getBaseCurrency();
+                }
+            } catch (Exception e) {
+                // Not valid JSON — treat llmResponse as plain text (likely a query answer)
+                log.debug("LLM response is not parseable as expense JSON, treating as plain text reply");
+            }
+        }
+
+        return new ProcessedResponse(botText, savedExpenseIds);
+    }
+
+    /**
+     * Save expenses from the DTO list, including their line items.
+     */
+    private List<Long> saveExpensesFromDto(List<ChatExpenseDto> expenses, Long userId, User user) {
+        List<Long> savedIds = new ArrayList<>();
+        for (ChatExpenseDto expDto : expenses) {
+            Expense expense = buildExpenseFromDto(expDto, user);
+            Expense saved = expenseService.createManualExpense(expense, userId);
+            savedIds.add(saved.getId());
+            saveExpenseItemsFromDto(expDto, saved.getId());
+        }
+        return savedIds;
+    }
+
+    /**
+     * Build an Expense entity from a typed DTO.
+     */
+    private Expense buildExpenseFromDto(ChatExpenseDto dto, User user) {
+        Expense expense = new Expense();
+
+        if (dto.transactionDatetime() != null) {
+            try {
+                expense.setTransactionDatetime(LocalDateTime.parse(
+                        dto.transactionDatetime(), DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+            } catch (Exception e) {
+                expense.setTransactionDatetime(LocalDateTime.now());
+            }
+        } else {
+            expense.setTransactionDatetime(LocalDateTime.now());
+        }
+
+        if (dto.amount() != null) expense.setAmount(dto.amount());
+        if (dto.currency() != null) {
+            expense.setCurrency(dto.currency());
+        } else if (user.getBaseCurrency() != null) {
+            expense.setCurrency(user.getBaseCurrency());
+        }
+        if (dto.category() != null) expense.setCategory(dto.category());
+        if (dto.notes() != null) expense.setNotes(dto.notes());
+        if (dto.storeId() != null) expense.setStoreId(dto.storeId());
+
+        return expense;
+    }
+
+    /**
+     * Persist expense line items from a typed DTO.
+     */
+    private void saveExpenseItemsFromDto(ChatExpenseDto expDto, Long expenseId) {
+        if (expDto.items() == null || expDto.items().isEmpty()) return;
+        List<ExpenseItem> items = new ArrayList<>();
+        for (ChatExpenseItemDto itemDto : expDto.items()) {
+            ExpenseItem item = new ExpenseItem();
+            item.setExpenseId(expenseId);
+            item.setItemName(itemDto.itemName() != null ? itemDto.itemName() : "");
+            item.setQuantity(itemDto.quantity() != null ? itemDto.quantity() : BigDecimal.ONE);
+            item.setUnitPrice(itemDto.unitPrice() != null ? itemDto.unitPrice() : BigDecimal.ZERO);
+            item.setAdjustment(itemDto.adjustment() != null ? itemDto.adjustment() : BigDecimal.ZERO);
+            item.setDeleted(false);
+            items.add(item);
+        }
+        expenseItemRepository.saveAll(items);
+    }
+
+    /**
+     * Compute total expenses for today in user's base currency.
+     */
+    private BigDecimal computeDailyTotal(Long userId) {
+        LocalDate today = LocalDate.now();
+        List<Expense> todaysExpenses = expenseRepository.findByUserIdAndDeletedFalse(userId);
+        return todaysExpenses.stream()
+                .filter(e -> e.getTransactionDatetime() != null
+                        && e.getTransactionDatetime().toLocalDate().equals(today))
+                .map(e -> e.getAmountInBase() != null ? e.getAmountInBase()
+                        : (e.getAmount() != null ? e.getAmount() : BigDecimal.ZERO))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /**
@@ -229,5 +284,10 @@ public class ChatService {
         chatMessageRepository.save(botMsg);
         return botMsg;
     }
+
+    /**
+     * Holds the result of LLM response processing.
+     */
+    private record ProcessedResponse(String botText, List<Long> savedExpenseIds) {}
 }
 

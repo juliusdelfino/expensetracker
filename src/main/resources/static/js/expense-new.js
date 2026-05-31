@@ -17,11 +17,11 @@ function renderNewExpense(app, embedded = false) {
                     <div style="display:grid; grid-template-columns:3fr 1fr; gap:0.75rem;">
                         <div class="form-group">
                             <label>Amount <span style="color:var(--danger)">*</span></label>
-                            <input type="number" step="0.01" class="form-control" id="mAmount" required placeholder="0.00">
+                            <input type="number" step="0.01" min="0" max="9999999999" class="form-control" id="mAmount" required placeholder="0.00">
                         </div>
                         <div class="form-group">
                             <label>Currency <span style="color:var(--danger)">*</span></label>
-                            <input type="text" class="form-control" id="mCurrency" list="mCurrencyList" placeholder="USD" required>
+                            <input type="text" class="form-control" id="mCurrency" list="mCurrencyList" placeholder="USD" maxlength="3" required>
                             <datalist id="mCurrencyList">
                                 <option value="USD"></option><option value="EUR"></option>
                                 <option value="GBP"></option><option value="SGD"></option>
@@ -32,7 +32,7 @@ function renderNewExpense(app, embedded = false) {
                     </div>
                     <div class="form-group">
                         <label>Notes</label>
-                        <textarea class="form-control" id="mNotes" placeholder="What was this expense for?"></textarea>
+                        <textarea class="form-control" id="mNotes" maxlength="500" placeholder="What was this expense for?"></textarea>
                     </div>
                     <div class="expand-toggle" onclick="toggleNewExpenseDetails()">
                         <i class="fa-solid fa-chevron-down" id="expandIcon"></i> <span id="expandLabel">More details</span>
@@ -45,18 +45,18 @@ function renderNewExpense(app, embedded = false) {
                             </div>
                             <div class="form-group">
                                 <label>Category</label>
-                                <input type="text" class="form-control" id="mCategory" placeholder="e.g. Food, Transport" list="mCategoryList" autocomplete="off">
+                                <input type="text" class="form-control" id="mCategory" maxlength="50" placeholder="e.g. Food, Transport" list="mCategoryList" autocomplete="off">
                                 <datalist id="mCategoryList"></datalist>
                             </div>
                         </div>
                         <div style="display:grid; grid-template-columns:2fr 1fr; gap:0.75rem;">
                             <div class="form-group">
                                 <label>Receipt Number</label>
-                                <input type="text" class="form-control" id="mReceipt">
+                                <input type="text" class="form-control" id="mReceipt" maxlength="50">
                             </div>
                             <div class="form-group">
                                 <label>Exchange Rate</label>
-                                <input type="number" step="0.000001" class="form-control" id="mExRate" placeholder="Auto-fetched">
+                                <input type="number" step="0.000001" min="0" max="999999" class="form-control" id="mExRate" placeholder="Auto-fetched">
                             </div>
                         </div>
                         <div class="form-group">
@@ -314,12 +314,11 @@ async function submitReceiptBatch() {
     statusEl.style.display = 'block';
     statusEl.innerHTML = `<div class="badge badge-processing"><i class="fa-solid fa-spinner fa-spin"></i> Uploading ${_pendingReceiptFiles.length} receipt${_pendingReceiptFiles.length > 1 ? 's' : ''}...</div>`;
 
-    // Hide file list during upload
     const listEl = document.getElementById('receiptFileList');
     if (listEl) listEl.style.display = 'none';
 
     if (_pendingReceiptFiles.length === 1) {
-        // Single file: use existing single endpoint for immediate processing
+        // Single file: immediate single endpoint
         const fd = new FormData();
         fd.append('file', _pendingReceiptFiles[0]);
         const result = await api('/api/expenses/scan', { method: 'POST', body: fd });
@@ -332,15 +331,13 @@ async function submitReceiptBatch() {
             toast('Upload failed', 'error');
         }
     } else {
-        // Multiple files: use batch endpoint
+        // Multiple files: always use batch endpoint; server decides queued vs immediate via config
         const fd = new FormData();
-        for (const f of _pendingReceiptFiles) {
-            fd.append('files', f);
-        }
-        const results = await api('/api/expenses/scan/batch', { method: 'POST', body: fd });
+        for (const f of _pendingReceiptFiles) fd.append('files', f);
         _pendingReceiptFiles = [];
+        const results = await api('/api/expenses/scan/batch', { method: 'POST', body: fd });
         if (results && Array.isArray(results) && results.length > 0) {
-            toast(`${results.length} receipts uploaded! Processing in queue...`, 'info');
+            toast(`${results.length} receipts uploaded! Processing...`, 'info');
             navigate('#/expenses');
         } else {
             statusEl.innerHTML = '<div class="badge badge-failed"><i class="fa-solid fa-xmark"></i> Upload failed</div>';
@@ -520,27 +517,28 @@ function addNewExpenseItem() {
     const overlay = document.createElement('div');
     overlay.className = 'item-dialog-overlay';
     overlay.id = 'newItemDialogOverlay';
-    overlay.onclick = (ev) => { if (ev.target === overlay) overlay.remove(); };
     overlay.innerHTML = `
         <div class="item-dialog">
             <h3 class="item-dialog-title">Add Item</h3>
+            <div class="item-dialog-body">
             <div class="form-group">
                 <label>Item Name</label>
-                <input type="text" class="form-control" id="newDlgItemName" placeholder="Item name">
+                <input type="text" class="form-control" id="newDlgItemName" maxlength="100" placeholder="Item name">
             </div>
             <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.75rem;">
                 <div class="form-group">
                     <label>Quantity</label>
-                    <input type="number" step="0.01" class="form-control" id="newDlgItemQty" value="1">
+                    <input type="number" step="0.01" min="0" max="9999" class="form-control" id="newDlgItemQty" value="1">
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="flex:2;">
                     <label>Unit Price</label>
-                    <input type="number" step="0.01" class="form-control" id="newDlgItemPrice" placeholder="0.00">
+                    <input type="number" step="0.01" min="0" max="9999999999" class="form-control" id="newDlgItemPrice" placeholder="0.00">
                 </div>
-                <div class="form-group">
-                    <label>Adjustment <span style="font-size:0.7rem; color:var(--text-light)">±</span></label>
-                    <input type="number" step="0.01" class="form-control" id="newDlgItemAdjustment" placeholder="0.00">
+                <div class="form-group" style="flex:2;">
+                    <label>Adjustment</label>
+                    <input type="number" step="0.01" max="9999999999" class="form-control" id="newDlgItemAdjustment" placeholder="0.00">
                 </div>
+            </div>
             </div>
             <div class="item-dialog-actions">
                 <button class="btn btn-primary btn-sm" onclick="saveNewExpenseItem()">
@@ -553,6 +551,7 @@ function addNewExpenseItem() {
         </div>`;
     document.body.appendChild(overlay);
     document.getElementById('newDlgItemName').focus();
+    _registerEscHandler('newItemDialogOverlay', () => document.getElementById('newItemDialogOverlay')?.remove());
 }
 
 function editNewExpenseItem(index) {
@@ -561,27 +560,28 @@ function editNewExpenseItem(index) {
     const overlay = document.createElement('div');
     overlay.className = 'item-dialog-overlay';
     overlay.id = 'newItemDialogOverlay';
-    overlay.onclick = (ev) => { if (ev.target === overlay) overlay.remove(); };
     overlay.innerHTML = `
         <div class="item-dialog">
             <h3 class="item-dialog-title">Edit Item</h3>
+            <div class="item-dialog-body">
             <div class="form-group">
                 <label>Item Name</label>
-                <input type="text" class="form-control" id="newDlgItemName" value="${esc(item.itemName)}">
+                <input type="text" class="form-control" id="newDlgItemName" maxlength="100" value="${esc(item.itemName)}">
             </div>
             <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.75rem;">
                 <div class="form-group">
                     <label>Quantity</label>
-                    <input type="number" step="0.01" class="form-control" id="newDlgItemQty" value="${item.quantity}">
+                    <input type="number" step="0.01" min="0" max="9999" class="form-control" id="newDlgItemQty" value="${item.quantity}">
                 </div>
                 <div class="form-group">
                     <label>Unit Price</label>
-                    <input type="number" step="0.01" class="form-control" id="newDlgItemPrice" value="${item.unitPrice}">
+                    <input type="number" step="0.01" min="0" max="9999999999" class="form-control" id="newDlgItemPrice" value="${item.unitPrice}">
                 </div>
                 <div class="form-group">
                     <label>Adjustment <span style="font-size:0.7rem; color:var(--text-light)">±</span></label>
-                    <input type="number" step="0.01" class="form-control" id="newDlgItemAdjustment" value="${item.adjustment || ''}" placeholder="0.00">
+                    <input type="number" step="0.01" max="9999999999" class="form-control" id="newDlgItemAdjustment" value="${item.adjustment || ''}" placeholder="0.00">
                 </div>
+            </div>
             </div>
             <div class="item-dialog-actions">
                 <button class="btn btn-primary btn-sm" onclick="updateNewExpenseItem(${index})">
@@ -597,6 +597,7 @@ function editNewExpenseItem(index) {
         </div>`;
     document.body.appendChild(overlay);
     document.getElementById('newDlgItemName').focus();
+    _registerEscHandler('newItemDialogOverlay', () => document.getElementById('newItemDialogOverlay')?.remove());
 }
 
 function saveNewExpenseItem() {
@@ -671,42 +672,43 @@ function openNewExpenseStoreDialog() {
 
     overlay.innerHTML = `
         <div class="change-store-dialog" id="changeStoreDialog">
-            <div class="change-store-header">
+            <div class="change-store-header" style="padding-top:1.5rem; padding-left:1.5rem; padding-right:1.5rem; flex-shrink:0;">
                 <h3 class="item-dialog-title" style="margin-bottom:0"><i class="fa-solid fa-store"></i> Set Store</h3>
                 <button class="btn btn-outline btn-sm" onclick="closeNewExpenseStoreDialog()"><i class="fa-solid fa-xmark"></i></button>
             </div>
+            <div class="change-store-dialog-body">
             <div class="form-group" style="position:relative; margin-top:0.75rem;">
-                <label>Search address or place</label>
-                <input type="text" class="form-control" id="nominatimSearch" placeholder="e.g. Rivergate Vienna" oninput="debounceNominatim()" autocomplete="off">
+                <label>Search your stores or an address</label>
+                <input type="text" class="form-control" id="nominatimSearch" placeholder="e.g. Starbucks or Rivergate Vienna" oninput="debounceNominatim()" autocomplete="off">
                 <div class="nominatim-results" id="nominatimResults" style="display:none;"></div>
             </div>
-            <p style="font-size:0.78rem; color:var(--text-light); margin-bottom:0.75rem;"><i class="fa-solid fa-circle-info"></i> Search to auto-fill, or edit fields directly.</p>
+            <p style="font-size:0.78rem; color:var(--text-light); margin-bottom:0.75rem;"><i class="fa-solid fa-circle-info"></i> Pick an existing store or search to auto-fill fields.</p>
             <div class="form-group">
                 <label>Name</label>
-                <input type="text" class="form-control" id="csName" value="${esc(store.name || '')}">
+                <input type="text" class="form-control" id="csName" maxlength="100" value="${esc(store.name || '')}">
             </div>
             <div class="form-group">
                 <label>Address</label>
-                <input type="text" class="form-control" id="csAddress" value="${esc(store.address || '')}">
+                <input type="text" class="form-control" id="csAddress" maxlength="200" value="${esc(store.address || '')}">
             </div>
             <div class="form-row-inline">
                 <div class="form-group">
                     <label>City</label>
-                    <input type="text" class="form-control" id="csCity" value="${esc(store.city || '')}">
+                    <input type="text" class="form-control" id="csCity" maxlength="100" value="${esc(store.city || '')}">
                 </div>
                 <div class="form-group">
                     <label>Country Code</label>
-                    <input type="text" class="form-control" id="csCountry" value="${esc(store.country || '')}" placeholder="e.g. AT">
+                    <input type="text" class="form-control" id="csCountry" maxlength="2" value="${esc(store.country || '')}" placeholder="e.g. AT">
                 </div>
             </div>
             <div class="form-row-inline">
                 <div class="form-group">
                     <label>Postal Code</label>
-                    <input type="text" class="form-control" id="csPostal" value="${esc(store.postalCode || '')}">
+                    <input type="text" class="form-control" id="csPostal" maxlength="20" value="${esc(store.postalCode || '')}">
                 </div>
                 <div class="form-group">
                     <label>Phone</label>
-                    <input type="text" class="form-control" id="csPhone" value="${esc(store.phoneNumber || '')}">
+                    <input type="text" class="form-control" id="csPhone" maxlength="30" value="${esc(store.phoneNumber || '')}">
                 </div>
             </div>
             <div class="form-group">
@@ -719,7 +721,8 @@ function openNewExpenseStoreDialog() {
             </div>
             <input type="hidden" id="csLat" value="${store.latitude || ''}">
             <input type="hidden" id="csLng" value="${store.longitude || ''}">
-            <div class="item-dialog-actions" style="margin-top:1rem;">
+            </div>
+            <div class="item-dialog-actions">
                 <button class="btn btn-primary" onclick="saveNewExpenseStore()">
                     <i class="fa-solid fa-save"></i> Save
                 </button>
@@ -736,6 +739,7 @@ function openNewExpenseStoreDialog() {
     document.getElementById('nominatimSearch').focus();
     window._nominatimPlaceId = null;
     window._nominatimSnapshot = null;
+    _registerEscHandler('changeStoreOverlay', closeNewExpenseStoreDialog);
     setTimeout(() => initChangeStoreMap(store), 200);
 }
 
@@ -778,6 +782,7 @@ function clearNewExpenseStore() {
 }
 
 function closeNewExpenseStoreDialog() {
+    _unregisterEscHandler('changeStoreOverlay');
     if (_changeStoreMap) {
         try { _changeStoreMap.remove(); } catch(e) {}
         _changeStoreMap = null; _changeStoreMarker = null;
