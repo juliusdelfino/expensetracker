@@ -45,6 +45,7 @@ public class DbMigrationRunner implements CommandLineRunner {
     /** Tables in dependency order: parents before children. */
     private static final List<String> TABLES = List.of(
             "users",
+            "ai_usage",
             "stores",
             "expenses",
             "expense_items",
@@ -56,7 +57,7 @@ public class DbMigrationRunner implements CommandLineRunner {
 
     /** Tables that have a serial/identity "id" column whose sequence must be reset. */
     private static final List<String> ID_TABLES = List.of(
-            "users", "stores", "expenses", "expense_items", "chat_messages"
+            "users", "ai_usage", "stores", "expenses", "expense_items", "chat_messages"
     );
 
     private final DataSource pgDataSource;

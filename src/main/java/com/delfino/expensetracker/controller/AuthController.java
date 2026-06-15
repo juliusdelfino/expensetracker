@@ -9,6 +9,7 @@ import com.delfino.expensetracker.dto.auth.UserProfileResponse;
 import com.delfino.expensetracker.dto.common.ErrorResponse;
 import com.delfino.expensetracker.dto.common.MessageResponse;
 import com.delfino.expensetracker.model.User;
+import com.delfino.expensetracker.model.UserRole;
 import com.delfino.expensetracker.repository.UserRepository;
 import com.delfino.expensetracker.service.SupportedCurrencyService;
 import jakarta.servlet.http.HttpSession;
@@ -58,6 +59,7 @@ public class AuthController {
         user.setEmail(email);
         user.setPhoneNumber(phone);
         user.setBaseCurrency(baseCurrency);
+        user.setRole(UserRole.USER);
         user.setCreatedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
@@ -101,7 +103,9 @@ public class AuthController {
                         u.getPhoneNumber(),
                         u.getBaseCurrency(),
                         u.getBaseCity(),
-                        u.getBaseCountry()
+                        u.getBaseCountry(),
+                        u.getRole(),
+                        u.getAiModel()
                 )))
                 .orElse(ResponseEntity.status(401).body(new ErrorResponse("User not found")));
     }

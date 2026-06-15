@@ -12,6 +12,7 @@
 
     .desktop-chat-fab { display: flex; }
     .desktop-chat-panel { display: none; }
+    .ai-status-strip { display: none !important; }
 
     /* Show inline nav links on desktop */
     .nav-inline { display: flex; }
@@ -94,6 +95,17 @@
     .action-bar { flex-direction: row; align-items: center; justify-content: space-between; }
     .action-bar-right { flex-wrap: wrap; }
 
+    .admin-summary-grid,
+    .admin-breakdown-grid,
+    .admin-detail-grid,
+    .admin-filter-bar {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-actions-cell {
+        min-width: 0;
+    }
+
     .navbar { padding: 0 0.75rem; }
     .navbar-brand { font-size: 1.1rem; }
 
@@ -165,5 +177,9 @@
     .receipt-details-card.hidden-mobile { display: none; }
     /* Toggle button: only visible on mobile */
     .receipt-scan-toggle-btn { display: inline-flex; }
-}
 
+    /* Account page: collapse tab labels to icons only */
+    .account-tab-btn span { display: none; }
+    .account-tab-btn { padding: 0.6rem 0.75rem; }
+    .account-danger-item { flex-direction: column; }
+}

@@ -171,25 +171,22 @@ public class ExpenseController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> uploadReceiptBatch(@RequestParam("files") List<MultipartFile> files, UserToken userToken) throws IOException {
         long userId = userToken.getUserId();
+        if (files.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("At least one file is required"));
+        }
         if (files.size() > batchMaxFiles) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Maximum " + batchMaxFiles + " files allowed per batch"));
         }
         Path uploadDir = Path.of(dataDir, "receipts");
         Files.createDirectories(uploadDir);
-        List<Expense> expenses = new ArrayList<>();
+        List<String> imagePaths = new ArrayList<>();
         for (MultipartFile file : files) {
             String filename = getDateString() + "_" + userId + "_" + file.getOriginalFilename();
             Path filePath = uploadDir.resolve(filename);
             Files.write(filePath, file.getBytes());
-            if (batchQueueEnabled) {
-                expenses.add(expenseService.createReceiptScanExpenseQueued(userId, filePath.toString()));
-            } else {
-                expenses.add(expenseService.createReceiptScanExpense(userId, filePath.toString()));
-            }
+            imagePaths.add(filePath.toString());
         }
-        if (batchQueueEnabled) {
-            expenseService.processOcrQueue(expenses);
-        }
+        List<Expense> expenses = expenseService.createReceiptScanExpensesBatch(userId, imagePaths, batchQueueEnabled);
         return ResponseEntity.ok(expenses);
     }
 
@@ -302,10 +299,19 @@ public class ExpenseController {
         if (search != null) search = search.trim();
         List<Expense> expenses = expenseService.search(userId, search, false);
 
+        // Batch-load items for all expenses in one query
+        Map<Long, List<ExpenseItem>> itemsByExpense = expenseService.getItemsByExpenseId(expenses);
+
         if ("csv".equalsIgnoreCase(format)) {
             StringBuilder csv = new StringBuilder();
-            csv.append("ID,Date,Amount,Currency,AmountInBase,Category,ReceiptNumber,Type,Status,Notes,Tags\n");
+            csv.append("ID,Date,Amount,Currency,AmountInBase,Category,ReceiptNumber,Type,Status,Notes,Tags,Items\n");
             for (Expense e : expenses) {
+                List<ExpenseItem> items = itemsByExpense.getOrDefault(e.getId(), List.of());
+                String itemsSummary = items.isEmpty() ? "" :
+                        items.stream()
+                                .map(i -> escapeCsv(i.getItemName()) + "(" + i.getQuantity() + "×" + i.getUnitPrice() + ")")
+                                .reduce((a, b) -> a + "|" + b)
+                                .orElse("");
                 csv.append(String.join(",",
                         e.getUrlId(),
                         e.getTransactionDatetime() != null ? e.getTransactionDatetime().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) : "",
@@ -317,7 +323,8 @@ public class ExpenseController {
                         e.getType() != null ? e.getType().name() : "",
                         e.getStatus() != null ? e.getStatus().name() : "",
                         escapeCsv(e.getNotes()),
-                        e.getTags() != null ? String.join(";", e.getTags()) : ""
+                        e.getTags() != null ? String.join(";", e.getTags()) : "",
+                        escapeCsv(itemsSummary)
                 )).append("\n");
             }
             return ResponseEntity.ok()
@@ -325,7 +332,12 @@ public class ExpenseController {
                     .header("Content-Disposition", "attachment; filename=expenses.csv")
                     .body(csv.toString());
         }
-        return ResponseEntity.ok(expenses);
+        // JSON: return safe DTOs (no internal IDs) with items embedded
+        List<com.delfino.expensetracker.dto.expense.ExpenseExportDto> dtos = expenses.stream()
+                .map(e -> com.delfino.expensetracker.dto.expense.ExpenseExportDto.fromWithItems(
+                        e, itemsByExpense.getOrDefault(e.getId(), List.of())))
+                .toList();
+        return ResponseEntity.ok(dtos);
     }
 
     // --- Private helpers ---

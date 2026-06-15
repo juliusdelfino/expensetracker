@@ -409,7 +409,7 @@
 
 /* ===================== CARD TITLE ROW (with dropdown) ===================== */
 .card {
-    padding: 1.5rem 0.5rem;
+    padding: 1.5rem;
 }
 .card-title-row {
     display: flex;

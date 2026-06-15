@@ -60,6 +60,32 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains (if HTTPS)
 - Log authentication events (login, logout, failed attempts).
 - Never log passwords, tokens, or full credit card numbers.
 - Log access to sensitive operations (delete, share, export).
+- **Account management audit events** logged by dedicated services:
+  - `UserTrashService`: permanent purge of individual and bulk soft-deleted expenses (includes count and user ID).
+  - `UserExportService`: full account archive generation (includes expense/receipt/attachment counts).
+  - `UserDeletionService`: account deletion initiation and completion (includes username, expense count, store count).
+  - All events logged at `INFO` level with structured fields sufficient for audit trail.
+
+## Destructive Operations — Confirmation Requirements
+
+The following operations require explicit user confirmation before execution:
+
+| Operation | Required confirmation |
+|---|---|
+| Permanent delete (single expense from trash) | Browser `confirm()` dialog |
+| Bulk purge from trash | Browser `confirm()` with item count |
+| Empty Trash (all) | Browser `confirm()` dialog |
+| Account deletion | Current password + typed phrase `DELETE` |
+
+Account deletion additionally validates the password server-side before any data is touched.
+
+## Account Deletion
+
+- Implemented in `UserDeletionService`.
+- Requires matching current password and exact confirmation phrase `DELETE`.
+- Deletion order: files → expense items → expenses → stores → AI usage → user row → session invalidation.
+- Session is invalidated server-side immediately after deletion.
+- All operations run within a single `@Transactional` boundary; a failure rolls back DB changes (files already deleted are not restored — operator intervention required).
 
 ## File Upload Security
 
@@ -67,4 +93,3 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains (if HTTPS)
 - Store uploads outside the web root or in a non-executable directory.
 - Generate random file names to prevent enumeration.
 - Scan for malicious content if feasible.
-

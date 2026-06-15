@@ -23,9 +23,10 @@ function renderChatPanel(container) {
                 <p style="font-style:italic; margin-top:0.5rem; color:var(--text-light);">"lunch 12.50 SGD"<br>"coffee 5, taxi 15 USD"<br>"yesterday dinner 45 EUR at Italian restaurant"</p>
             </div>
         </div>
+        <div class="chat-quota-banner" id="chatQuotaBanner" style="display:none;"></div>
         <div class="chat-input-area">
             <textarea class="chat-input" id="chatInput" placeholder="Type expenses here..." rows="1" maxlength="500" onkeydown="chatKeydown(event)"></textarea>
-            <button class="btn btn-primary chat-send-btn" onclick="sendChat()">
+            <button class="btn btn-primary chat-send-btn" id="chatSendBtn" onclick="sendChat()">
                 <i class="fa-solid fa-paper-plane"></i>
             </button>
         </div>
@@ -33,10 +34,36 @@ function renderChatPanel(container) {
     _chatOffset = 0;
     _chatHasMore = false;
     chatExpenseMap = {};
-    loadChatHistory(true);
+    applyChatQuotaState();
+    loadChatHistory();
 }
 
-async function loadChatHistory(initial = false) {
+function applyChatQuotaState() {
+    const input = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('chatSendBtn');
+    const banner = document.getElementById('chatQuotaBanner');
+    const blocked = !!currentAiStatus && !currentAiStatus.chatAllowed;
+
+    if (input) {
+        input.disabled = blocked;
+        input.placeholder = blocked
+            ? 'Your monthly chat quota has been reached.'
+            : 'Type expenses here...';
+    }
+    if (sendBtn) sendBtn.disabled = blocked;
+    if (banner) {
+        if (blocked) {
+            const quota = currentAiStatus.chat?.quota ?? 0;
+            banner.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Your monthly chat quota has been reached (${quota} messages). Chat will be available again next month.`;
+            banner.style.display = 'flex';
+        } else {
+            banner.style.display = 'none';
+            banner.innerHTML = '';
+        }
+    }
+}
+
+async function loadChatHistory() {
     const data = await api(`/api/chat/history?limit=${_chatPageSize}&offset=0`);
     if (!data || !data.messages) return;
     Object.assign(chatExpenseMap, data.expenses || {});
@@ -148,6 +175,11 @@ function chatKeydown(e) {
 
 async function sendChat() {
     const input = document.getElementById('chatInput');
+    if (!input || (currentAiStatus && !currentAiStatus.chatAllowed)) {
+        applyChatQuotaState();
+        toast('Your monthly chat quota has been reached.', 'error');
+        return;
+    }
     const message = input.value.trim();
     if (!message) return;
     input.value = '';
@@ -173,10 +205,19 @@ async function sendChat() {
         const ts = result.message.createdAt || new Date().toISOString();
         appendChatBubble('bot', result.message.text, result.message.linkedExpenseIds, ts);
         _chatOffset += 2; // user + bot messages added
+        await loadAiStatus(true);
     } else {
-        appendChatBubble('bot', 'Sorry, something went wrong. Please try again.', [], new Date().toISOString());
+        if (result?.code === 'AI_CHAT_QUOTA_EXCEEDED') {
+            appendChatBubble('bot', 'Your monthly chat quota has been reached. You can still view earlier messages, but sending new ones will be available again next month.', [], new Date().toISOString());
+            await loadAiStatus(true);
+            applyChatQuotaState();
+            return;
+        }
+        appendChatBubble('bot', result?.error || 'Sorry, something went wrong. Please try again.', [], new Date().toISOString());
         _chatOffset += 1;
     }
+
+    applyChatQuotaState();
 }
 
 // --- Desktop chat toggle ---
