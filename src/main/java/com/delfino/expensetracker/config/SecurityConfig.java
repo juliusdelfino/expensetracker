@@ -40,7 +40,7 @@ public class SecurityConfig {
         return username -> userRepository.findByUsernameIgnoreCase(username)
                 .map(u -> User.withUsername(u.getUsername())
                         .password(u.getPasswordHash())
-                        .roles("USER")
+                        .roles(u.getRole().name())
                         .build())
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
     }
@@ -69,12 +69,12 @@ public class SecurityConfig {
                 .authenticationEntryPoint((request, response, authException) -> {
                     response.setContentType("application/json");
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                    response.getWriter().write("{\"error\":\"Not authenticated\"}");
+                    response.getWriter().write("{\"error\":\"Not authenticated\",\"code\":\"UNAUTHORIZED\"}");
                 })
                 .accessDeniedHandler((request, response, accessDeniedException) -> {
                     response.setContentType("application/json");
                     response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                    response.getWriter().write("{\"error\":\"Access denied\"}");
+                    response.getWriter().write("{\"error\":\"Access denied\",\"code\":\"ADMIN_ONLY\"}");
                 })
             );
 

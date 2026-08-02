@@ -120,6 +120,43 @@ class ChatControllerTest extends BaseControllerTest {
     }
 
     @Test
+    void sendMessage_userWithOpenAiModel_routesToOpenAiProvider() throws Exception {
+        WIRE_MOCK.stubFor(WireMock.post(urlPathMatching("/(v1/)?chat/completions")).atPriority(1)
+                .willReturn(okJson(openAiChatResponse("OpenAI provider reply"))
+                        .withHeader("Connection", "close")));
+
+        createTestUser("openai-user", "pass", "USD", com.delfino.expensetracker.model.UserRole.USER, "qwen3.5-397b-a17b");
+        MockHttpSession session = loginAs("openai-user", "pass");
+
+        mockMvc.perform(post("/api/chat")
+                        .session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("message", "hello from openai"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message.text").value("OpenAI provider reply"));
+    }
+
+    @Test
+    void sendMessage_chatQuotaExceeded_returns429AndDoesNotPersistMessage() throws Exception {
+        User user = createTestUser("alice", "pass");
+        aiUsageService.consume(user.getId(), com.delfino.expensetracker.model.AiUsageType.CHAT);
+        aiUsageService.consume(user.getId(), com.delfino.expensetracker.model.AiUsageType.CHAT);
+        MockHttpSession session = loginAs("alice", "pass");
+
+        mockMvc.perform(post("/api/chat")
+                        .session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("message", "blocked"))))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("AI_CHAT_QUOTA_EXCEEDED"))
+                .andExpect(jsonPath("$.type").value("CHAT"))
+                .andExpect(jsonPath("$.quota").value(2))
+                .andExpect(jsonPath("$.remaining").value(0));
+
+        assertThat(chatMessageRepository.count()).isZero();
+    }
+
+    @Test
     void sendMessage_ollamaCallFails_returnsErrorMessage() throws Exception {
         // Override stub to simulate Ollama being unavailable
         WIRE_MOCK.stubFor(WireMock.post(urlPathEqualTo("/api/chat")).atPriority(1)

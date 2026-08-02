@@ -186,6 +186,17 @@ body {
 }
 .btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-hover); }
 .btn:active { transform: translateY(0); }
+.btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.btn:disabled:hover {
+    transform: none;
+    box-shadow: none;
+}
 
 .btn-primary {
     background: var(--btn-primary-bg);
@@ -243,6 +254,16 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 /* Stays 2-column on mobile — intended for compact dialog fields */
 .form-row-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
 .form-row-inline .form-group { margin-bottom: 0; }
+.form-help {
+    margin-top: 0.35rem;
+    font-size: 0.8rem;
+    color: var(--text-light);
+    line-height: 1.45;
+}
+
+.form-help strong {
+    color: var(--primary-dark);
+}
 
 /* ===================== TABLES ===================== */
 .table-responsive { overflow-x: auto; }
@@ -290,6 +311,156 @@ table tr.deleted { opacity: 0.5; background: var(--bg); }
 .auth-switch { text-align: center; margin-top: 1rem; color: var(--text-light); }
 .auth-switch a { color: var(--primary); cursor: pointer; text-decoration: none; }
 .auth-switch a:hover { text-decoration: underline; }
+
+.profile-ai-meta {
+    margin-top: 0.75rem;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    background: var(--bg);
+}
+
+.profile-ai-meta-title {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--primary-dark);
+}
+
+/* ===================== ADMIN PAGE ===================== */
+.admin-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.admin-summary-grid-wide {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-breakdown-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.admin-summary-card,
+.admin-detail-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.admin-summary-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-light);
+}
+
+.admin-filter-bar {
+    display: grid;
+    grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(150px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.admin-user-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.admin-user-meta span,
+.admin-model-cell span {
+    font-size: 0.78rem;
+    color: var(--text-light);
+}
+
+.admin-model-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.admin-actions-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    min-width: 240px;
+}
+
+.admin-inline-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.admin-inline-form label {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--primary-dark);
+}
+
+.admin-inline-form-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.admin-inline-form-controls .form-control {
+    flex: 1;
+}
+
+.pill-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.22rem 0.65rem;
+    border-radius: 999px;
+    background: var(--primary-pale);
+    color: var(--primary-dark);
+    font-size: 0.76rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.pill-badge-admin {
+    background: var(--secondary-pale);
+    color: var(--secondary);
+}
+
+.pill-badge-danger {
+    background: var(--badge-failed-bg);
+    color: var(--danger);
+}
+
+.admin-empty-state {
+    text-align: center;
+}
+
+.admin-inline-empty {
+    padding: 1rem 0;
+}
+
+.admin-current-user-row {
+    background: var(--table-stripe);
+}
+
+.admin-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.9rem;
+}
+
+.admin-breakdown-table td,
+.admin-breakdown-table th {
+    white-space: nowrap;
+}
 
 /* ===================== TOAST ===================== */
 .toast-container {
@@ -461,6 +632,137 @@ table tr.deleted { opacity: 0.5; background: var(--bg); }
 .modal-header h3 { margin: 0; color: var(--primary-dark); }
 .modal-close {
     background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-light);
+}
+
+/* ============================================================
+   User Account Page — Tabbed Layout
+   ============================================================ */
+
+.account-page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem 3rem;
+}
+
+.account-tabs-header {
+    display: flex;
+    gap: 0.25rem;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 1.5rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.account-tabs-header::-webkit-scrollbar { display: none; }
+
+.account-tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.6rem 0.9rem;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    color: var(--text-light);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+    border-radius: var(--radius) var(--radius) 0 0;
+}
+.account-tab-btn:hover { color: var(--primary); background: var(--primary-pale); }
+.account-tab-btn.active { color: var(--primary-dark); border-bottom-color: var(--primary); }
+
+.account-tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.account-tab-content .card {
+    margin-bottom: 1rem;
+}
+
+.account-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 2.5rem 1rem;
+    color: var(--text-light);
+    font-size: 1rem;
+}
+.account-empty-state i { font-size: 2rem; opacity: 0.5; }
+
+.account-danger-zone { border-left: 4px solid var(--danger); }
+
+.account-danger-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    background: var(--bg);
+}
+
+/* ============================================================
+   AI Usage tab
+   ============================================================ */
+.ai-usage-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.ai-usage-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.85rem 1rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-color);
+    background: var(--bg);
+}
+.ai-usage-stat.ai-usage-exceeded {
+    border-color: var(--danger);
+    background: var(--badge-failed-bg);
+}
+.ai-usage-stat-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-light);
+}
+.ai-usage-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary-dark);
+    line-height: 1;
+}
+.ai-usage-exceeded .ai-usage-stat-value { color: var(--danger); }
+.ai-usage-stat-of { font-size: 0.9rem; font-weight: 400; color: var(--text-light); }
+.ai-usage-quota-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    align-self: flex-start;
 }
 
 /* Shared action bar */
@@ -738,4 +1040,3 @@ table tr.deleted { opacity: 0.5; background: var(--bg); }
         align-self: stretch;
     }
 }
-

@@ -1,5 +1,7 @@
 package com.delfino.expensetracker.service;
 
+import com.delfino.expensetracker.exception.AiQuotaExceededException;
+import com.delfino.expensetracker.model.AiUsageType;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.ExpenseItem;
 import com.delfino.expensetracker.model.ExpenseStatus;
@@ -13,15 +15,14 @@ import com.delfino.expensetracker.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -36,25 +37,30 @@ public class ExpenseService {
     private final StoreRepository storeRepository;
     private final CurrencyService currencyService;
     private final OcrService ocrService;
+    private final ExpenseOcrQueueService expenseOcrQueueService;
     private final UserRepository userRepository;
     private final SupportedCurrencyService supportedCurrencyService;
     private final CountryService countryService;
+    private final AiUsageService aiUsageService;
 
     @Value("${app.data.dir:data}")
     private String dataDir;
 
     public ExpenseService(ExpenseRepository expenseRepository, ExpenseItemRepository expenseItemRepository,
                           StoreRepository storeRepository, CurrencyService currencyService,
-                          OcrService ocrService, UserRepository userRepository, SupportedCurrencyService supportedCurrencyService,
-                          CountryService countryService) {
+                          OcrService ocrService, ExpenseOcrQueueService expenseOcrQueueService,
+                          UserRepository userRepository, SupportedCurrencyService supportedCurrencyService,
+                          CountryService countryService, AiUsageService aiUsageService) {
         this.expenseRepository = expenseRepository;
         this.expenseItemRepository = expenseItemRepository;
         this.storeRepository = storeRepository;
         this.currencyService = currencyService;
         this.ocrService = ocrService;
+        this.expenseOcrQueueService = expenseOcrQueueService;
         this.userRepository = userRepository;
         this.supportedCurrencyService = supportedCurrencyService;
         this.countryService = countryService;
+        this.aiUsageService = aiUsageService;
     }
 
     public Expense createManualExpense(Expense expense, Long userId) {
@@ -82,28 +88,28 @@ public class ExpenseService {
     }
 
     public Expense createReceiptScanExpense(Long userId, String imagePath) {
-        Expense expense = new Expense();
-        expense.setUserId(userId);
-        expense.setType(ExpenseType.RECEIPT_SCAN);
-        expense.setStatus(ExpenseStatus.PROCESSING);
-        expense.setImagePath(imagePath);
-        expense.setDeleted(false);
-        expense.setAttachments(new ArrayList<>());
-        expense.setTags(new ArrayList<>());
-        expense.setScannedAt(LocalDateTime.now());
-        expense.setCreatedAt(LocalDateTime.now());
-        expense.setUpdatedAt(LocalDateTime.now());
-        expense.setUrlId(UUID.randomUUID().toString());
-        expenseRepository.save(expense);
+        ensureOcrQuota(userId, 1);
+        Expense expense = createReceiptScanExpenseInternal(userId, imagePath);
 
         ocrService.processReceipt(expense.getId(), imagePath);
         return expense;
     }
 
-    /**
-     * Creates a receipt scan expense without immediately triggering OCR (for batch processing).
-     */
-    public Expense createReceiptScanExpenseQueued(Long userId, String imagePath) {
+    public List<Expense> createReceiptScanExpensesBatch(Long userId, List<String> imagePaths, boolean queueEnabled) {
+        ensureOcrQuota(userId, imagePaths.size());
+        List<Expense> expenses = imagePaths.stream()
+                .map(path -> createReceiptScanExpenseInternal(userId, path))
+                .toList();
+
+        if (queueEnabled) {
+            expenseOcrQueueService.processOcrQueue(expenses);
+        } else {
+            expenses.forEach(expense -> ocrService.processReceipt(expense.getId(), expense.getImagePath()));
+        }
+        return expenses;
+    }
+
+    private Expense createReceiptScanExpenseInternal(Long userId, String imagePath) {
         Expense expense = new Expense();
         expense.setUserId(userId);
         expense.setType(ExpenseType.RECEIPT_SCAN);
@@ -120,17 +126,17 @@ public class ExpenseService {
         return expense;
     }
 
-    /**
-     * Processes a queue of expenses through OCR.
-     */
-    @Async
-    public void processOcrQueue(List<Expense> expenses) {
-        for (int i = 0; i < expenses.size(); i++) {
-            Expense expense = expenses.get(i);
-            log.info("Processing OCR queue item {}/{}: expense {}", i + 1, expenses.size(), expense.getId());
-            ocrService.processReceiptSync(expense.getId(), expense.getImagePath());
+    private void ensureOcrQuota(Long userId, int requestedUnits) {
+        AiUsageService.QuotaCheckResult quota = aiUsageService.checkQuota(userId, AiUsageType.OCR, requestedUnits);
+        if (!quota.allowed()) {
+            throw new AiQuotaExceededException(
+                    AiUsageType.OCR,
+                    quota.usageCount(),
+                    quota.quota(),
+                    quota.requestedUnits());
         }
     }
+
 
     @Transactional
     public Expense updateExpense(String urlId, Expense updates, long userId) {
@@ -465,29 +471,6 @@ public class ExpenseService {
         if (store.getLongitude() != null) matched.setLongitude(store.getLongitude());
         if (store.getSourceId() != null) matched.setSourceId(store.getSourceId());
         return matched;
-    }
-
-    /** Backward-compatible overload */
-    public Store saveStore(String urlId, Store store) {
-        Expense expense = expenseRepository.findByUrlId(urlId)
-                .orElseThrow(() -> new IllegalStateException("Expense not found"));
-        return saveStore(urlId, store, expense.getUserId());
-    }
-
-    /**
-     * Get the store associated with an expense, if any.
-     */
-    public Optional<Store> getStoreForExpense(Expense expense) {
-        if (expense.getStoreId() == null) return Optional.empty();
-        return storeRepository.findById(expense.getStoreId());
-    }
-
-    /**
-     * Get the store associated with an expense by expense ID.
-     */
-    public Optional<Store> getStoreForExpense(Long expenseId) {
-        return expenseRepository.findById(expenseId)
-                .flatMap(e -> e.getStoreId() != null ? storeRepository.findById(e.getStoreId()) : Optional.empty());
     }
 
     /**

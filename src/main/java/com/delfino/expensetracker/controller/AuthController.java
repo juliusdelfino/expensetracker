@@ -9,9 +9,11 @@ import com.delfino.expensetracker.dto.auth.UserProfileResponse;
 import com.delfino.expensetracker.dto.common.ErrorResponse;
 import com.delfino.expensetracker.dto.common.MessageResponse;
 import com.delfino.expensetracker.model.User;
+import com.delfino.expensetracker.model.UserRole;
 import com.delfino.expensetracker.repository.UserRepository;
 import com.delfino.expensetracker.service.SupportedCurrencyService;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -58,6 +60,7 @@ public class AuthController {
         user.setEmail(email);
         user.setPhoneNumber(phone);
         user.setBaseCurrency(baseCurrency);
+        user.setRole(UserRole.USER);
         user.setCreatedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
@@ -81,7 +84,7 @@ public class AuthController {
                             u.getBaseCurrency()
                     ));
                 })
-                .orElse(ResponseEntity.status(401).body(new ErrorResponse("Invalid credentials")));
+                .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse("Invalid credentials")));
     }
 
     @PostMapping("/logout")
@@ -101,8 +104,10 @@ public class AuthController {
                         u.getPhoneNumber(),
                         u.getBaseCurrency(),
                         u.getBaseCity(),
-                        u.getBaseCountry()
+                        u.getBaseCountry(),
+                        u.getRole(),
+                        u.getAiModel()
                 )))
-                .orElse(ResponseEntity.status(401).body(new ErrorResponse("User not found")));
+                .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse("User not found")));
     }
 }

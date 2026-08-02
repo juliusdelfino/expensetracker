@@ -30,7 +30,7 @@
 <body>
 
 <!-- Navbar -->
-<nav class="navbar" id="navbar" style="display:none;">
+<nav class="navbar" id="navbar" aria-label="Primary navigation" style="display:none;">
     <a href="#/dashboard" class="navbar-brand" onclick="if(isMobile()){ goToDashboard(); return false; }">
         <img src="/images/logo192.png" alt="logo" style="width:28px;height:28px;border-radius:6px;"> Expense Tracker
     </a>
@@ -40,6 +40,7 @@
         <a href="#/reports"><i class="fa-solid fa-chart-line"></i> Reports</a>
         <a href="#/expenses/new"><i class="fa-solid fa-plus"></i> New Expense</a>
         <a href="#/chat" onclick="openChat(event)"><i class="fa-solid fa-comment"></i> Chat</a>
+        <a href="#/admin" id="navAdminLink" style="display:none;"><i class="fa-solid fa-user-shield"></i> Admin</a>
     </div>
     <button class="burger-btn" id="burgerBtn" onclick="toggleNavDrawer()">
         <i class="fa-solid fa-bars"></i>
@@ -50,10 +51,12 @@
         <a href="#/reports" onclick="closeNavDrawer()"><i class="fa-solid fa-chart-line"></i> Reports</a>
         <a href="#/expenses/new" class="drawer-mobile-only" onclick="closeNavDrawer()"><i class="fa-solid fa-plus"></i> New Expense</a>
         <a href="#/chat" class="drawer-mobile-only" onclick="openChat(event); closeNavDrawer()"><i class="fa-solid fa-comment"></i> Chat</a>
+        <a href="#/admin" id="drawerAdminLink" onclick="closeNavDrawer()" style="display:none;"><i class="fa-solid fa-user-shield"></i> Admin</a>
         <a href="#/profile" onclick="closeNavDrawer()"><i class="fa-solid fa-user-gear"></i> <span id="nav-username"></span></a>
         <a href="#" onclick="logout(); closeNavDrawer(); return false;"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
     </div>
 </nav>
+
 
 <!-- Desktop: normal page content rendered here -->
 <div id="app"></div>
@@ -68,7 +71,7 @@
 </div>
 
 <!-- Mobile: bottom tab bar -->
-<nav class="bottom-tab-bar" id="bottomTabBar" style="display:none;">
+<nav class="bottom-tab-bar" id="bottomTabBar" aria-label="Mobile tabs" style="display:none;">
     <button class="tab-btn" data-panel="0" onclick="goToPanel(0)">
         <i class="fa-solid fa-camera"></i>
         <span>Scan</span>
@@ -117,6 +120,7 @@
 <script src="/js/home.js"></script>
 <script src="/js/chat.js"></script>
 <script src="/js/auth.js"></script>
+<script src="/js/admin.js"></script>
 <script src="/js/expenses.js"></script>
 <script src="/js/reports.js"></script>
 <script src="/js/expense-new.js"></script>

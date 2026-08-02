@@ -15,5 +15,9 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
 
     List<Expense> findByUserId(Long userId);
 
+    List<Expense> findByUserIdAndDeletedTrue(Long userId);
+
+    long countByUserIdAndDeletedTrue(Long userId);
+
     Optional<Expense> findByUrlId(String urlId);
 }

@@ -2,6 +2,7 @@ package com.delfino.expensetracker.controller;
 
 import com.delfino.expensetracker.BaseControllerTest;
 import com.delfino.expensetracker.model.User;
+import com.delfino.expensetracker.model.UserRole;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
@@ -47,6 +48,7 @@ class AuthControllerTest extends BaseControllerTest {
 
         User saved = userRepository.findByUsernameIgnoreCase("bob").orElseThrow();
         assertThat(saved.getBaseCurrency()).isEqualTo("USD");
+        assertThat(saved.getRole()).isEqualTo(UserRole.USER);
     }
 
     @Test
@@ -172,7 +174,7 @@ class AuthControllerTest extends BaseControllerTest {
 
     @Test
     void me_authenticated_returnsUserData() throws Exception {
-        createTestUser("alice", "pass");
+        createTestUser("alice", "pass", "USD", UserRole.ADMIN, "gpt-4.1-mini");
         MockHttpSession session = loginAs("alice", "pass");
 
         mockMvc.perform(get("/api/auth/me").session(session))
@@ -180,6 +182,8 @@ class AuthControllerTest extends BaseControllerTest {
                 .andExpect(jsonPath("$.username").value("alice"))
                 .andExpect(jsonPath("$.email").value("alice@test.com"))
                 .andExpect(jsonPath("$.baseCurrency").value("USD"))
+                .andExpect(jsonPath("$.role").value("ADMIN"))
+                .andExpect(jsonPath("$.aiModel").value("gpt-4.1-mini"))
                 .andExpect(jsonPath("$.id").isNumber());
     }
 

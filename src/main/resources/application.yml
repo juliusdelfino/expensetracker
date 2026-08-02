@@ -10,6 +10,31 @@ server:
 app:
   data:
     dir: data
+  admin:
+    bootstrap-username: ${APP_ADMIN_BOOTSTRAP_USERNAME:}
+  ai:
+    defaults:
+      chat-model: ${APP_AI_DEFAULT_CHAT_MODEL:gemma4:31b-cloud}
+      ocr-model: ${APP_AI_DEFAULT_OCR_MODEL:gemma4:31b-cloud}
+    quotas:
+      chat-monthly: ${APP_AI_CHAT_MONTHLY_QUOTA:200}
+      ocr-monthly: ${APP_AI_OCR_MONTHLY_QUOTA:100}
+    providers:
+      ollama:
+        ocr-url: ${APP_AI_OLLAMA_OCR_URL:http://ludwig:11434/api/chat}
+      openai:
+        ocr-url: ${APP_AI_OPENAI_OCR_URL:https://api.openai.com/v1/chat/completions}
+    models:
+      - id: gemma4:31b-cloud
+        label: Gemma 4 (Ollama)
+        provider: OLLAMA
+        supports-chat: true
+        supports-ocr: true
+      - id: qwen3.5-397b-a17b
+        label: Qwen 3.5 (OpenAI)
+        provider: OPENAI
+        supports-chat: true
+        supports-ocr: true
 
 ocr:
   api:
@@ -89,10 +114,25 @@ spring:
     deserialization:
       fail-on-unknown-properties: false
   ai:
+    ollama:
+      base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://ludwig:11434}
+      chat:
+        enabled: true
+        options:
+          model: ${APP_AI_OLLAMA_CHAT_MODEL:gemma4:31b-cloud}
+          temperature: 0.3
+    openai:
+      api-key: ${LLM_API_KEY:}
+      base-url: ${SPRING_AI_OPENAI_BASE_URL:https://api.openai.com}
+      chat:
+        enabled: true
+        options:
+          model: ${APP_AI_OPENAI_CHAT_MODEL:qwen3.5-397b-a17b}
+          temperature: 0.3
     mcp:
       server:
         name: expense-tracker-mcp
-        version: 1.0.0
+        version: ${project.version}
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/expensetracker}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}

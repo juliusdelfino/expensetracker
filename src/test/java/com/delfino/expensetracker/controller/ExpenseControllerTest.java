@@ -312,6 +312,53 @@ class ExpenseControllerTest extends BaseControllerTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void scanReceipt_ocrQuotaExceeded_returns429() throws Exception {
+        User user = createTestUser("alice", "pass");
+        aiUsageService.consume(user.getId(), com.delfino.expensetracker.model.AiUsageType.OCR);
+        aiUsageService.consume(user.getId(), com.delfino.expensetracker.model.AiUsageType.OCR);
+        MockHttpSession session = loginAs("alice", "pass");
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "receipt.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[] {(byte)0xFF, (byte)0xD8, (byte)0xFF, (byte)0xE0}
+        );
+
+        mockMvc.perform(multipart("/api/expenses/scan")
+                        .file(file)
+                        .session(session))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("AI_OCR_QUOTA_EXCEEDED"))
+                .andExpect(jsonPath("$.type").value("OCR"))
+                .andExpect(jsonPath("$.remaining").value(0));
+
+        assertThat(expenseRepository.count()).isZero();
+    }
+
+    @Test
+    void scanReceiptBatch_ocrQuotaExceeded_rejectsWholeBatch() throws Exception {
+        User user = createTestUser("alice", "pass");
+        aiUsageService.consume(user.getId(), com.delfino.expensetracker.model.AiUsageType.OCR);
+        MockHttpSession session = loginAs("alice", "pass");
+
+        MockMultipartFile first = new MockMultipartFile(
+                "files", "receipt-1.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[] {(byte)0xFF, (byte)0xD8, (byte)0xFF, (byte)0xE0}
+        );
+        MockMultipartFile second = new MockMultipartFile(
+                "files", "receipt-2.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[] {(byte)0xFF, (byte)0xD8, (byte)0xFF, (byte)0xE1}
+        );
+
+        mockMvc.perform(multipart("/api/expenses/scan/batch")
+                        .file(first)
+                        .file(second)
+                        .session(session))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("AI_OCR_QUOTA_EXCEEDED"))
+                .andExpect(jsonPath("$.requestedUnits").value(2))
+                .andExpect(jsonPath("$.remaining").value(1));
+
+        assertThat(expenseRepository.count()).isZero();
+    }
+
     // ==================== PUT /api/expenses/{urlId} ====================
 
     @Test
@@ -414,6 +461,24 @@ class ExpenseControllerTest extends BaseControllerTest {
     @Test
     void retryOcr_success() throws Exception {
         User user = createTestUser("alice", "pass");
+        Expense expense = createTestExpense(user.getId(), "Food", BigDecimal.TEN, "USD");
+        expense.setType(ExpenseType.RECEIPT_SCAN);
+        expense.setStatus(ExpenseStatus.FAILED);
+        expense.setImagePath("target/test-data/receipts/test.jpg");
+        expenseRepository.save(expense);
+        MockHttpSession session = loginAs("alice", "pass");
+
+        mockMvc.perform(post("/api/expenses/" + expense.getUrlId() + "/retry").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Retry initiated"));
+    }
+
+    @Test
+    void retryOcr_whenQuotaAlreadyExhausted_stillAllowed() throws Exception {
+        User user = createTestUser("alice", "pass");
+        aiUsageService.consume(user.getId(), com.delfino.expensetracker.model.AiUsageType.OCR);
+        aiUsageService.consume(user.getId(), com.delfino.expensetracker.model.AiUsageType.OCR);
+
         Expense expense = createTestExpense(user.getId(), "Food", BigDecimal.TEN, "USD");
         expense.setType(ExpenseType.RECEIPT_SCAN);
         expense.setStatus(ExpenseStatus.FAILED);

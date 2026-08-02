@@ -15,7 +15,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -35,10 +34,8 @@ public class AiConfig {
     /**
      * Override the auto-configured OllamaApi bean to inject the API key as an
      * Authorization: Bearer header on every request.
-     * Only active when the "ollama" Spring profile is selected.
      */
     @Bean
-    @Profile("ollama")
     public OllamaApi ollamaApi(
             @Value("${spring.ai.ollama.base-url:http://localhost:11434}") String baseUrl,
             ChatBotProperties chatBotProperties,
@@ -67,24 +64,34 @@ public class AiConfig {
     }
 
     /**
-     * Mark the Ollama chat model as @Primary when the "ollama" profile is active,
-     * so that ChatClientAutoConfiguration doesn't complain about two ChatModel beans.
+     * Expose one default/primary chat model bean so Spring AI's auto-configured
+     * ChatClient.Builder can still initialize even when both providers are present.
      */
     @Bean
     @Primary
-    @Profile({"ollama", "test"})
-    public ChatModel primaryChatModel(OllamaChatModel ollamaChatModel) {
-        return ollamaChatModel;
-    }
+    public ChatModel primaryChatModel(AiProperties aiProperties,
+                                      ObjectProvider<OllamaChatModel> ollamaChatModelProvider,
+                                      ObjectProvider<OpenAiChatModel> openAiChatModelProvider) {
+        AiProviderType defaultProvider = aiProperties.findModel(aiProperties.getDefaults().getChatModel())
+                .map(AiModelDefinition::getProvider)
+                .orElse(AiProviderType.OLLAMA);
 
-    /**
-     * Mark the OpenAI chat model as @Primary when the "openai" profile is active.
-     */
-    @Bean("primaryChatModel")
-    @Primary
-    @Profile("openai")
-    public ChatModel primaryChatModelOpenAi(OpenAiChatModel openAiChatModel) {
-        return openAiChatModel;
+        return switch (defaultProvider) {
+            case OLLAMA -> {
+                ChatModel model = ollamaChatModelProvider.getIfAvailable();
+                if (model == null) {
+                    throw new IllegalStateException("Default chat model requires Ollama, but no Ollama chat model bean is configured");
+                }
+                yield model;
+            }
+            case OPENAI -> {
+                ChatModel model = openAiChatModelProvider.getIfAvailable();
+                if (model == null) {
+                    throw new IllegalStateException("Default chat model requires OpenAI, but no OpenAI chat model bean is configured");
+                }
+                yield model;
+            }
+        };
     }
 
     @Bean

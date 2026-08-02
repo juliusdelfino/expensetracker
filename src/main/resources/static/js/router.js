@@ -13,11 +13,14 @@ async function checkAuth() {
     if (data && data.id) {
         currentUser = data;
         document.getElementById('navbar').style.display = 'flex';
-        document.getElementById('nav-username').textContent = data.username;
+        renderNavigationState();
+        await loadAiStatus(true);
+        await loadAiModels();
         return true;
     }
     currentUser = null;
     document.getElementById('navbar').style.display = 'none';
+    clearAiClientState();
     return false;
 }
 
@@ -30,13 +33,16 @@ async function tryCheckAuth() {
             if (data && data.id) {
                 currentUser = data;
                 document.getElementById('navbar').style.display = 'flex';
-                document.getElementById('nav-username').textContent = data.username;
+                renderNavigationState();
+                await loadAiStatus(true);
+                await loadAiModels();
                 return true;
             }
         }
     } catch (e) { /* ignore */ }
     currentUser = null;
     document.getElementById('navbar').style.display = 'none';
+    clearAiClientState();
     return false;
 }
 
@@ -95,6 +101,14 @@ async function router() {
     else if (routeOnly === '#/reports') renderReportsPage(app);
     else if (routeOnly.match(/^#\/reports\/\d+$/)) renderReportDetail(app, routeOnly.split('/')[2]);
     else if (routeOnly === '#/profile') renderProfile(app);
+    else if (routeOnly === '#/admin') {
+        if (!isAdminUser()) {
+            toast('Admin access is required to open this page.', 'error');
+            navigate('#/dashboard');
+            return;
+        }
+        renderAdminPage(app);
+    }
     else if (routeOnly === '#/chat') { toggleDesktopChat(); navigate('#/dashboard'); }
     else renderDashboard(app);
 }
@@ -135,6 +149,7 @@ async function logout() {
     currentUser = null;
     mobilePanelsRendered = false;
     document.getElementById('navbar').style.display = 'none';
+    clearAiClientState();
     hideMobileUI();
     navigate('#/login');
 }

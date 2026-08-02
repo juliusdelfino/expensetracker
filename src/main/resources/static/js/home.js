@@ -177,7 +177,7 @@ function updateHomeCharts() {
                 const value = totalsValues[idx];
                 if (label) {
                     const params = _totalsLabelToDateParams(label, period);
-                    updateChartStatusBar('homeMonthlyChartStatus', label, value, '#/expenses?' + params);
+                    updateChartStatusBar('homeMonthlyChartStatus', label, value, buildExpensesNavUrl(Object.fromEntries(new URLSearchParams(params))));
                 }
             }
         }
@@ -334,7 +334,7 @@ function updateDesktopCharts() {
                 const value = totalsValues[idx];
                 if (label) {
                     const params = _totalsLabelToDateParams(label, period);
-                    updateChartStatusBar('monthlyChartStatus', label, value, '#/expenses?' + params);
+                    updateChartStatusBar('monthlyChartStatus', label, value, buildExpensesNavUrl(Object.fromEntries(new URLSearchParams(params))));
                 }
             }
         }

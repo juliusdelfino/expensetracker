@@ -75,27 +75,46 @@ public class ExpenseController {
                                   @RequestParam(required = false, defaultValue = "false") boolean includeDeleted,
                                   @RequestParam(required = false) String startDate,
                                   @RequestParam(required = false) String endDate,
-                                  @RequestParam(required = false) String category,
-                                  @RequestParam(required = false) String country,
+                                  @RequestParam(required = false) String createdDateFrom,
+                                  @RequestParam(required = false) String createdDateTo,
+                                  @RequestParam(required = false) List<String> category,
+                                  @RequestParam(required = false) List<String> country,
+                                  @RequestParam(required = false) List<String> storeName,
                                   UserToken userToken) {
         long userId = userToken.getUserId();
         if (search != null) search = search.trim();
         List<Expense> expenses = expenseService.search(userId, search, includeDeleted);
 
         expenses = filterByDateRange(expenses, startDate, endDate);
+        expenses = filterByCreatedDateRange(expenses, createdDateFrom, createdDateTo);
 
-        // Apply category filter
-        if (category != null && !category.isBlank()) {
+        // Apply category filter (OR within categories)
+        List<String> categories = nonBlank(category);
+        if (!categories.isEmpty()) {
             expenses = expenses.stream()
-                    .filter(e -> category.equalsIgnoreCase(e.getCategory()))
+                    .filter(e -> categories.stream().anyMatch(c -> c.equalsIgnoreCase(e.getCategory())))
                     .toList();
         }
         // Batch-load this user's stores in one query (avoids N+1 across filter + enrichment)
         Map<Long, Store> storeMap = expenseService.getStoreMapForUser(userId);
 
-        // Apply country filter
-        if (country != null && !country.isBlank()) {
-            expenses = filterByCountry(expenses, country, storeMap);
+        // Apply country filter (OR within countries)
+        List<String> countries = nonBlank(country);
+        if (!countries.isEmpty()) {
+            expenses = filterByCountry(expenses, countries, storeMap);
+        }
+
+        // Apply store-name filter
+        List<String> storeNames = nonBlank(storeName);
+        if (!storeNames.isEmpty()) {
+            expenses = expenses.stream()
+                    .filter(e -> {
+                        if (e.getStoreId() == null) return false;
+                        Store s = storeMap.get(e.getStoreId());
+                        if (s == null || s.getName() == null) return false;
+                        String sn = s.getName().toLowerCase();
+                        return storeNames.stream().anyMatch(n -> sn.contains(n.toLowerCase()));
+                    }).toList();
         }
 
         // Sort by date descending
@@ -171,25 +190,22 @@ public class ExpenseController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> uploadReceiptBatch(@RequestParam("files") List<MultipartFile> files, UserToken userToken) throws IOException {
         long userId = userToken.getUserId();
+        if (files.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("At least one file is required"));
+        }
         if (files.size() > batchMaxFiles) {
             return ResponseEntity.badRequest().body(new ErrorResponse("Maximum " + batchMaxFiles + " files allowed per batch"));
         }
         Path uploadDir = Path.of(dataDir, "receipts");
         Files.createDirectories(uploadDir);
-        List<Expense> expenses = new ArrayList<>();
+        List<String> imagePaths = new ArrayList<>();
         for (MultipartFile file : files) {
             String filename = getDateString() + "_" + userId + "_" + file.getOriginalFilename();
             Path filePath = uploadDir.resolve(filename);
             Files.write(filePath, file.getBytes());
-            if (batchQueueEnabled) {
-                expenses.add(expenseService.createReceiptScanExpenseQueued(userId, filePath.toString()));
-            } else {
-                expenses.add(expenseService.createReceiptScanExpense(userId, filePath.toString()));
-            }
+            imagePaths.add(filePath.toString());
         }
-        if (batchQueueEnabled) {
-            expenseService.processOcrQueue(expenses);
-        }
+        List<Expense> expenses = expenseService.createReceiptScanExpensesBatch(userId, imagePaths, batchQueueEnabled);
         return ResponseEntity.ok(expenses);
     }
 
@@ -302,10 +318,19 @@ public class ExpenseController {
         if (search != null) search = search.trim();
         List<Expense> expenses = expenseService.search(userId, search, false);
 
+        // Batch-load items for all expenses in one query
+        Map<Long, List<ExpenseItem>> itemsByExpense = expenseService.getItemsByExpenseId(expenses);
+
         if ("csv".equalsIgnoreCase(format)) {
             StringBuilder csv = new StringBuilder();
-            csv.append("ID,Date,Amount,Currency,AmountInBase,Category,ReceiptNumber,Type,Status,Notes,Tags\n");
+            csv.append("ID,Date,Amount,Currency,AmountInBase,Category,ReceiptNumber,Type,Status,Notes,Tags,Items\n");
             for (Expense e : expenses) {
+                List<ExpenseItem> items = itemsByExpense.getOrDefault(e.getId(), List.of());
+                String itemsSummary = items.isEmpty() ? "" :
+                        items.stream()
+                                .map(i -> escapeCsv(i.getItemName()) + "(" + i.getQuantity() + "×" + i.getUnitPrice() + ")")
+                                .reduce((a, b) -> a + "|" + b)
+                                .orElse("");
                 csv.append(String.join(",",
                         e.getUrlId(),
                         e.getTransactionDatetime() != null ? e.getTransactionDatetime().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) : "",
@@ -317,7 +342,8 @@ public class ExpenseController {
                         e.getType() != null ? e.getType().name() : "",
                         e.getStatus() != null ? e.getStatus().name() : "",
                         escapeCsv(e.getNotes()),
-                        e.getTags() != null ? String.join(";", e.getTags()) : ""
+                        e.getTags() != null ? String.join(";", e.getTags()) : "",
+                        escapeCsv(itemsSummary)
                 )).append("\n");
             }
             return ResponseEntity.ok()
@@ -325,7 +351,12 @@ public class ExpenseController {
                     .header("Content-Disposition", "attachment; filename=expenses.csv")
                     .body(csv.toString());
         }
-        return ResponseEntity.ok(expenses);
+        // JSON: return safe DTOs (no internal IDs) with items embedded
+        List<com.delfino.expensetracker.dto.expense.ExpenseExportDto> dtos = expenses.stream()
+                .map(e -> com.delfino.expensetracker.dto.expense.ExpenseExportDto.fromWithItems(
+                        e, itemsByExpense.getOrDefault(e.getId(), List.of())))
+                .toList();
+        return ResponseEntity.ok(dtos);
     }
 
     // --- Private helpers ---
@@ -349,15 +380,40 @@ public class ExpenseController {
         return expenses;
     }
 
-    /** Filter expenses by country (supports both code and name). */
-    List<Expense> filterByCountry(List<Expense> expenses, String country, Map<Long, Store> storeMap) {
-        final String countryFilter = country.toLowerCase();
-        final String resolvedCode = countryService.findCodeByName(country);
+    /** Filter expenses by the date they were created/scanned (independent of transaction date). */
+    static List<Expense> filterByCreatedDateRange(List<Expense> expenses, String createdFrom, String createdTo) {
+        if (createdFrom != null && !createdFrom.isBlank()) {
+            LocalDate from = LocalDate.parse(createdFrom);
+            expenses = expenses.stream()
+                    .filter(e -> e.getCreatedAt() != null
+                            && !e.getCreatedAt().toLocalDate().isBefore(from))
+                    .toList();
+        }
+        if (createdTo != null && !createdTo.isBlank()) {
+            LocalDate to = LocalDate.parse(createdTo);
+            expenses = expenses.stream()
+                    .filter(e -> e.getCreatedAt() != null
+                            && !e.getCreatedAt().toLocalDate().isAfter(to))
+                    .toList();
+        }
+        return expenses;
+    }
+
+    /** Filter expenses by country (supports both code and name, OR-matched across multiple values). */
+    List<Expense> filterByCountry(List<Expense> expenses, List<String> countries, Map<Long, Store> storeMap) {
+        List<String> countryFilters = countries.stream().map(String::toLowerCase).toList();
+        List<String> resolvedCodes = countries.stream()
+                .map(countryService::findCodeByName)
+                .toList();
         return expenses.stream()
                 .filter(e -> {
                     if (e.getStoreId() == null) return false;
                     Store s = storeMap.get(e.getStoreId());
-                    return s != null && matchesCountry(s, countryFilter, resolvedCode);
+                    if (s == null) return false;
+                    for (int i = 0; i < countryFilters.size(); i++) {
+                        if (matchesCountry(s, countryFilters.get(i), resolvedCodes.get(i))) return true;
+                    }
+                    return false;
                 })
                 .toList();
     }
@@ -383,6 +439,7 @@ public class ExpenseController {
         for (Expense e : expenses) {
             Store store = e.getStoreId() != null ? storeMap.get(e.getStoreId()) : null;
             String storeName = store != null ? store.getName() : null;
+            String storeWebsite = store != null ? store.getWebsite() : null;
             String cat = e.getCategory() != null ? e.getCategory() : "Uncategorized";
 
             EnrichedExpense.Builder builder = EnrichedExpense.builder()
@@ -407,6 +464,7 @@ public class ExpenseController {
                     .scannedAt(e.getScannedAt())
                     .urlId(e.getUrlId())
                     .storeName(storeName)
+                    .storeWebsite(storeWebsite)
                     .country(store != null ? store.getCountry() : null)
                     .countryName(store != null && store.getCountry() != null
                             ? countryService.getName(store.getCountry()) : null)
@@ -472,6 +530,11 @@ public class ExpenseController {
         s.setLongitude(r.getLongitude());
         s.setSourceId(r.getSourceId());
         return s;
+    }
+
+    private static List<String> nonBlank(List<String> values) {
+        if (values == null) return List.of();
+        return values.stream().filter(v -> v != null && !v.isBlank()).toList();
     }
 
     private String escapeCsv(String val) {

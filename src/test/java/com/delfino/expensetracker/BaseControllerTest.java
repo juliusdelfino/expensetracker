@@ -6,7 +6,9 @@ import com.delfino.expensetracker.model.ExpenseStatus;
 import com.delfino.expensetracker.model.ExpenseType;
 import com.delfino.expensetracker.model.Store;
 import com.delfino.expensetracker.model.User;
+import com.delfino.expensetracker.model.UserRole;
 import com.delfino.expensetracker.repository.ChatMessageRepository;
+import com.delfino.expensetracker.repository.AiUsageRepository;
 import com.delfino.expensetracker.repository.ExchangeRateCacheRepository;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
@@ -18,6 +20,7 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -127,10 +130,13 @@ public abstract class BaseControllerTest {
         String base = "http://localhost:" + WIRE_MOCK.port();
         // Frankfurter currency API (used by CurrencyService + SupportedCurrencyService)
         registry.add("currency.api.url", () -> base);
-        // OCR API – full endpoint URL (used directly by OcrService)
-        registry.add("ocr.api.url", () -> base + "/api/chat");
         // Ollama base URL (used by Spring AI ChatClient → OllamaApi)
         registry.add("spring.ai.ollama.base-url", () -> base);
+        // OpenAI-compatible base URL for Spring AI chat clients
+        registry.add("spring.ai.openai.base-url", () -> base);
+        // Provider-specific OCR endpoints
+        registry.add("app.ai.providers.ollama.ocr-url", () -> base + "/api/chat");
+        registry.add("app.ai.providers.openai.ocr-url", () -> base + "/v1/chat/completions");
         // Nominatim geocoding API (used by GeocodingService)
         registry.add("geocoding.api.url", () -> base);
         // Embedded PostgreSQL datasource
@@ -150,8 +156,11 @@ public abstract class BaseControllerTest {
     @Autowired protected ExpenseItemRepository expenseItemRepository;
     @Autowired protected StoreRepository storeRepository;
     @Autowired protected ChatMessageRepository chatMessageRepository;
+    @Autowired protected AiUsageRepository aiUsageRepository;
     @Autowired protected ExchangeRateCacheRepository exchangeRateCacheRepository;
     @Autowired protected PasswordEncoder passwordEncoder;
+    @Autowired protected com.delfino.expensetracker.service.AiUsageService aiUsageService;
+    @Autowired protected MeterRegistry meterRegistry;
 
     // -------------------------------------------------------------------------
     // Per-test setup: clean DB + reset WireMock stubs to sensible defaults
@@ -160,6 +169,7 @@ public abstract class BaseControllerTest {
     void setUpEach() {
         // 1. Clean all data for test isolation
         chatMessageRepository.deleteAll();
+        aiUsageRepository.deleteAll();
         expenseItemRepository.deleteAll();
         expenseRepository.deleteAll();
         reportRepository.deleteAll();
@@ -216,6 +226,13 @@ public abstract class BaseControllerTest {
         WIRE_MOCK.stubFor(WireMock.post(urlPathEqualTo("/api/chat"))
                 .atPriority(5)
                 .willReturn(okJson(ollamaChatResponse(
+                        "I'm a helpful expense assistant. How can I help you today?"))
+                        .withHeader("Connection", "close")));
+
+        // -- OpenAI chat API: POST /v1/chat/completions → plain-text assistant reply ----
+        WIRE_MOCK.stubFor(WireMock.post(urlPathMatching("/(v1/)?chat/completions"))
+                .atPriority(5)
+                .willReturn(okJson(openAiChatResponse(
                         "I'm a helpful expense assistant. How can I help you today?"))
                         .withHeader("Connection", "close")));
 
@@ -281,6 +298,17 @@ public abstract class BaseControllerTest {
                "\"model\":\"test-model\"}";
     }
 
+    protected static String openAiChatResponse(String content) {
+        String escaped = content
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n");
+        return "{\"id\":\"chatcmpl-test\"," +
+               "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"" + escaped + "\"}," +
+               "\"finish_reason\":\"stop\"}]," +
+               "\"model\":\"test-model\"}";
+    }
+
     // -------------------------------------------------------------------------
     // DB helpers
     // -------------------------------------------------------------------------
@@ -290,11 +318,17 @@ public abstract class BaseControllerTest {
     }
 
     protected User createTestUser(String username, String password, String baseCurrency) {
+        return createTestUser(username, password, baseCurrency, UserRole.USER, null);
+    }
+
+    protected User createTestUser(String username, String password, String baseCurrency, UserRole role, String aiModel) {
         User user = new User();
         user.setUsername(username);
         user.setPasswordHash(passwordEncoder.encode(password));
         user.setBaseCurrency(baseCurrency);
         user.setEmail(username + "@test.com");
+        user.setRole(role);
+        user.setAiModel(aiModel);
         user.setCreatedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
         return userRepository.save(user);
