@@ -27,4 +27,8 @@ public interface ExpenseItemRepository extends JpaRepository<ExpenseItem, Long> 
     @Modifying
     @Query("UPDATE ExpenseItem i SET i.deleted = false WHERE i.expenseId = :expenseId")
     void restoreByExpenseId(Long expenseId);
+
+    @Modifying
+    @Query("DELETE FROM ExpenseItem i WHERE i.expenseId = :expenseId")
+    void deleteByExpenseId(Long expenseId);
 }

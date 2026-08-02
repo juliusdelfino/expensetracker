@@ -92,7 +92,8 @@ function renderNewExpense(app, embedded = false) {
         </div>
         <div id="tab-scan" class="tab-content">
             <div class="card">
-                <div class="upload-zone" id="uploadZone" onclick="document.getElementById('receiptFile').click()">
+                <div id="ocrQuotaBanner" class="ocr-quota-banner" style="display:none;"></div>
+                <div class="upload-zone" id="uploadZone" onclick="triggerReceiptFilePicker()">
                     <i class="fa-solid fa-cloud-arrow-up"></i>
                     <p>Click or drag & drop receipt images here</p>
                     <p style="font-size:0.8rem; margin-top:0.5rem">Supported: JPG, PNG, PDF &middot; Up to 20 files</p>
@@ -204,6 +205,8 @@ function renderNewExpense(app, embedded = false) {
         if (e.dataTransfer.files.length > 0) handleReceiptFiles(e.dataTransfer.files);
     });
 
+    applyOcrQuotaState();
+
     // Auto-switch to Scan tab if ?tab=scan in the URL hash
     if (window.location.hash.includes('tab=scan')) {
         const scanTabEl = container.querySelector('.tab[data-tab="scan"]');
@@ -244,7 +247,64 @@ function switchTab(tab, el) {
 const RECEIPT_MAX_FILES = 20;
 let _pendingReceiptFiles = [];
 
+function getCurrentOcrLine() {
+    return currentAiStatus?.ocr || null;
+}
+
+function isOcrBlocked() {
+    return !!currentAiStatus && !currentAiStatus.ocrAllowed;
+}
+
+function triggerReceiptFilePicker() {
+    if (isOcrBlocked()) {
+        applyOcrQuotaState();
+        toast('Your monthly OCR quota has been reached.', 'error');
+        return;
+    }
+    document.getElementById('receiptFile')?.click();
+}
+
+function applyOcrQuotaState() {
+    const banner = document.getElementById('ocrQuotaBanner');
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('receiptFile');
+    const cameraBtn = document.getElementById('desktopCameraBtn');
+    const ocr = getCurrentOcrLine();
+    const blocked = isOcrBlocked();
+
+    if (banner) {
+        if (blocked) {
+            banner.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Your monthly OCR quota has been reached. Receipt scanning is temporarily unavailable until next month.`;
+            banner.style.display = 'flex';
+            banner.classList.add('quota-exceeded');
+        } else if (ocr) {
+            banner.innerHTML = `<i class="fa-solid fa-sparkles"></i> OCR usage this month: <strong>${ocr.usageCount} / ${ocr.quota}</strong> &middot; Remaining scans: <strong>${ocr.remaining}</strong>`;
+            banner.style.display = 'flex';
+            banner.classList.remove('quota-exceeded');
+        } else {
+            banner.style.display = 'none';
+            banner.innerHTML = '';
+            banner.classList.remove('quota-exceeded');
+        }
+    }
+
+    if (uploadZone) uploadZone.classList.toggle('disabled', blocked);
+    if (fileInput) fileInput.disabled = blocked;
+    if (cameraBtn) cameraBtn.disabled = blocked;
+    if (blocked) closeDesktopCamera();
+
+    const submitBtn = document.getElementById('receiptBatchSubmitBtn');
+    if (submitBtn && ocr) {
+        submitBtn.disabled = blocked || _pendingReceiptFiles.length > ocr.remaining;
+    }
+}
+
 function handleReceiptFiles(fileList) {
+    if (isOcrBlocked()) {
+        applyOcrQuotaState();
+        toast('Your monthly OCR quota has been reached.', 'error');
+        return;
+    }
     const files = Array.from(fileList).filter(f => {
         const ext = f.name.split('.').pop().toLowerCase();
         return ['jpg','jpeg','png','gif','webp','pdf'].includes(ext) || f.type.startsWith('image/');
@@ -260,6 +320,10 @@ function handleReceiptFiles(fileList) {
         const exists = _pendingReceiptFiles.some(p => p.name === f.name && p.size === f.size);
         if (!exists) _pendingReceiptFiles.push(f);
     }
+    const remaining = getCurrentOcrLine()?.remaining;
+    if (typeof remaining === 'number' && _pendingReceiptFiles.length > remaining) {
+        toast(`You only have ${remaining} OCR scan${remaining === 1 ? '' : 's'} remaining this month.`, 'info');
+    }
     renderReceiptFileList();
 }
 
@@ -273,10 +337,12 @@ function renderReceiptFileList() {
     }
     listEl.style.display = 'block';
     const formatSize = (bytes) => bytes < 1024 * 1024 ? (bytes / 1024).toFixed(0) + ' KB' : (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    const remaining = getCurrentOcrLine()?.remaining;
+    const overRemaining = typeof remaining === 'number' && _pendingReceiptFiles.length > remaining;
     listEl.innerHTML = `
         <div class="receipt-file-list-header">
             <span><strong>${_pendingReceiptFiles.length}</strong> file${_pendingReceiptFiles.length > 1 ? 's' : ''} selected</span>
-            <button class="btn btn-outline btn-sm" onclick="document.getElementById('receiptFile').click()"><i class="fa-solid fa-plus"></i> Add more</button>
+            <button class="btn btn-outline btn-sm" onclick="triggerReceiptFilePicker()"><i class="fa-solid fa-plus"></i> Add more</button>
         </div>
         <div class="receipt-file-items">
             ${_pendingReceiptFiles.map((f, i) => {
@@ -290,10 +356,12 @@ function renderReceiptFileList() {
                 </div>`;
             }).join('')}
         </div>
+        ${overRemaining ? `<div class="receipt-file-warning"><i class="fa-solid fa-circle-info"></i> You selected ${_pendingReceiptFiles.length} files but only ${remaining} OCR scan${remaining === 1 ? '' : 's'} remain this month.</div>` : ''}
         <div class="receipt-file-actions">
-            <button class="btn btn-primary" onclick="submitReceiptBatch()"><i class="fa-solid fa-upload"></i> Submit ${_pendingReceiptFiles.length} receipt${_pendingReceiptFiles.length > 1 ? 's' : ''}</button>
+            <button class="btn btn-primary" id="receiptBatchSubmitBtn" onclick="submitReceiptBatch()" ${isOcrBlocked() || overRemaining ? 'disabled' : ''}><i class="fa-solid fa-upload"></i> Submit ${_pendingReceiptFiles.length} receipt${_pendingReceiptFiles.length > 1 ? 's' : ''}</button>
             <button class="btn btn-outline" onclick="cancelReceiptBatch()"><i class="fa-solid fa-xmark"></i> Cancel</button>
         </div>`;
+    applyOcrQuotaState();
 }
 
 function removeReceiptFile(index) {
@@ -309,6 +377,18 @@ function cancelReceiptBatch() {
 
 async function submitReceiptBatch() {
     if (_pendingReceiptFiles.length === 0) return;
+    if (isOcrBlocked()) {
+        applyOcrQuotaState();
+        toast('Your monthly OCR quota has been reached.', 'error');
+        return;
+    }
+
+    const remaining = getCurrentOcrLine()?.remaining;
+    if (typeof remaining === 'number' && _pendingReceiptFiles.length > remaining) {
+        toast(`Only ${remaining} OCR scan${remaining === 1 ? '' : 's'} remain this month.`, 'error');
+        renderReceiptFileList();
+        return;
+    }
 
     const statusEl = document.getElementById('uploadStatus');
     statusEl.style.display = 'block';
@@ -322,11 +402,19 @@ async function submitReceiptBatch() {
         const fd = new FormData();
         fd.append('file', _pendingReceiptFiles[0]);
         const result = await api('/api/expenses/scan', { method: 'POST', body: fd });
-        _pendingReceiptFiles = [];
         if (result && result.id) {
+            _pendingReceiptFiles = [];
+            await loadAiStatus(true);
             toast('Receipt uploaded! Processing...', 'info');
             navigate('#/expenses/' + result.urlId);
+        } else if (result?.code === 'AI_OCR_QUOTA_EXCEEDED') {
+            statusEl.innerHTML = `<div class="badge badge-failed"><i class="fa-solid fa-triangle-exclamation"></i> ${esc(result.error || 'OCR quota exceeded')}</div>`;
+            await loadAiStatus(true);
+            applyOcrQuotaState();
+            renderReceiptFileList();
+            toast(result.error || 'Your monthly OCR quota has been reached.', 'error');
         } else {
+            _pendingReceiptFiles = [];
             statusEl.innerHTML = '<div class="badge badge-failed"><i class="fa-solid fa-xmark"></i> Upload failed</div>';
             toast('Upload failed', 'error');
         }
@@ -334,28 +422,35 @@ async function submitReceiptBatch() {
         // Multiple files: always use batch endpoint; server decides queued vs immediate via config
         const fd = new FormData();
         for (const f of _pendingReceiptFiles) fd.append('files', f);
-        _pendingReceiptFiles = [];
         const results = await api('/api/expenses/scan/batch', { method: 'POST', body: fd });
         if (results && Array.isArray(results) && results.length > 0) {
+            _pendingReceiptFiles = [];
+            await loadAiStatus(true);
             toast(`${results.length} receipts uploaded! Processing...`, 'info');
             navigate('#/expenses');
+        } else if (results?.code === 'AI_OCR_QUOTA_EXCEEDED') {
+            statusEl.innerHTML = `<div class="badge badge-failed"><i class="fa-solid fa-triangle-exclamation"></i> ${esc(results.error || 'OCR quota exceeded')}</div>`;
+            await loadAiStatus(true);
+            applyOcrQuotaState();
+            renderReceiptFileList();
+            toast(results.error || 'Your monthly OCR quota has been reached.', 'error');
         } else {
+            _pendingReceiptFiles = [];
             statusEl.innerHTML = '<div class="badge badge-failed"><i class="fa-solid fa-xmark"></i> Upload failed</div>';
             toast('Upload failed', 'error');
         }
     }
 }
 
-async function uploadReceipt() {
-    const file = document.getElementById('receiptFile').files[0];
-    if (!file) return;
-    handleReceiptFiles([file]);
-}
-
 // Desktop camera for new expense page
 let desktopCameraStream = null;
 
 async function openDesktopCamera() {
+    if (isOcrBlocked()) {
+        applyOcrQuotaState();
+        toast('Your monthly OCR quota has been reached.', 'error');
+        return;
+    }
     try {
         const video = document.getElementById('desktopCameraPreview');
         const container = document.getElementById('desktopCameraContainer');
@@ -391,7 +486,6 @@ async function openDesktopCamera() {
             // Also reduce padding on parent wrappers
             const tabContent = scanCard.closest('.tab-content');
             if (tabContent) tabContent.style.padding = '0';
-            const heading = scanCard.closest('.tab-content')?.previousElementSibling;
             // Hide the heading and tabs bar
             const parentContainer = scanCard.closest('#mobileNewExpenseContent') || scanCard.closest('.container');
             if (parentContainer) {
@@ -495,8 +589,14 @@ function captureSubmit() {
         fd.append('file', blob, 'receipt_' + Date.now() + '.jpg');
         const result = await api('/api/expenses/scan', { method: 'POST', body: fd });
         if (result && result.id) {
+            await loadAiStatus(true);
             toast('Photo captured & uploaded! Processing...', 'info');
             navigate('#/expenses/' + result.urlId);
+        } else if (result?.code === 'AI_OCR_QUOTA_EXCEEDED') {
+            statusEl.innerHTML = `<div class="badge badge-failed"><i class="fa-solid fa-triangle-exclamation"></i> ${esc(result.error || 'OCR quota exceeded')}</div>`;
+            await loadAiStatus(true);
+            applyOcrQuotaState();
+            toast(result.error || 'Your monthly OCR quota has been reached.', 'error');
         } else {
             statusEl.innerHTML = '<div class="badge badge-failed"><i class="fa-solid fa-xmark"></i> Upload failed</div>';
             toast('Upload failed', 'error');

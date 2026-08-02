@@ -13,16 +13,16 @@ import com.delfino.expensetracker.repository.UserRepository;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
-import com.delfino.expensetracker.service.ocr.OcrProvider;
 import com.delfino.expensetracker.util.JsonUtils;
 import com.delfino.expensetracker.util.MediaUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -61,33 +61,19 @@ public class OcrService {
     private final CurrencyService currencyService;
     private final GeocodingService geocodingService;
     private final ObjectMapper objectMapper;
-    private final OcrProvider ocrProvider;
+    private final OcrModelResolver ocrModelResolver;
     private final Map<String, Object> toolSchema;
+    private final MeterRegistry meterRegistry;
+    private final AiUsageService aiUsageService;
     private final HttpClient httpClient = HttpClient.newHttpClient();
-
-    @Value("${ocr.api.url:http://localhost:11434/api/chat}")
-    private String ocrApiUrl;
-
-    @Value("${ocr.api.model:llava}")
-    private String ocrModel;
-
-    @Value("${ocr.api.api-key:}")
-    private String ocrApiKey;
-
-    @Value("${ocr.api.disable-thinking:false}")
-    private boolean ocrDisableThinking;
-
-    @Value("${ocr.api.use-tools:true}")
-    private boolean ocrUseTools;
-
-    @Value("${ocr.api.prompt:Parse this receipt image and return a JSON object. Return ONLY valid JSON.}")
-    private String ocrPrompt;
 
     public OcrService(ExpenseRepository expenseRepository, ExpenseItemRepository expenseItemRepository,
                       StoreRepository storeRepository, UserRepository userRepository,
                       CurrencyService currencyService, GeocodingService geocodingService,
-                      ObjectMapper objectMapper, OcrProvider ocrProvider,
-                      @Qualifier("ocrToolSchema") Map<String, Object> toolSchema) {
+                      ObjectMapper objectMapper, OcrModelResolver ocrModelResolver,
+                      @Qualifier("ocrToolSchema") Map<String, Object> toolSchema,
+                      MeterRegistry meterRegistry,
+                      AiUsageService aiUsageService) {
         this.expenseRepository = expenseRepository;
         this.expenseItemRepository = expenseItemRepository;
         this.storeRepository = storeRepository;
@@ -95,15 +81,17 @@ public class OcrService {
         this.currencyService = currencyService;
         this.geocodingService = geocodingService;
         this.objectMapper = objectMapper;
-        this.ocrProvider = ocrProvider;
+        this.ocrModelResolver = ocrModelResolver;
         this.toolSchema = toolSchema;
+        this.meterRegistry = meterRegistry;
+        this.aiUsageService = aiUsageService;
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // Request body builders
     // ─────────────────────────────────────────────────────────────────────
 
-    public OcrRequest buildRequestBody(String ocrModel, String ocrPrompt,
+    public OcrRequest buildRequestBody(OcrModelResolver.ResolvedOcrModel resolvedOcrModel,
                                        String imagePath, Long expenseId) throws IOException {
         log.info("Processing receipt for expense {}: reading image from {}", expenseId, imagePath);
         byte[] imageBytes = Files.readAllBytes(Path.of(imagePath));
@@ -115,7 +103,13 @@ public class OcrService {
             if (MediaUtils.hasUsableText(pdfText)) {
                 log.info("PDF for expense {} contains extractable text ({} chars) — using text-only LLM path",
                         expenseId, pdfText.length());
-                requestBody = ocrProvider.buildTextRequestBody(ocrModel, ocrPrompt, pdfText, toolSchema, ocrUseTools, ocrDisableThinking);
+                requestBody = resolvedOcrModel.ocrProvider().buildTextRequestBody(
+                        resolvedOcrModel.modelId(),
+                        resolvedOcrModel.prompt(),
+                        pdfText,
+                        toolSchema,
+                        resolvedOcrModel.useTools(),
+                        resolvedOcrModel.disableThinking());
                 return new OcrRequest(imageBytes, "application/pdf", requestBody);
             }
             log.info("PDF for expense {} appears image-based — falling back to vision path", expenseId);
@@ -123,23 +117,25 @@ public class OcrService {
             if (imgs.isEmpty()) throw new IOException("PDF contained no renderable pages");
             imageBytes = imgs.get(0);
             mediaType = "image/jpeg";
-            requestBody = ocrProvider.buildVisionRequestBody(ocrModel, ocrPrompt, imgs, mediaType, toolSchema, ocrUseTools, ocrDisableThinking);
+            requestBody = resolvedOcrModel.ocrProvider().buildVisionRequestBody(
+                    resolvedOcrModel.modelId(),
+                    resolvedOcrModel.prompt(),
+                    imgs,
+                    mediaType,
+                    toolSchema,
+                    resolvedOcrModel.useTools(),
+                    resolvedOcrModel.disableThinking());
         } else {
-            requestBody = ocrProvider.buildVisionRequestBody(ocrModel, ocrPrompt,
-                    Collections.singletonList(imageBytes), mediaType, toolSchema, ocrUseTools, ocrDisableThinking);
+            requestBody = resolvedOcrModel.ocrProvider().buildVisionRequestBody(
+                    resolvedOcrModel.modelId(),
+                    resolvedOcrModel.prompt(),
+                    Collections.singletonList(imageBytes),
+                    mediaType,
+                    toolSchema,
+                    resolvedOcrModel.useTools(),
+                    resolvedOcrModel.disableThinking());
         }
         return new OcrRequest(imageBytes, mediaType, requestBody);
-    }
-
-    public Map<String, Object> buildRequestBody(String ocrModel, String ocrPrompt,
-                                                List<byte[]> imageBytesList, String mediaType) {
-        if (imageBytesList == null || imageBytesList.isEmpty()) {
-            throw new IllegalArgumentException("No image data provided");
-        }
-        if (!IMAGE_MEDIA_TYPES.contains(mediaType)) {
-            throw new IllegalArgumentException("Unsupported media type: " + mediaType);
-        }
-        return ocrProvider.buildVisionRequestBody(ocrModel, ocrPrompt, imageBytesList, mediaType, toolSchema, ocrUseTools, ocrDisableThinking);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -153,18 +149,23 @@ public class OcrService {
 
     public void processReceiptSync(Long expenseId, String imagePath) {
         try {
-            OcrRequest ocrRequest = buildRequestBody(ocrModel, ocrPrompt, imagePath, expenseId);
+            User user = expenseRepository.findById(expenseId)
+                    .flatMap(expense -> userRepository.findById(expense.getUserId()))
+                    .orElseThrow(() -> new IllegalStateException("User not found for OCR expense " + expenseId));
+            OcrModelResolver.ResolvedOcrModel resolvedOcrModel = ocrModelResolver.resolveForUser(user);
+            OcrRequest ocrRequest = buildRequestBody(resolvedOcrModel, imagePath, expenseId);
 
-            String currentResponseBody = callOcrApi(objectMapper.writeValueAsString(ocrRequest.requestBody()), expenseId);
+            String currentResponseBody = callOcrApi(objectMapper.writeValueAsString(ocrRequest.requestBody()), expenseId, resolvedOcrModel);
             if (currentResponseBody == null) return;
 
-            currentResponseBody = validateAndRetryToolCall(currentResponseBody, ocrRequest, expenseId);
+            currentResponseBody = validateAndRetryToolCall(currentResponseBody, ocrRequest, expenseId, resolvedOcrModel);
             if (currentResponseBody == null) return;
 
-            processOcrResponse(expenseId, currentResponseBody);
+            processOcrResponse(expenseId, currentResponseBody, resolvedOcrModel);
+            aiUsageService.consume(user.getId(), com.delfino.expensetracker.model.AiUsageType.OCR);
             log.info("Successfully processed receipt for expense {}", expenseId);
 
-        } catch (IOException | InterruptedException e) {
+        } catch (Exception e) { //must handle ANY error that can possibly occur (DB or AI-provider related)
             log.error("Failed to process receipt for expense {}", expenseId, e);
             markFailed(expenseId, e);
         }
@@ -172,14 +173,15 @@ public class OcrService {
 
     @SuppressWarnings("unchecked")
     private String validateAndRetryToolCall(String currentResponseBody, OcrRequest ocrRequest,
-                                            Long expenseId) throws IOException, InterruptedException {
+                                            Long expenseId,
+                                            OcrModelResolver.ResolvedOcrModel resolvedOcrModel) throws IOException, InterruptedException {
         List<Map<String, Object>> messages = new ArrayList<>(
                 (List<Map<String, Object>>) ocrRequest.requestBody().get("messages"));
 
         for (int attempt = 0; attempt <= MAX_TOOL_RETRIES; attempt++) {
             JsonNode root = objectMapper.readTree(currentResponseBody);
-            JsonNode assistantMsg = ocrProvider.extractAssistantMessage(root);
-            ParsedReceiptDto args = ocrProvider.extractToolCallArgs(assistantMsg);
+            JsonNode assistantMsg = resolvedOcrModel.ocrProvider().extractAssistantMessage(root);
+            ParsedReceiptDto args = resolvedOcrModel.ocrProvider().extractToolCallArgs(assistantMsg);
             boolean usedToolCall = args != null;
 
             if (!usedToolCall) {
@@ -208,8 +210,8 @@ public class OcrService {
                 toolResultMsg.put("content", "Validation failed: " + validationError +
                         ". Please recalculate so that amount equals the exact sum of" +
                         " (quantity * unitPrice + adjustment) for every item, then call submit_receipt again.");
-                if (ocrProvider.requiresToolCallId()) {
-                    toolResultMsg.put("tool_call_id", ocrProvider.extractToolCallId(assistantMsg));
+                if (resolvedOcrModel.ocrProvider().requiresToolCallId()) {
+                    toolResultMsg.put("tool_call_id", resolvedOcrModel.ocrProvider().extractToolCallId(assistantMsg));
                 }
                 messages.add(toolResultMsg);
             } else {
@@ -224,7 +226,7 @@ public class OcrService {
 
             Map<String, Object> correctionBody = new LinkedHashMap<>(ocrRequest.requestBody());
             correctionBody.put("messages", messages);
-            String nextResponse = callOcrApi(objectMapper.writeValueAsString(correctionBody), expenseId);
+            String nextResponse = callOcrApi(objectMapper.writeValueAsString(correctionBody), expenseId, resolvedOcrModel);
             if (nextResponse == null) return null;
             currentResponseBody = nextResponse;
         }
@@ -251,18 +253,29 @@ public class OcrService {
     // HTTP & response processing
     // ─────────────────────────────────────────────────────────────────────
 
-    private String callOcrApi(String jsonBody, Long expenseId) throws IOException, InterruptedException {
-        log.info("Calling OCR API: POST {} with model={}", ocrApiUrl, ocrModel);
+    private String callOcrApi(String jsonBody, Long expenseId,
+                              OcrModelResolver.ResolvedOcrModel resolvedOcrModel) throws IOException, InterruptedException {
+        String provider = resolvedOcrModel.provider().name().toLowerCase();
+        String modelId = resolvedOcrModel.modelId();
+        Timer.Sample sample = Timer.start(meterRegistry);
+        log.info("Calling OCR API for expense {}: POST {} provider={} model={}", expenseId, resolvedOcrModel.apiUrl(), provider, modelId);
         HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                .uri(URI.create(ocrApiUrl))
+                .uri(URI.create(resolvedOcrModel.apiUrl()))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody));
-        if (ocrApiKey != null && !ocrApiKey.isBlank()) {
-            requestBuilder.header("Authorization", "Bearer " + ocrApiKey);
+        if (resolvedOcrModel.apiKey() != null && !resolvedOcrModel.apiKey().isBlank()) {
+            requestBuilder.header("Authorization", "Bearer " + resolvedOcrModel.apiKey());
         }
         HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
         String responseBody = response.body();
         log.info("OCR API response: status={}, body={}", response.statusCode(), responseBody);
+        String outcome = response.statusCode() == 200 ? "success" : "error";
+        meterRegistry.counter("app.ai.ocr.calls", "provider", provider, "model", modelId, "outcome", outcome).increment();
+        sample.stop(Timer.builder("app.ai.ocr.latency")
+                .tag("provider", provider)
+                .tag("model", modelId)
+                .tag("outcome", outcome)
+                .register(meterRegistry));
         if (response.statusCode() != 200) {
             log.error("OCR API returned non-200 status {} for expense {}. Body: {}", response.statusCode(), expenseId, responseBody);
             markFailed(expenseId, new Exception(responseBody));
@@ -271,11 +284,12 @@ public class OcrService {
         return responseBody;
     }
 
-    private void processOcrResponse(Long expenseId, String responseBody) throws JsonProcessingException {
+    private void processOcrResponse(Long expenseId, String responseBody,
+                                    OcrModelResolver.ResolvedOcrModel resolvedOcrModel) throws JsonProcessingException {
         JsonNode root = objectMapper.readTree(responseBody);
-        JsonNode assistantMsg = ocrProvider.extractAssistantMessage(root);
+        JsonNode assistantMsg = resolvedOcrModel.ocrProvider().extractAssistantMessage(root);
 
-        ParsedReceiptDto dto = ocrProvider.extractToolCallArgs(assistantMsg);
+        ParsedReceiptDto dto = resolvedOcrModel.ocrProvider().extractToolCallArgs(assistantMsg);
         if (dto != null) {
             log.info("OCR parsed receipt for expense {} via tool_call: amount={}, currency={}, items={}",
                     expenseId,
@@ -329,7 +343,7 @@ public class OcrService {
             try {
                 expense.setTransactionDatetime(LocalDateTime.parse(parsed.transactionDatetime(),
                         DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-            } catch (Exception ignored) {} // noinspection CommentedOutCode
+            } catch (Exception ignored) {}
         }
         if (parsed.amount() != null) expense.setAmount(parsed.amount());
         if (parsed.currency() != null) expense.setCurrency(parsed.currency());

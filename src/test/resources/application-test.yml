@@ -26,11 +26,12 @@ spring:
     ollama:
       base-url: http://127.0.0.1:1
       chat:
-        enabled: false
+        enabled: true
     openai:
       api-key: test-key   # required to prevent "API key must be set" from auto-configurations
+      base-url: http://127.0.0.1:1
       chat:
-        enabled: false
+        enabled: true
       image:
         enabled: false
       audio:
@@ -43,7 +44,7 @@ spring:
     mcp:
       server:
         name: expense-tracker-mcp-test
-        version: 1.0.0
+        version: ${project.version}
     # Disable Spring AI retry backoff so WireMock connection errors fail fast
     retry:
       max-attempts: 1
@@ -58,6 +59,29 @@ app:
     enabled: false
   data:
     dir: target/test-data
+  ai:
+    defaults:
+      chat-model: gemma4:latest
+      ocr-model: gemma4:latest
+    quotas:
+      chat-monthly: 2
+      ocr-monthly: 2
+    providers:
+      ollama:
+        ocr-url: http://127.0.0.1:1/api/chat
+      openai:
+        ocr-url: http://127.0.0.1:1/v1/chat/completions
+    models:
+      - id: gemma4:latest
+        label: Gemma 4 (Ollama)
+        provider: OLLAMA
+        supports-chat: true
+        supports-ocr: true
+      - id: qwen3.5-397b-a17b
+        label: Qwen 3.5 (OpenAI)
+        provider: OPENAI
+        supports-chat: true
+        supports-ocr: true
 
 # Fast-fail invalid URL to prevent real HTTP currency calls
 currency:
@@ -66,8 +90,6 @@ currency:
 
 ocr:
   api:
-    url: http://127.0.0.1:1
-    model: test-model
     api-key: test-key
     prompt: "test prompt"
 

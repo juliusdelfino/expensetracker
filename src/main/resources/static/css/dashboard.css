@@ -8,7 +8,7 @@
 .chart-click-tooltip {
     position: absolute;
     background: var(--bg-card, #fff);
-    border: 1px solid var(--border, #e0e0e0);
+    border: 1px solid var(--border-color, #e0e0e0);
     border-radius: 8px;
     padding: 0.5rem 0.75rem;
     pointer-events: none;
@@ -39,7 +39,7 @@
     padding: 0.3rem 0.5rem;
     font-size: 0.82rem;
     color: var(--text-light, #666);
-    border-top: 1px solid var(--border, #e0e0e0);
+    border-top: 1px solid var(--border-color, #e0e0e0);
     margin-top: 0.5rem;
     display: flex;
     align-items: center;
@@ -157,6 +157,40 @@
 .upload-zone:hover { border-color: var(--primary); background: rgba(25, 118, 210, 0.06); }
 .upload-zone i { font-size: 3rem; color: var(--primary-light); margin-bottom: 1rem; }
 .upload-zone p { color: var(--text-light); }
+.upload-zone.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: var(--bg);
+    border-color: var(--border-color);
+}
+
+.upload-zone.disabled:hover {
+    border-color: var(--border-color);
+    background: var(--bg);
+}
+
+.ocr-quota-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem 0.9rem;
+    border-radius: var(--radius);
+    background: var(--badge-processing-bg);
+    color: var(--primary-dark);
+    font-size: 0.82rem;
+    line-height: 1.45;
+    flex-wrap: wrap;
+}
+
+.ocr-quota-banner strong {
+    color: inherit;
+}
+
+.ocr-quota-banner.quota-exceeded {
+    background: var(--badge-failed-bg);
+    color: var(--danger);
+}
 
 /* ===================== RECEIPT FILE LIST (batch upload) ===================== */
 .receipt-file-list-header {
@@ -174,6 +208,18 @@
 .receipt-file-size { color: var(--text-light); font-size: 0.75rem; white-space: nowrap; }
 .receipt-file-actions {
     display: flex; gap: 0.75rem; margin-top: 0.75rem; flex-wrap: wrap;
+}
+
+.receipt-file-warning {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.75rem;
+    padding: 0.65rem 0.8rem;
+    border-radius: var(--radius);
+    background: var(--badge-draft-bg);
+    color: var(--warning);
+    font-size: 0.8rem;
 }
 .batch-queue-toggle {
     display: flex;
@@ -275,6 +321,7 @@
 .expense-filters-bar input[type="text"] { flex: 2; min-width: 180px; }
 .expense-filters-bar input[type="date"] { flex: 1; min-width: 130px; }
 .expense-filters-bar select { flex: 1; min-width: 130px; }
+.exp-extra-filters button { flex: 1; min-width: 160px; white-space: nowrap; }
 
 /* ===================== EXPENSE TABLE ===================== */
 .expense-table { width: 100%; border-collapse: collapse; }
@@ -300,15 +347,24 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
-    font-size: 0.65rem;
+    font-size: 1rem;
 }
 .status-processing { background: var(--badge-processing-bg); color: var(--primary); }
 .status-completed { background: var(--badge-completed-bg); color: var(--success); }
 .status-failed { background: var(--badge-failed-bg); color: var(--danger); }
 .status-draft { background: var(--badge-draft-bg); color: var(--warning); }
+
+/* Keep store logos visually aligned with the original Font Awesome icon size. */
+.status-inline-logo {
+    width: 1.5rem;
+    height: 1.5rem;
+    object-fit: contain;
+    display: block;
+    border-radius: 1rem;
+}
 
 /* Pagination */
 .pagination-bar {

@@ -10,6 +10,7 @@ import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.service.ChatService;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -33,7 +34,7 @@ public class ChatController {
     @PostMapping
     public ResponseEntity<?> sendMessage(@RequestBody @Valid ChatMessageRequest body, HttpSession session) {
         Long userId = getUserId(session);
-        if (userId == null) return ResponseEntity.status(401).body(new ErrorResponse("Not authenticated"));
+        if (userId == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse("Not authenticated"));
 
         String message = body.message();
         if (message == null || message.isBlank()) {
@@ -66,7 +67,7 @@ public class ChatController {
             @RequestParam(defaultValue = "0") int offset,
             HttpSession session) {
         Long userId = getUserId(session);
-        if (userId == null) return ResponseEntity.status(401).body(new ErrorResponse("Not authenticated"));
+        if (userId == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse("Not authenticated"));
 
         List<ChatMessage> page = chatService.getHistoryPage(userId, limit, offset);
         long total = chatService.countHistory(userId);
