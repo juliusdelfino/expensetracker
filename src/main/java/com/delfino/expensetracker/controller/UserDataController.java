@@ -11,6 +11,7 @@ import com.delfino.expensetracker.service.UserExportService;
 import com.delfino.expensetracker.service.UserTrashService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -55,7 +56,7 @@ public class UserDataController {
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (AuthorizationDeniedException e) {
-            return ResponseEntity.status(403).body(new ErrorResponse("Access denied"));
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse("Access denied"));
         }
     }
 
@@ -70,7 +71,7 @@ public class UserDataController {
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (AuthorizationDeniedException e) {
-            return ResponseEntity.status(403).body(new ErrorResponse("Access denied"));
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse("Access denied"));
         }
     }
 
@@ -83,7 +84,7 @@ public class UserDataController {
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (AuthorizationDeniedException e) {
-            return ResponseEntity.status(403).body(new ErrorResponse("Access denied"));
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse("Access denied"));
         }
     }
 
@@ -117,7 +118,7 @@ public class UserDataController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (IllegalStateException e) {
-            return ResponseEntity.status(500).body(new ErrorResponse(e.getMessage()));
+            return ResponseEntity.internalServerError().body(new ErrorResponse(e.getMessage()));
         }
     }
 }

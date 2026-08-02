@@ -13,6 +13,7 @@ import com.delfino.expensetracker.model.UserRole;
 import com.delfino.expensetracker.repository.UserRepository;
 import com.delfino.expensetracker.service.SupportedCurrencyService;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -83,7 +84,7 @@ public class AuthController {
                             u.getBaseCurrency()
                     ));
                 })
-                .orElse(ResponseEntity.status(401).body(new ErrorResponse("Invalid credentials")));
+                .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse("Invalid credentials")));
     }
 
     @PostMapping("/logout")
@@ -107,6 +108,6 @@ public class AuthController {
                         u.getRole(),
                         u.getAiModel()
                 )))
-                .orElse(ResponseEntity.status(401).body(new ErrorResponse("User not found")));
+                .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse("User not found")));
     }
 }

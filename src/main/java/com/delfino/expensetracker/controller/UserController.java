@@ -84,7 +84,7 @@ public class UserController {
         long userId = userToken.getUserId();
 
         User user = userRepository.findById(userId).orElse(null);
-        if (user == null) return ResponseEntity.status(404).build();
+        if (user == null) return ResponseEntity.notFound().build();
 
         if (body.email() != null) user.setEmail(body.email());
         if (body.phoneNumber() != null) user.setPhoneNumber(body.phoneNumber());
