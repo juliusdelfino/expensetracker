@@ -199,6 +199,19 @@ function updateChartStatusBar(statusBarId, label, value, navUrl) {
     el.innerHTML = `<span class="chart-status-info"><strong>${label}</strong>: ${value}</span>${linkHtml}`;
 }
 
+function buildExpensesNavUrl(extraParams = {}) {
+    const params = new URLSearchParams();
+    const currentPeriod = document.getElementById('homeHeroPeriod')?.value || document.getElementById('deskHeroPeriod')?.value || 'all';
+    const currentParams = new URLSearchParams(buildFullFilterParams(currentPeriod));
+    for (const [key, value] of currentParams.entries()) {
+        params.append(key, value);
+    }
+    Object.entries(extraParams).forEach(([key, value]) => {
+        if (value != null && value !== '') params.set(key, value);
+    });
+    return '#/expenses' + (params.toString() ? '?' + params.toString() : '');
+}
+
 function createTimelineChart(canvasId, chartKey, data) {
     const tc = document.getElementById(canvasId);
     if (!tc) return;
@@ -220,7 +233,7 @@ function createTimelineChart(canvasId, chartKey, data) {
                 const idx = elements[0].index;
                 const label = timelineLabels[idx];
                 const value = timelineValues[idx];
-                const navUrl = label ? '#/expenses?startDate=' + label + '&endDate=' + label : null;
+                const navUrl = label ? buildExpensesNavUrl({ startDate: label, endDate: label }) : null;
                 updateChartStatusBar(canvasId + 'Status', label, value, navUrl);
             }
         }
@@ -239,7 +252,7 @@ async function renderRecentExpenses(elementId, count, filterParams) {
         const recent = allExpenses.slice(0, count);
         el.innerHTML = recent.length ? recent.map(e => `
             <a href="#/expenses/${e.urlId}" class="expense-mini-card">
-                <div class="mini-card-icon"><i class="fa-solid fa-${categoryIcon(e.category)}"></i></div>
+                <div class="mini-card-icon">${recentExpenseIconHtml(e)}</div>
                 <div class="mini-card-info">
                     <div class="mini-card-category">${e.displayName || e.category || 'Uncategorized'}</div>
                     <div class="mini-card-date">${e.transactionDatetime ? new Date(e.transactionDatetime).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}</div>
@@ -247,6 +260,18 @@ async function renderRecentExpenses(elementId, count, filterParams) {
                 <div class="mini-card-amount">${e.amount != null ? Number(e.amount).toFixed(2) : '-'} ${e.currency || ''}</div>
             </a>`).join('') : '<p style="color:var(--text-light); text-align:center; padding:1rem;">No expenses yet</p>';
     }
+}
+
+function recentExpenseIconHtml(expense) {
+    if (expense?.status === 'COMPLETED' && expense.storeWebsite && appConfig?.logoDevToken) {
+        const domain = getRootDomain(expense.storeWebsite);
+        if (domain) {
+            const label = esc(expense.storeName || 'Store');
+            return `<img class="mini-card-logo" src="https://img.logo.dev/${encodeURIComponent(domain)}?token=${encodeURIComponent(appConfig.logoDevToken)}" alt="${label}" title="${label}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block'">
+                    <i class="fa-solid fa-store mini-card-logo-fallback" style="display:none"></i>`;
+        }
+    }
+    return `<i class="fa-solid fa-${categoryIcon(expense?.category)}"></i>`;
 }
 
 function renderTopShops(elementId, topShops) {
@@ -588,7 +613,7 @@ function createCategoryChart(canvasId, chartKey, data) {
                     const idx = elements[0].index;
                     const label = catLabels[idx];
                     const value = catValues[idx];
-                    const navUrl = label ? '#/expenses?category=' + encodeURIComponent(label) : null;
+                    const navUrl = label ? buildExpensesNavUrl({ category: label }) : null;
                     updateChartStatusBar(canvasId + 'Status', label, value, navUrl);
                 }
             }
@@ -605,7 +630,7 @@ function createCategoryChart(canvasId, chartKey, data) {
                     const idx = elements[0].index;
                     const label = catLabels[idx];
                     const value = catValues[idx];
-                    const navUrl = label ? '#/expenses?category=' + encodeURIComponent(label) : null;
+                    const navUrl = label ? buildExpensesNavUrl({ category: label }) : null;
                     updateChartStatusBar(canvasId + 'Status', label, value, navUrl);
                 }
             }

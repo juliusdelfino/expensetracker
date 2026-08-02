@@ -44,7 +44,7 @@ spring:
     mcp:
       server:
         name: expense-tracker-mcp-test
-        version: 1.0.0
+        version: ${project.version}
     # Disable Spring AI retry backoff so WireMock connection errors fail fast
     retry:
       max-attempts: 1

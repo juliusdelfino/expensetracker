@@ -29,6 +29,7 @@ public record EnrichedExpense(
         LocalDateTime scannedAt,
         String urlId,
         String storeName,
+        String storeWebsite,
         String country,
         String countryName,
         String displayName,
@@ -60,6 +61,7 @@ public record EnrichedExpense(
         private LocalDateTime scannedAt;
         private String urlId;
         private String storeName;
+        private String storeWebsite;
         private String country;
         private String countryName;
         private String displayName;
@@ -86,6 +88,7 @@ public record EnrichedExpense(
         public Builder scannedAt(LocalDateTime v) { this.scannedAt = v; return this; }
         public Builder urlId(String v) { this.urlId = v; return this; }
         public Builder storeName(String v) { this.storeName = v; return this; }
+        public Builder storeWebsite(String v) { this.storeWebsite = v; return this; }
         public Builder country(String v) { this.country = v; return this; }
         public Builder countryName(String v) { this.countryName = v; return this; }
         public Builder displayName(String v) { this.displayName = v; return this; }
@@ -95,7 +98,7 @@ public record EnrichedExpense(
             return new EnrichedExpense(id, userId, type, transactionDatetime, amount, currency,
                     amountInBase, exchangeRate, receiptNumber, category, tags, notes, status,
                     imagePath, attachments, deleted, createdAt, updatedAt, scannedAt, urlId,
-                    storeName, country, countryName, displayName, matchingItems);
+                    storeName, storeWebsite, country, countryName, displayName, matchingItems);
         }
     }
 }

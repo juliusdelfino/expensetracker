@@ -321,6 +321,7 @@
 .expense-filters-bar input[type="text"] { flex: 2; min-width: 180px; }
 .expense-filters-bar input[type="date"] { flex: 1; min-width: 130px; }
 .expense-filters-bar select { flex: 1; min-width: 130px; }
+.exp-extra-filters button { flex: 1; min-width: 160px; white-space: nowrap; }
 
 /* ===================== EXPENSE TABLE ===================== */
 .expense-table { width: 100%; border-collapse: collapse; }
@@ -346,15 +347,24 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
-    font-size: 0.65rem;
+    font-size: 1rem;
 }
 .status-processing { background: var(--badge-processing-bg); color: var(--primary); }
 .status-completed { background: var(--badge-completed-bg); color: var(--success); }
 .status-failed { background: var(--badge-failed-bg); color: var(--danger); }
 .status-draft { background: var(--badge-draft-bg); color: var(--warning); }
+
+/* Keep store logos visually aligned with the original Font Awesome icon size. */
+.status-inline-logo {
+    width: 1.5rem;
+    height: 1.5rem;
+    object-fit: contain;
+    display: block;
+    border-radius: 1rem;
+}
 
 /* Pagination */
 .pagination-bar {

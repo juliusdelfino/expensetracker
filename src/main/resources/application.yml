@@ -127,7 +127,7 @@ spring:
     mcp:
       server:
         name: expense-tracker-mcp
-        version: 1.0.0
+        version: ${project.version}
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/expensetracker}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}

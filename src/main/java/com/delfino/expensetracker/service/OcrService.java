@@ -138,24 +138,6 @@ public class OcrService {
         return new OcrRequest(imageBytes, mediaType, requestBody);
     }
 
-    public Map<String, Object> buildRequestBody(OcrModelResolver.ResolvedOcrModel resolvedOcrModel,
-                                                List<byte[]> imageBytesList, String mediaType) {
-        if (imageBytesList == null || imageBytesList.isEmpty()) {
-            throw new IllegalArgumentException("No image data provided");
-        }
-        if (!IMAGE_MEDIA_TYPES.contains(mediaType)) {
-            throw new IllegalArgumentException("Unsupported media type: " + mediaType);
-        }
-        return resolvedOcrModel.ocrProvider().buildVisionRequestBody(
-                resolvedOcrModel.modelId(),
-                resolvedOcrModel.prompt(),
-                imageBytesList,
-                mediaType,
-                toolSchema,
-                resolvedOcrModel.useTools(),
-                resolvedOcrModel.disableThinking());
-    }
-
     // ─────────────────────────────────────────────────────────────────────
     // Receipt processing — unified tool-calling loop
     // ─────────────────────────────────────────────────────────────────────
@@ -183,7 +165,7 @@ public class OcrService {
             aiUsageService.consume(user.getId(), com.delfino.expensetracker.model.AiUsageType.OCR);
             log.info("Successfully processed receipt for expense {}", expenseId);
 
-        } catch (IOException | InterruptedException e) {
+        } catch (Exception e) { //must handle ANY error that can possibly occur (DB or AI-provider related)
             log.error("Failed to process receipt for expense {}", expenseId, e);
             markFailed(expenseId, e);
         }
@@ -361,7 +343,7 @@ public class OcrService {
             try {
                 expense.setTransactionDatetime(LocalDateTime.parse(parsed.transactionDatetime(),
                         DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-            } catch (Exception ignored) {} // noinspection CommentedOutCode
+            } catch (Exception ignored) {}
         }
         if (parsed.amount() != null) expense.setAmount(parsed.amount());
         if (parsed.currency() != null) expense.setCurrency(parsed.currency());

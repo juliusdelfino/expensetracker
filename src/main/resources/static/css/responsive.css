@@ -52,7 +52,12 @@
         font-size: 0.75rem;
         padding: 0.3rem 0.25rem;
     }
-    .exp-extra-filters select { flex: 1 1 calc(50% - 0.15rem); min-width: 0 !important; font-size: 0.8rem; }
+    .exp-extra-filters select,
+    .exp-extra-filters button {
+        flex: 1 1 calc(50% - 0.15rem);
+        min-width: 0 !important;
+        font-size: 0.8rem;
+    }
 
     /* Hide CSV, JSON, Deleted buttons on mobile */
     .expense-desktop-only { display: none !important; }
