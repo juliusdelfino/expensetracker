@@ -14,6 +14,8 @@ import com.delfino.expensetracker.repository.ChatMessageRepository;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.UserRepository;
+import com.delfino.expensetracker.service.mcp.ChatReportContext;
+import com.delfino.expensetracker.service.mcp.ChatReportContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -53,6 +55,7 @@ public class ChatService {
     private final AiUsageService aiUsageService;
     private final MeterRegistry meterRegistry;
     private final Map<String, ChatClient> chatClients = new HashMap<>();
+    private final ChatReportContext chatReportContext;
 
     public ChatService(ChatMessageRepository chatMessageRepository, ExpenseService expenseService,
                        ExpenseRepository expenseRepository, UserRepository userRepository,
@@ -61,7 +64,8 @@ public class ChatService {
                        ChatBotProperties chatBotProperties,
                        ExpenseItemRepository expenseItemRepository,
                        AiUsageService aiUsageService,
-                       MeterRegistry meterRegistry) {
+                       MeterRegistry meterRegistry,
+                       ChatReportContext chatReportContext) {
         this.chatMessageRepository = chatMessageRepository;
         this.expenseService = expenseService;
         this.expenseRepository = expenseRepository;
@@ -73,6 +77,7 @@ public class ChatService {
         this.expenseItemRepository = expenseItemRepository;
         this.aiUsageService = aiUsageService;
         this.meterRegistry = meterRegistry;
+        this.chatReportContext = chatReportContext;
     }
 
     public List<ChatMessage> getHistoryPage(Long userId, int limit, int offset) {
@@ -99,6 +104,7 @@ public class ChatService {
                     chatQuota.quota(),
                     chatQuota.requestedUnits());
         }
+        chatReportContext.clear();
 
         // Save user message
         ChatMessage userMsg = new ChatMessage();
@@ -123,7 +129,7 @@ public class ChatService {
 
             // Try to parse as JSON (expense-creation flow)
             ProcessedResponse result = processLlmResponse(llmResponse, userId, user);
-            return saveBotMessage(userId, result.botText(), result.savedExpenseIds());
+            return saveBotMessage(userId, result.botText(), result.savedExpenseIds(), chatReportContext.getLinkedReportIds());
 
         } catch (AiQuotaExceededException e) {
             throw e;
@@ -132,6 +138,7 @@ public class ChatService {
             return saveBotMessage(userId,
                     "Sorry, I had trouble processing that. Could you try rephrasing? " +
                             "For example: \"lunch 12.50 SGD\" or \"How much did I spend on groceries last month?\"",
+                    List.of(),
                     List.of());
         }
     }
@@ -337,12 +344,13 @@ public class ChatService {
         return cleaned;
     }
 
-    private ChatMessage saveBotMessage(Long userId, String text, List<Long> linkedExpenseIds) {
+    private ChatMessage saveBotMessage(Long userId, String text, List<Long> linkedExpenseIds, List<Long> linkedReportIds) {
         ChatMessage botMsg = new ChatMessage();
         botMsg.setUserId(userId);
         botMsg.setRole("BOT");
         botMsg.setText(text);
         botMsg.setLinkedExpenseIds(linkedExpenseIds);
+        botMsg.setLinkedReportIds(linkedReportIds);
         botMsg.setCreatedAt(LocalDateTime.now());
         chatMessageRepository.save(botMsg);
         return botMsg;

@@ -3,6 +3,8 @@ package com.delfino.expensetracker.controller;
 import com.delfino.expensetracker.BaseControllerTest;
 import com.delfino.expensetracker.model.ChatMessage;
 import com.delfino.expensetracker.model.Expense;
+import com.delfino.expensetracker.model.Report;
+import com.delfino.expensetracker.model.ReportGroupBy;
 import com.delfino.expensetracker.model.User;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import org.junit.jupiter.api.Test;
@@ -78,7 +80,9 @@ class ChatControllerTest extends BaseControllerTest {
                 .andExpect(jsonPath("$.message").exists())
                 .andExpect(jsonPath("$.message.text").isString())
                 .andExpect(jsonPath("$.expenseCards").isArray())
-                .andExpect(jsonPath("$.expenseCards.length()").value(0));
+                .andExpect(jsonPath("$.expenseCards.length()").value(0))
+                .andExpect(jsonPath("$.reportCards").isArray())
+                .andExpect(jsonPath("$.reportCards.length()").value(0));
 
         // Both user message and bot reply should be persisted
         assertThat(chatMessageRepository.count()).isEqualTo(2);
@@ -107,6 +111,7 @@ class ChatControllerTest extends BaseControllerTest {
                         .content(objectMapper.writeValueAsString(Map.of("message", "lunch 10 USD"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.expenseCards.length()").value(1))
+                .andExpect(jsonPath("$.reportCards.length()").value(0))
                 .andExpect(jsonPath("$.expenseCards[0].category").value("Lunch"))
                 .andExpect(jsonPath("$.expenseCards[0].urlId").isString());
 
@@ -189,14 +194,15 @@ class ChatControllerTest extends BaseControllerTest {
                 .andExpect(jsonPath("$.messages.length()").value(0))
                 .andExpect(jsonPath("$.hasMore").value(false))
                 .andExpect(jsonPath("$.total").value(0))
-                .andExpect(jsonPath("$.expenses").isMap());
+                .andExpect(jsonPath("$.expenses").isMap())
+                .andExpect(jsonPath("$.reports").isMap());
     }
 
     @Test
     void getHistory_withMessages_returnsChronologicalList() throws Exception {
         User user = createTestUser("alice", "pass");
-        saveChatMessage(user.getId(), "USER", "What did I spend?", List.of());
-        saveChatMessage(user.getId(), "BOT", "You spent $50 on Food.", List.of());
+        saveChatMessage(user.getId(), "USER", "What did I spend?", List.of(), List.of());
+        saveChatMessage(user.getId(), "BOT", "You spent $50 on Food.", List.of(), List.of());
         MockHttpSession session = loginAs("alice", "pass");
 
         mockMvc.perform(get("/api/chat/history?limit=10&offset=0").session(session))
@@ -210,7 +216,7 @@ class ChatControllerTest extends BaseControllerTest {
     void getHistory_withLinkedExpenses_populatesExpenseMap() throws Exception {
         User user = createTestUser("alice", "pass");
         Expense expense = createTestExpense(user.getId(), "Food", BigDecimal.TEN, "USD");
-        saveChatMessage(user.getId(), "BOT", "Here is your expense.", List.of(expense.getId()));
+        saveChatMessage(user.getId(), "BOT", "Here is your expense.", List.of(expense.getId()), List.of());
         MockHttpSession session = loginAs("alice", "pass");
 
         mockMvc.perform(get("/api/chat/history").session(session))
@@ -222,10 +228,24 @@ class ChatControllerTest extends BaseControllerTest {
     }
 
     @Test
+    void getHistory_withLinkedReports_populatesReportMap() throws Exception {
+        User user = createTestUser("alice", "pass");
+        Report report = saveReport(user.getId(), "Japan Trip Report");
+        saveChatMessage(user.getId(), "BOT", "I created a report for your trip.", List.of(), List.of(report.getId()));
+        MockHttpSession session = loginAs("alice", "pass");
+
+        mockMvc.perform(get("/api/chat/history").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reports").isMap())
+                .andExpect(jsonPath("$.reports['" + report.getId() + "'].title").value("Japan Trip Report"))
+                .andExpect(jsonPath("$.reports['" + report.getId() + "'].groupBy").value("KEYWORD"));
+    }
+
+    @Test
     void getHistory_pagination_hasMoreWhenNotLastPage() throws Exception {
         User user = createTestUser("alice", "pass");
         for (int i = 0; i < 5; i++) {
-            saveChatMessage(user.getId(), "USER", "Message " + i, List.of());
+            saveChatMessage(user.getId(), "USER", "Message " + i, List.of(), List.of());
         }
         MockHttpSession session = loginAs("alice", "pass");
 
@@ -237,14 +257,30 @@ class ChatControllerTest extends BaseControllerTest {
 
     // ---- Private helper ----
 
-    private ChatMessage saveChatMessage(long userId, String role, String text, List<Long> linkedIds) {
+    private ChatMessage saveChatMessage(long userId, String role, String text, List<Long> linkedExpenseIds, List<Long> linkedReportIds) {
         ChatMessage msg = new ChatMessage();
         msg.setUserId(userId);
         msg.setRole(role);
         msg.setText(text);
-        msg.setLinkedExpenseIds(linkedIds != null ? linkedIds : List.of());
+        msg.setLinkedExpenseIds(linkedExpenseIds != null ? linkedExpenseIds : List.of());
+        msg.setLinkedReportIds(linkedReportIds != null ? linkedReportIds : List.of());
         msg.setCreatedAt(LocalDateTime.now());
         return chatMessageRepository.save(msg);
+    }
+
+    private Report saveReport(long userId, String title) {
+        Report report = new Report();
+        report.setUserId(userId);
+        report.setTitle(title);
+        report.setDescription("Generated from chat");
+        report.setExpenseIds(List.of());
+        report.setChartDefinitions(objectMapper.createArrayNode());
+        report.setGroupBy(ReportGroupBy.KEYWORD);
+        report.setFilterSnapshot(objectMapper.createObjectNode().put("search", "japan"));
+        report.setInsights(objectMapper.createArrayNode());
+        report.setCreatedAt(LocalDateTime.now());
+        report.setUpdatedAt(LocalDateTime.now());
+        return reportRepository.save(report);
     }
 }
 

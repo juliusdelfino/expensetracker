@@ -27,6 +27,12 @@ public class ChatMessage {
     @BatchSize(size = 50)
     private List<Long> linkedExpenseIds = new ArrayList<>(); // store original Long strings
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "chat_message_linked_reports", joinColumns = @JoinColumn(name = "chat_message_id"))
+    @Column(name = "report_id")
+    @BatchSize(size = 50)
+    private List<Long> linkedReportIds = new ArrayList<>();
+
     private LocalDateTime createdAt;
 
     public ChatMessage() {}
@@ -45,6 +51,9 @@ public class ChatMessage {
 
     public List<Long> getLinkedExpenseIds() { return linkedExpenseIds; }
     public void setLinkedExpenseIds(List<Long> linkedExpenseIds) { this.linkedExpenseIds = linkedExpenseIds; }
+
+    public List<Long> getLinkedReportIds() { return linkedReportIds; }
+    public void setLinkedReportIds(List<Long> linkedReportIds) { this.linkedReportIds = linkedReportIds; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
