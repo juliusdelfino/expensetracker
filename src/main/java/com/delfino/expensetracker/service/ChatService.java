@@ -15,7 +15,7 @@ import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.UserRepository;
 import com.delfino.expensetracker.service.mcp.ChatReportContext;
-import com.delfino.expensetracker.service.mcp.ChatReportContext;
+import com.delfino.expensetracker.util.MoneyUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -292,9 +292,13 @@ public class ChatService {
             ExpenseItem item = new ExpenseItem();
             item.setExpenseId(expenseId);
             item.setItemName(itemDto.itemName() != null ? itemDto.itemName() : "");
-            item.setQuantity(itemDto.quantity() != null ? itemDto.quantity() : BigDecimal.ONE);
-            item.setUnitPrice(itemDto.unitPrice() != null ? itemDto.unitPrice() : BigDecimal.ZERO);
-            item.setAdjustment(itemDto.adjustment() != null ? itemDto.adjustment() : BigDecimal.ZERO);
+            // Round quantity/unitPrice to the precision allowed by ExpenseItem, folding any
+            // rounding delta into adjustment so quantity*unitPrice+adjustment == original total.
+            MoneyUtils.LineItemPricing pricing = MoneyUtils.normalizeLineItemPricing(
+                    itemDto.quantity(), itemDto.unitPrice(), itemDto.adjustment());
+            item.setQuantity(pricing.quantity());
+            item.setUnitPrice(pricing.unitPrice());
+            item.setAdjustment(pricing.adjustment());
             item.setDeleted(false);
             items.add(item);
         }

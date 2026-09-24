@@ -28,9 +28,9 @@ async function renderExpenseList(app) {
                 <h2 style="color:var(--primary-dark)"><i class="fa-solid fa-receipt"></i> Expenses</h2>
             </div>
             <div class="action-bar-right">
-                <button class="btn btn-primary btn-sm" onclick="openGenerateReportModal(getCurrentExpenseReportFilters())">
-                    <i class="fa-solid fa-chart-line"></i> Report
-                </button>
+                <a class="btn btn-primary btn-sm" href="#/expenses/new">
+                    <i class="fa-solid fa-plus"></i> New Expense
+                </a>
                 <button class="btn btn-outline btn-sm expense-desktop-only" onclick="exportExpenses('csv')">
                     <i class="fa-solid fa-file-csv"></i> CSV
                 </button>

@@ -5,6 +5,14 @@
 let _reportOptionsCache = null;
 let _reportChartKeys = [];
 let _reportsAutoOpenHandled = false;
+// Report detail state — kept across per-section saves
+let _reportEditKeywords = [];
+let _reportCurrentId = null;
+let _reportCurrentGroupBy = null;
+let _reportCurrentTitle = '';
+let _reportCurrentDescription = '';
+let _reportCurrentFilters = {};
+let _reportCurrentChartDefs = [];
 
 function getReportsHashQuery() {
     return new URLSearchParams((window.location.hash.split('?')[1] || ''));
@@ -58,27 +66,13 @@ async function renderReportsPage(app) {
     <div class="container">
         <div class="action-bar reports-action-bar">
             <div class="action-bar-left">
-                <h2 style="color:var(--primary-dark)"><i class="fa-solid fa-chart-line"></i> Reports</h2>
+                <h2 class="reports-page-title" style="color:var(--primary-dark)"><i class="fa-solid fa-chart-line"></i> Reports</h2>
                 <p class="reports-subtitle">Generate saved reports from your expense filters and revisit them anytime.</p>
             </div>
             <div class="action-bar-right">
-                <button class="btn btn-primary" onclick="openGenerateReportModal()">
+                <button class="btn btn-primary btn-sm" onclick="openGenerateReportModal()">
                     <i class="fa-solid fa-wand-magic-sparkles"></i> Generate Report
                 </button>
-            </div>
-        </div>
-
-        <div class="card reports-help-card">
-            <div class="reports-help-grid">
-                <div>
-                    <div class="card-title" style="margin-bottom:0.5rem;"><i class="fa-solid fa-filter-circle-dollar"></i> What you can generate</div>
-                    <p class="reports-copy">Create category, location, or keyword reports across any date range. Reports are saved snapshots with charts and insights.</p>
-                </div>
-                <div class="reports-quick-pills">
-                    <span class="badge badge-processing"><i class="fa-solid fa-layer-group"></i> Categories</span>
-                    <span class="badge badge-completed"><i class="fa-solid fa-location-dot"></i> Store locations</span>
-                    <span class="badge badge-draft"><i class="fa-solid fa-key"></i> Keywords</span>
-                </div>
             </div>
         </div>
 
@@ -103,28 +97,30 @@ function renderReportsListCards(reports) {
             <i class="fa-solid fa-chart-line"></i>
             <h3>No reports yet</h3>
             <p>Create your first report from filters, categories, or store locations.</p>
-            <button class="btn btn-primary" onclick="openGenerateReportModal()"><i class="fa-solid fa-plus"></i> Generate Report</button>
+            <button class="btn btn-primary btn-sm" onclick="openGenerateReportModal()"><i class="fa-solid fa-plus"></i> Generate Report</button>
         </div>`;
     }
 
     return `<div class="reports-list-grid">${reports.map(report => `
-        <div class="report-card">
+        <div class="report-card report-card-clickable" role="link" tabindex="0"
+             onclick="navigate('#/reports/${report.id}')"
+             onkeydown="if(event.key==='Enter' || event.key===' '){ event.preventDefault(); navigate('#/reports/${report.id}'); }">
             <div class="report-card-top">
                 <div>
                     <div class="report-card-title">${esc(report.title)}</div>
                     <div class="report-card-meta">
                         <span><i class="fa-solid fa-layer-group"></i> ${formatGroupBy(report.groupBy)}</span>
+                        <span><i class="fa-solid fa-wallet"></i> ${formatMoney(report.totalAmount, currentUser?.baseCurrency || 'USD')}</span>
                         <span><i class="fa-solid fa-receipt"></i> ${report.expenseCount || 0} expense${report.expenseCount === 1 ? '' : 's'}</span>
                     </div>
                 </div>
                 <span class="report-card-date">${formatReportDate(report.createdAt)}</span>
             </div>
-            <p class="report-card-desc">${esc(report.description || 'No description provided.')}</p>
             <div class="report-card-actions">
-                <a class="btn btn-primary btn-sm" href="#/reports/${report.id}"><i class="fa-solid fa-eye"></i> Open</a>
-                <button class="btn btn-outline btn-sm" onclick="exportReportPdf(${report.id})"><i class="fa-solid fa-file-pdf"></i> PDF</button>
-                <button class="btn btn-outline btn-sm" onclick="openGenerateReportModal({ groupBy: '${esc(report.groupBy || 'KEYWORD')}' })"><i class="fa-solid fa-copy"></i> New Similar</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteReportFromList(${report.id})"><i class="fa-solid fa-trash"></i> Delete</button>
+                <button class="btn btn-outline btn-sm btn-icon report-list-action-desktop" title="Export PDF"
+                        onclick="event.stopPropagation(); exportReportPdf(${report.id})"><i class="fa-solid fa-file-pdf"></i></button>
+                <button class="btn btn-danger btn-sm btn-icon report-list-action-desktop" title="Delete"
+                        onclick="event.stopPropagation(); deleteReportFromList(${report.id})"><i class="fa-solid fa-trash"></i></button>
             </div>
         </div>`).join('')}</div>`;
 }
@@ -146,13 +142,42 @@ async function renderReportDetail(app, reportId) {
     }
 
     const canViewMatchingExpenses = report.filterSnapshot?.mode === 'FILTERS';
+    const filters = extractReportFilters(report.filterSnapshot);
+    const chartDefinitions = normalizeReportChartDefinitions(report.chartDefinitions, report.groupBy);
+
+    // Store module-level state for cross-section saves
+    _reportCurrentId = report.id;
+    _reportCurrentGroupBy = report.groupBy;
+    _reportCurrentTitle = report.title || '';
+    _reportCurrentDescription = report.description || '';
+    _reportCurrentFilters = filters;
+    _reportCurrentChartDefs = chartDefinitions;
+    _reportEditKeywords = [...filters.searchKeywords];
+
     app.innerHTML = `
     <div class="container">
+        <!-- ── Header: read-only title + description ── -->
         <div class="action-bar reports-action-bar reports-detail-header">
-            <div class="action-bar-left">
+            <div class="action-bar-left" style="flex:1; min-width:0;">
                 <a href="#/reports" class="reports-back-link"><i class="fa-solid fa-arrow-left"></i> Reports</a>
-                <h2 style="color:var(--primary-dark)">${esc(report.title || 'Report')}</h2>
-                <p class="reports-subtitle">${esc(report.description || 'Saved report snapshot')}</p>
+
+                <!-- Read-only view -->
+                <div id="reportTitleView" class="report-title-view-row">
+                    <h2 style="color:var(--primary-dark); margin:0;">${esc(report.title || 'Report')}</h2>
+                    <button class="btn btn-outline btn-sm btn-icon report-section-edit-btn" title="Edit title & description" onclick="enableReportTitleEdit()"><i class="fa-solid fa-pen"></i></button>
+                </div>
+                ${report.description ? `<p id="reportDescView" class="reports-subtitle" style="margin:0;">${esc(report.description)}</p>` : `<p id="reportDescView" class="reports-subtitle report-placeholder-text" style="margin:0;">No description</p>`}
+
+                <!-- Edit mode (hidden) -->
+                <div id="reportTitleEditBlock" style="display:none; width:100%;">
+                    <input id="reportTitleInput" class="form-control form-control-sm report-inline-input" maxlength="255" value="${esc(report.title || '')}" placeholder="Report title">
+                    <textarea id="reportDescriptionInput" class="form-control form-control-sm report-inline-textarea" maxlength="5000" placeholder="Description (optional)">${esc(report.description || '')}</textarea>
+                    <div class="report-section-actions">
+                        <button class="btn btn-primary btn-sm" onclick="saveReportTitleEdit()"><i class="fa-solid fa-save"></i> Save</button>
+                        <button class="btn btn-outline btn-sm" onclick="cancelReportTitleEdit()">Cancel</button>
+                    </div>
+                </div>
+
                 <div class="report-meta-row">
                     <span><i class="fa-solid fa-layer-group"></i> ${formatGroupBy(report.groupBy)}</span>
                     <span><i class="fa-solid fa-calendar"></i> ${formatReportDate(report.createdAt)}</span>
@@ -160,15 +185,52 @@ async function renderReportDetail(app, reportId) {
                 </div>
             </div>
             <div class="action-bar-right report-detail-actions">
-                <button class="btn btn-primary" onclick="openGenerateReportModal()"><i class="fa-solid fa-plus"></i> New Report</button>
-                <button class="btn btn-outline" onclick="exportReportPdf(${report.id})"><i class="fa-solid fa-file-pdf"></i> Export PDF</button>
-                ${canViewMatchingExpenses ? `<button class="btn btn-outline" onclick="openReportMatchingExpenses(${report.id})"><i class="fa-solid fa-table-list"></i> View Matching Expenses</button>` : ''}
-                <button class="btn btn-danger" onclick="deleteReportAndReturn(${report.id})"><i class="fa-solid fa-trash"></i> Delete</button>
+                <div class="action-menu-wrap" id="reportActionMenuWrap">
+                    <button class="btn btn-outline btn-sm btn-icon" onclick="toggleReportDetailMenu()" title="Actions"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                    <div class="action-dropdown" id="reportActionDropdown" style="display:none;">
+                        <button class="action-dropdown-item" onclick="closeReportDetailMenu(); exportReportPdf(${report.id})"><i class="fa-solid fa-file-pdf"></i> Export PDF</button>
+                        ${canViewMatchingExpenses ? `<button class="action-dropdown-item" onclick="closeReportDetailMenu(); openReportMatchingExpenses(${report.id})"><i class="fa-solid fa-table-list"></i> View Matching Expenses</button>` : ''}
+                        <button class="action-dropdown-item action-dropdown-danger" onclick="closeReportDetailMenu(); deleteReportAndReturn(${report.id})"><i class="fa-solid fa-trash"></i> Delete</button>
+                    </div>
+                </div>
             </div>
         </div>
 
-        ${renderReportFilterSnapshot(report.filterSnapshot)}
+        <!-- ── Filters card ── -->
+        <div class="card report-filter-compact-card">
+            <div class="reports-list-header" style="margin-bottom:0.5rem;">
+                <h3 class="card-title" style="margin:0;"><i class="fa-solid fa-filter"></i> Filters</h3>
+                <button id="reportFilterEditBtn" class="btn btn-outline btn-sm btn-icon report-section-edit-btn" title="Edit filters" onclick="enableReportFilterEdit()"><i class="fa-solid fa-pen"></i></button>
+            </div>
 
+            <!-- Read-only badges -->
+            <div id="reportFilterView">
+                ${renderFilterBadgesHtml(filters)}
+            </div>
+
+            <!-- Edit mode (hidden) -->
+            <div id="reportFilterEditBlock" style="display:none;">
+                <div class="report-filter-compact-grid">
+                    <input id="reportFilterStartDate" type="date" class="form-control form-control-sm" value="${esc(filters.startDate)}" title="Start date">
+                    <input id="reportFilterEndDate" type="date" class="form-control form-control-sm" value="${esc(filters.endDate)}" title="End date">
+                    <input id="reportFilterCategory" type="text" class="form-control form-control-sm" value="${esc(filters.category)}" placeholder="Category">
+                    <input id="reportFilterCountry" type="text" class="form-control form-control-sm" value="${esc(filters.country)}" placeholder="Country">
+                    <input id="reportFilterStoreName" type="text" class="form-control form-control-sm" value="${esc(filters.storeName)}" placeholder="Store">
+                    <input id="reportFilterCity" type="text" class="form-control form-control-sm" value="${esc(filters.city)}" placeholder="City">
+                </div>
+                <div class="report-keyword-editor" id="reportKeywordEditor"></div>
+                <div class="report-keyword-entry-row">
+                    <input id="reportKeywordInput" type="text" class="form-control form-control-sm" placeholder="Add keyword and press Enter">
+                    <button class="btn btn-outline btn-sm" onclick="addReportKeywordFromInput()"><i class="fa-solid fa-plus"></i> Add</button>
+                </div>
+                <div class="report-section-actions">
+                    <button class="btn btn-primary btn-sm" onclick="saveReportFilterEdit()"><i class="fa-solid fa-save"></i> Save</button>
+                    <button class="btn btn-outline btn-sm" onclick="cancelReportFilterEdit()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Summary cards ── -->
         <div class="reports-summary-grid">
             ${renderSummaryCard('Total Spend', formatMoney(report.summary?.totalAmount, currentUser?.baseCurrency || 'USD'), 'fa-wallet')}
             ${renderSummaryCard('Average', formatMoney(report.summary?.averageAmount, currentUser?.baseCurrency || 'USD'), 'fa-chart-simple')}
@@ -176,26 +238,28 @@ async function renderReportDetail(app, reportId) {
             ${renderSummaryCard('Top Category', report.summary?.topCategory || '—', 'fa-tags')}
             ${renderSummaryCard('Top Location', report.summary?.topLocation || '—', 'fa-location-dot')}
             ${renderSummaryCard('Active Days', String(report.summary?.activeDaysCount ?? 0), 'fa-calendar-days')}
+            ${renderSummaryCard('Covered Dates', formatCoveredDateRange(report.summary?.coveredStartDate, report.summary?.coveredEndDate), 'fa-calendar-range')}
         </div>
 
-        <div class="reports-section-grid">
-            <div class="card">
-                <h3 class="card-title"><i class="fa-solid fa-lightbulb"></i> Insights</h3>
-                <div class="report-insights-list">${renderInsights(report.insights)}</div>
-            </div>
-            <div class="card">
-                <h3 class="card-title"><i class="fa-solid fa-sigma"></i> Report Summary</h3>
-                <div class="report-summary-list">
-                    <div><strong>Covered dates:</strong> ${esc(report.summary?.coveredStartDate || '—')} → ${esc(report.summary?.coveredEndDate || '—')}</div>
-                    <div><strong>Smallest expense:</strong> ${formatMoney(report.summary?.minAmount, currentUser?.baseCurrency || 'USD')}</div>
-                    <div><strong>Expense count:</strong> ${report.summary?.expenseCount ?? 0}</div>
-                </div>
-            </div>
-        </div>
-
+        <!-- ── Charts: read-only grid + edit-charts panel ── -->
         <div class="reports-charts-grid" id="reportChartsGrid">
             ${renderChartShells(report.charts || [])}
         </div>
+
+        <!-- Chart editor (hidden) -->
+        <div id="reportChartEditorCard" class="card" style="display:none; margin-bottom:1.25rem;">
+            <div class="reports-list-header" style="margin-bottom:0.75rem;">
+                <h3 class="card-title" style="margin:0;"><i class="fa-solid fa-chart-column"></i> Edit Charts</h3>
+                <button class="btn btn-outline btn-sm" onclick="addReportChartDefinition()"><i class="fa-solid fa-plus"></i> Add Chart</button>
+            </div>
+            <div id="reportChartEditorList"></div>
+            <div class="report-section-actions" style="margin-top:0.75rem;">
+                <button class="btn btn-primary btn-sm" onclick="saveReportChartEdit()"><i class="fa-solid fa-save"></i> Save Charts</button>
+                <button class="btn btn-outline btn-sm" onclick="cancelReportChartEdit()">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Charts card header edit button (injected after render) -->
 
         <div class="card">
             <div class="reports-list-header">
@@ -206,6 +270,9 @@ async function renderReportDetail(app, reportId) {
         </div>
     </div>`;
 
+    // Inject edit-charts button into charts-grid header by prepending a row above it
+    _injectChartsEditButton(report.id);
+    initReportKeywordEditor();
     renderReportCharts(report.charts || []);
 }
 
@@ -240,6 +307,329 @@ function renderReportFilterSnapshot(filterSnapshot) {
     if (filterSnapshot.mode === 'EXPLICIT_EXPENSE_IDS') badges.push({ label: 'Source', value: 'Manual selection' });
     if (!badges.length) return '';
     return `<div class="card report-filters-card"><div class="card-title"><i class="fa-solid fa-filter"></i> Filters</div><div class="hero-filter-badges">${badges.map(b => `<span class="filter-badge">${esc(b.label)}: <strong>${esc(b.value)}</strong></span>`).join('')}</div></div>`;
+}
+
+function extractReportFilters(filterSnapshot) {
+    const rawKeywords = Array.isArray(filterSnapshot?.searchKeywords)
+        ? filterSnapshot.searchKeywords
+        : [];
+    const fallback = filterSnapshot?.search || '';
+    const normalized = normalizeKeywordValues([...rawKeywords, ...fallback.split(/[,;\n]/)]);
+    return {
+        startDate: filterSnapshot?.startDate || '',
+        endDate: filterSnapshot?.endDate || '',
+        category: filterSnapshot?.category || '',
+        country: filterSnapshot?.country || '',
+        city: filterSnapshot?.city || '',
+        storeName: filterSnapshot?.storeName || '',
+        searchKeywords: normalized
+    };
+}
+
+function normalizeKeywordValues(values) {
+    const unique = new Set();
+    (values || []).forEach(value => {
+        const trimmed = String(value || '').trim();
+        if (!trimmed) return;
+        const key = trimmed.toLowerCase();
+        if (!unique.has(key)) unique.add(key);
+    });
+    return Array.from(unique.values());
+}
+
+// ── Read-only filter badges ────────────────────────────────────────────
+function renderFilterBadgesHtml(filters) {
+    const badges = [];
+    if (filters.startDate) badges.push({ label: 'Start', value: filters.startDate });
+    if (filters.endDate)   badges.push({ label: 'End',   value: filters.endDate });
+    if (filters.category)  badges.push({ label: 'Category', value: filters.category });
+    if (filters.country)   badges.push({ label: 'Country',  value: filters.country });
+    if (filters.city)      badges.push({ label: 'City',     value: filters.city });
+    if (filters.storeName) badges.push({ label: 'Store',    value: filters.storeName });
+    (filters.searchKeywords || []).forEach(k => badges.push({ label: 'Keyword', value: k }));
+    if (!badges.length) return '<span class="reports-count" style="font-style:italic;">No filters applied</span>';
+    return '<div class="hero-filter-badges">' +
+        badges.map(b => `<span class="filter-badge">${esc(b.label)}: <strong>${esc(b.value)}</strong></span>`).join('') +
+        '</div>';
+}
+
+// ── Charts grid edit button injection ─────────────────────────────────
+function _injectChartsEditButton(reportId) {
+    const grid = document.getElementById('reportChartsGrid');
+    if (!grid) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'reports-list-header';
+    wrap.style.marginBottom = '0.75rem';
+    wrap.innerHTML = `<h3 class="card-title" style="margin:0;"><i class="fa-solid fa-chart-column"></i> Charts</h3>
+        <button class="btn btn-outline btn-sm btn-icon report-section-edit-btn" title="Edit charts" onclick="enableReportChartEdit()"><i class="fa-solid fa-pen"></i></button>`;
+    grid.parentNode.insertBefore(wrap, grid);
+}
+
+// ── Title / Description section ────────────────────────────────────────
+function enableReportTitleEdit() {
+    document.getElementById('reportTitleView').style.display = 'none';
+    document.getElementById('reportDescView').style.display = 'none';
+    document.getElementById('reportTitleEditBlock').style.display = 'block';
+    document.getElementById('reportTitleInput')?.focus();
+}
+function cancelReportTitleEdit() {
+    document.getElementById('reportTitleEditBlock').style.display = 'none';
+    document.getElementById('reportTitleView').style.display = '';
+    document.getElementById('reportDescView').style.display = '';
+}
+async function saveReportTitleEdit() {
+    const title = document.getElementById('reportTitleInput')?.value?.trim() || _reportCurrentTitle;
+    const description = document.getElementById('reportDescriptionInput')?.value?.trim() || '';
+    const body = _buildReportUpdateBody({ title, description });
+    const result = await api(`/api/reports/${_reportCurrentId}`, { method: 'PUT', body });
+    if (!result || result.error) { toast(result?.error || 'Failed to update', 'error'); return; }
+    toast('Title updated', 'success');
+    _reportCurrentTitle = result.title || title;
+    _reportCurrentDescription = result.description || description;
+    document.getElementById('reportTitleView').querySelector('h2').textContent = _reportCurrentTitle;
+    const descEl = document.getElementById('reportDescView');
+    if (descEl) {
+        descEl.textContent = _reportCurrentDescription || 'No description';
+        descEl.classList.toggle('report-placeholder-text', !_reportCurrentDescription);
+    }
+    cancelReportTitleEdit();
+}
+
+// ── Filters section ────────────────────────────────────────────────────
+function enableReportFilterEdit() {
+    document.getElementById('reportFilterView').style.display = 'none';
+    document.getElementById('reportFilterEditBtn').style.display = 'none';
+    document.getElementById('reportFilterEditBlock').style.display = 'block';
+    initReportKeywordEditor();
+}
+function cancelReportFilterEdit() {
+    document.getElementById('reportFilterEditBlock').style.display = 'none';
+    document.getElementById('reportFilterView').style.display = '';
+    document.getElementById('reportFilterEditBtn').style.display = '';
+}
+async function saveReportFilterEdit() {
+    const startDate  = document.getElementById('reportFilterStartDate')?.value || '';
+    const endDate    = document.getElementById('reportFilterEndDate')?.value || '';
+    const category   = document.getElementById('reportFilterCategory')?.value?.trim() || '';
+    const country    = document.getElementById('reportFilterCountry')?.value?.trim() || '';
+    const city       = document.getElementById('reportFilterCity')?.value?.trim() || '';
+    const storeName  = document.getElementById('reportFilterStoreName')?.value?.trim() || '';
+    const body = _buildReportUpdateBody({ startDate, endDate, category, country, city, storeName,
+        searchKeywords: _reportEditKeywords, search: _reportEditKeywords.join(', ') });
+    const result = await api(`/api/reports/${_reportCurrentId}`, { method: 'PUT', body });
+    if (!result || result.error) { toast(result?.error || 'Failed to update filters', 'error'); return; }
+    toast('Filters updated', 'success');
+    // Refresh the whole detail so charts + expense list reflect new expense set
+    const app = document.getElementById('app');
+    if (app) renderReportDetail(app, _reportCurrentId);
+}
+
+// ── Chart editor section ───────────────────────────────────────────────
+function enableReportChartEdit() {
+    const card = document.getElementById('reportChartEditorCard');
+    if (!card) return;
+    document.getElementById('reportChartEditorList').innerHTML =
+        renderReportChartEditorRows(_reportCurrentChartDefs);
+    card.style.display = 'block';
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function cancelReportChartEdit() {
+    const card = document.getElementById('reportChartEditorCard');
+    if (card) card.style.display = 'none';
+}
+async function saveReportChartEdit() {
+    const chartDefinitions = collectReportChartDefinitions();
+    if (!chartDefinitions.length) { toast('Please keep at least one chart.', 'info'); return; }
+    const body = _buildReportUpdateBody({ chartDefinitions });
+    const result = await api(`/api/reports/${_reportCurrentId}`, { method: 'PUT', body });
+    if (!result || result.error) { toast(result?.error || 'Failed to update charts', 'error'); return; }
+    toast('Charts updated', 'success');
+    const app = document.getElementById('app');
+    if (app) renderReportDetail(app, _reportCurrentId);
+}
+
+// ── Shared helper: build a full PUT body merging current state with overrides ─
+function _buildReportUpdateBody(overrides) {
+    const f = _reportCurrentFilters;
+    return Object.assign({
+        title: _reportCurrentTitle,
+        description: _reportCurrentDescription,
+        groupBy: _reportCurrentGroupBy,
+        startDate:  f.startDate  || '',
+        endDate:    f.endDate    || '',
+        category:   f.category   || '',
+        country:    f.country    || '',
+        city:       f.city       || '',
+        storeName:  f.storeName  || '',
+        searchKeywords: _reportEditKeywords,
+        search: _reportEditKeywords.join(', '),
+        chartDefinitions: _reportCurrentChartDefs
+    }, overrides);
+}
+
+// ── Legacy combined save (kept for backward-compat if called elsewhere) ──
+async function saveReportDetailEdits(reportId, groupBy) {
+    const chartDefinitions = collectReportChartDefinitions();
+    if (!chartDefinitions.length) { toast('Please keep at least one chart.', 'info'); return; }
+    const body = _buildReportUpdateBody({ chartDefinitions });
+    const result = await api(`/api/reports/${reportId}`, { method: 'PUT', body });
+    if (!result || result.error) { toast(result?.error || 'Failed to update report', 'error'); return; }
+    toast('Report updated', 'success');
+    const app = document.getElementById('app');
+    if (app) renderReportDetail(app, reportId);
+}
+
+function initReportKeywordEditor() {
+    renderReportKeywordEditor();
+    const input = document.getElementById('reportKeywordInput');
+    if (!input) return;
+    input.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter' || ev.key === ',') {
+            ev.preventDefault();
+            addReportKeywordFromInput();
+        }
+    });
+}
+
+function renderReportKeywordEditor() {
+    const host = document.getElementById('reportKeywordEditor');
+    if (!host) return;
+    host.innerHTML = (_reportEditKeywords || []).map(keyword =>
+        `<span class="filter-badge">${esc(keyword)}
+            <button class="filter-badge-x" onclick="removeReportKeyword('${esc(keyword)}')">&times;</button>
+        </span>`
+    ).join('') || '<span class="reports-count">No keywords</span>';
+}
+
+function addReportKeywordFromInput() {
+    const input = document.getElementById('reportKeywordInput');
+    if (!input) return;
+    const values = normalizeKeywordValues(input.value.split(/[,;\n]/));
+    if (!values.length) return;
+    _reportEditKeywords = normalizeKeywordValues([...( _reportEditKeywords || []), ...values]);
+    input.value = '';
+    renderReportKeywordEditor();
+}
+
+function removeReportKeyword(keyword) {
+    const key = String(keyword || '').toLowerCase();
+    _reportEditKeywords = (_reportEditKeywords || []).filter(k => k.toLowerCase() !== key);
+    renderReportKeywordEditor();
+}
+
+function normalizeReportChartDefinitions(chartDefinitions, fallbackGroupBy) {
+    if (!Array.isArray(chartDefinitions) || !chartDefinitions.length) {
+        return [defaultReportChartDefinition(fallbackGroupBy, 'chart-1')];
+    }
+    return chartDefinitions.map((chart, idx) => ({
+        id: chart?.id || `chart-${idx + 1}`,
+        title: chart?.title || `Chart ${idx + 1}`,
+        type: (chart?.type || 'BAR').toUpperCase(),
+        groupBy: (chart?.groupBy || 'CATEGORY').toUpperCase(),
+        metric: (chart?.metric || 'TOTAL_AMOUNT').toUpperCase(),
+        limit: Number(chart?.limit || 10),
+        sort: (chart?.sort || 'DESC').toUpperCase()
+    }));
+}
+
+function defaultReportChartDefinition(groupBy, idSeed) {
+    return {
+        id: idSeed,
+        title: 'New Chart',
+        type: 'BAR',
+        groupBy: groupBy === 'STORE_LOCATION' ? 'LOCATION' : 'CATEGORY',
+        metric: 'TOTAL_AMOUNT',
+        limit: 10,
+        sort: 'DESC'
+    };
+}
+
+function renderReportChartEditorRows(chartDefinitions) {
+    return (chartDefinitions || []).map((chart, index) => renderReportChartEditorRow(chart, index)).join('');
+}
+
+function renderReportChartEditorRow(chart, index) {
+    const chartId = esc(chart.id || `chart-${index + 1}`);
+    return `<div class="report-chart-edit-row" data-chart-row="${index}">
+        <input type="hidden" data-chart-field="id" value="${chartId}">
+        <input class="form-control form-control-sm" data-chart-field="title" value="${esc(chart.title || '')}" placeholder="Chart title">
+        <select class="form-control form-control-sm" data-chart-field="type">${renderReportOptionSet(['BAR','LINE','DOUGHNUT','TABLE'], chart.type || 'BAR')}</select>
+        <select class="form-control form-control-sm" data-chart-field="groupBy">${renderReportOptionSet(['CATEGORY','LOCATION','DAY'], chart.groupBy || 'CATEGORY')}</select>
+        <select class="form-control form-control-sm" data-chart-field="metric">${renderReportOptionSet(['TOTAL_AMOUNT','EXPENSE_COUNT','AVERAGE_AMOUNT'], chart.metric || 'TOTAL_AMOUNT')}</select>
+        <input class="form-control form-control-sm" data-chart-field="limit" type="number" min="1" max="50" value="${Number(chart.limit || 10)}" title="Limit">
+        <select class="form-control form-control-sm" data-chart-field="sort">${renderReportOptionSet(['DESC','ASC'], chart.sort || 'DESC')}</select>
+        <button class="btn btn-danger btn-sm btn-icon" title="Remove chart" onclick="removeReportChartDefinition(this)"><i class="fa-solid fa-trash"></i></button>
+    </div>`;
+}
+
+function renderReportOptionSet(values, selected) {
+    const target = String(selected || '').toUpperCase();
+    return values.map(v => `<option value="${v}" ${target === v ? 'selected' : ''}>${v}</option>`).join('');
+}
+
+function addReportChartDefinition() {
+    const list = document.getElementById('reportChartEditorList');
+    if (!list) return;
+    const index = list.querySelectorAll('.report-chart-edit-row').length;
+    const row = document.createElement('div');
+    row.innerHTML = renderReportChartEditorRow(defaultReportChartDefinition('CATEGORY', `chart-${Date.now()}`), index);
+    list.appendChild(row.firstElementChild);
+}
+
+function removeReportChartDefinition(btn) {
+    const row = btn?.closest('.report-chart-edit-row');
+    if (!row) return;
+    row.remove();
+}
+
+function collectReportChartDefinitions() {
+    const rows = Array.from(document.querySelectorAll('#reportChartEditorList .report-chart-edit-row'));
+    return rows.map((row, idx) => ({
+        id: row.querySelector('[data-chart-field="id"]')?.value || `chart-${idx + 1}`,
+        title: row.querySelector('[data-chart-field="title"]')?.value?.trim() || `Chart ${idx + 1}`,
+        type: row.querySelector('[data-chart-field="type"]')?.value || 'BAR',
+        groupBy: row.querySelector('[data-chart-field="groupBy"]')?.value || 'CATEGORY',
+        metric: row.querySelector('[data-chart-field="metric"]')?.value || 'TOTAL_AMOUNT',
+        limit: Number(row.querySelector('[data-chart-field="limit"]')?.value || 10),
+        sort: row.querySelector('[data-chart-field="sort"]')?.value || 'DESC'
+    }));
+}
+
+async function saveReportDetailEdits(reportId, groupBy) {
+    const chartDefinitions = collectReportChartDefinitions();
+    if (!chartDefinitions.length) {
+        toast('Please keep at least one chart.', 'info');
+        return;
+    }
+
+    const body = {
+        title: document.getElementById('reportTitleInput')?.value?.trim() || '',
+        description: document.getElementById('reportDescriptionInput')?.value?.trim() || '',
+        groupBy: groupBy,
+        startDate: document.getElementById('reportFilterStartDate')?.value || '',
+        endDate: document.getElementById('reportFilterEndDate')?.value || '',
+        category: document.getElementById('reportFilterCategory')?.value?.trim() || '',
+        country: document.getElementById('reportFilterCountry')?.value?.trim() || '',
+        city: document.getElementById('reportFilterCity')?.value?.trim() || '',
+        storeName: document.getElementById('reportFilterStoreName')?.value?.trim() || '',
+        searchKeywords: _reportEditKeywords,
+        search: (_reportEditKeywords || []).join(', '),
+        chartDefinitions
+    };
+
+    const result = await api(`/api/reports/${reportId}`, { method: 'PUT', body });
+    if (!result || result.error) {
+        toast(result?.error || 'Failed to update report', 'error');
+        return;
+    }
+    toast('Report updated', 'success');
+    const app = document.getElementById('app');
+    if (app) renderReportDetail(app, reportId);
+}
+
+function formatCoveredDateRange(startDate, endDate) {
+    if (!startDate && !endDate) return '—';
+    return `${startDate || '—'} → ${endDate || '—'}`;
 }
 
 function renderChartShells(charts) {
@@ -596,6 +986,28 @@ function formatMoney(value, currency) {
 function formatReportDate(value) {
     if (!value) return '—';
     return new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function toggleReportDetailMenu() {
+    const dd = document.getElementById('reportActionDropdown');
+    if (!dd) return;
+    const visible = dd.style.display !== 'none';
+    dd.style.display = visible ? 'none' : 'block';
+    if (!visible) {
+        setTimeout(() => {
+            document.addEventListener('click', function closeMenu(e) {
+                if (!document.getElementById('reportActionMenuWrap')?.contains(e.target)) {
+                    closeReportDetailMenu();
+                    document.removeEventListener('click', closeMenu);
+                }
+            });
+        }, 10);
+    }
+}
+
+function closeReportDetailMenu() {
+    const dd = document.getElementById('reportActionDropdown');
+    if (dd) dd.style.display = 'none';
 }
 
 

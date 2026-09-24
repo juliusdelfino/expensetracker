@@ -192,7 +192,8 @@ class ReportControllerTest extends BaseControllerTest {
     void listAndGetReport_shouldOnlyExposeCurrentUsersReports() throws Exception {
         var alice = createTestUser("alice", "pass");
         var bob = createTestUser("bob", "pass");
-        Report alicesReport = saveReport(alice.getId(), "Alice report", LocalDateTime.now().minusHours(1));
+        var aliceExpense = createTestExpense(alice.getId(), "Food", BigDecimal.valueOf(12.50), "USD");
+        Report alicesReport = saveReport(alice.getId(), "Alice report", LocalDateTime.now().minusHours(1), List.of(aliceExpense.getId()));
         Report bobsReport = saveReport(bob.getId(), "Bob report", LocalDateTime.now());
         MockHttpSession session = loginAs("alice", "pass");
 
@@ -200,7 +201,8 @@ class ReportControllerTest extends BaseControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(alicesReport.getId()))
                 .andExpect(jsonPath("$[0].title").value("Alice report"))
-                .andExpect(jsonPath("$[0].expenseCount").value(0));
+                .andExpect(jsonPath("$[0].expenseCount").value(1))
+                .andExpect(jsonPath("$[0].totalAmount").value(12.5));
 
         mockMvc.perform(get("/api/reports/" + alicesReport.getId()).session(session))
                 .andExpect(status().isOk())
@@ -323,11 +325,15 @@ class ReportControllerTest extends BaseControllerTest {
     }
 
     private Report saveReport(Long userId, String title, LocalDateTime createdAt) {
+        return saveReport(userId, title, createdAt, List.of());
+    }
+
+    private Report saveReport(Long userId, String title, LocalDateTime createdAt, List<Long> expenseIds) {
         Report report = new Report();
         report.setUserId(userId);
         report.setTitle(title);
         report.setDescription("Description for " + title);
-        report.setExpenseIds(List.of());
+        report.setExpenseIds(expenseIds);
         report.setChartDefinitions(objectMapper.createArrayNode());
         report.setGroupBy(ReportGroupBy.KEYWORD);
         report.setFilterSnapshot(objectMapper.createObjectNode().put("search", title.toLowerCase()));

@@ -1,6 +1,8 @@
 package com.delfino.expensetracker.service;
 
 import com.delfino.expensetracker.dto.report.CreateReportRequest;
+import com.delfino.expensetracker.dto.report.ReportFilterRequest;
+import com.delfino.expensetracker.dto.report.UpdateReportRequest;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.Report;
 import com.delfino.expensetracker.model.ReportGroupBy;
@@ -16,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -89,6 +92,26 @@ public class ReportService {
                     return true;
                 })
                 .orElse(false);
+    }
+
+    @Transactional
+    public Report updateReport(Long userId, Long reportId, UpdateReportRequest request) {
+        Report report = reportRepository.findByIdAndUserId(reportId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Report not found"));
+
+        ReportGroupBy groupBy = request.groupBy() != null ? request.groupBy() : report.getGroupBy();
+        ReportFilterRequest filterRequest = mergeWithExistingFilter(report, request);
+        List<Expense> expenses = reportExpenseFilterService.filterExpenses(userId, filterRequest);
+        List<Long> expenseIds = expenses.stream().map(Expense::getId).toList();
+
+        report.setTitle(resolveUpdatedTitle(report.getTitle(), request.title(), groupBy));
+        report.setDescription(request.description() != null ? request.description().trim() : null);
+        report.setGroupBy(groupBy);
+        report.setExpenseIds(expenseIds);
+        report.setChartDefinitions(resolveUpdatedChartDefinitions(report, request, groupBy));
+        report.setFilterSnapshot(buildFilterSnapshot(filterRequest, groupBy));
+        report.setUpdatedAt(LocalDateTime.now());
+        return reportRepository.save(report);
     }
 
     private List<Expense> resolveExpenses(Long userId, CreateReportRequest request) {
@@ -170,8 +193,110 @@ public class ReportService {
         putIfHasText(node, "country", request.country());
         putIfHasText(node, "city", request.city());
         putIfHasText(node, "storeName", request.storeName());
-        putIfHasText(node, "search", request.search());
+        List<String> keywords = normalizeKeywords(request.searchKeywords(), request.search());
+        if (!keywords.isEmpty()) {
+            node.put("search", String.join(", ", keywords));
+            ArrayNode keywordArray = node.putArray("searchKeywords");
+            keywords.forEach(keywordArray::add);
+        }
         return node;
+    }
+
+    private JsonNode buildFilterSnapshot(ReportFilterRequest filterRequest, ReportGroupBy groupBy) {
+        ObjectNode node = objectMapper.createObjectNode();
+        node.put("groupBy", groupBy.name());
+        node.put("mode", "FILTERS");
+        putIfHasText(node, "startDate", filterRequest.startDate());
+        putIfHasText(node, "endDate", filterRequest.endDate());
+        putIfHasText(node, "category", filterRequest.category());
+        putIfHasText(node, "country", filterRequest.country());
+        putIfHasText(node, "city", filterRequest.city());
+        putIfHasText(node, "storeName", filterRequest.storeName());
+        List<String> keywords = normalizeKeywords(filterRequest.searchKeywords(), filterRequest.search());
+        if (!keywords.isEmpty()) {
+            node.put("search", String.join(", ", keywords));
+            ArrayNode keywordArray = node.putArray("searchKeywords");
+            keywords.forEach(keywordArray::add);
+        }
+        return node;
+    }
+
+    private ReportFilterRequest mergeWithExistingFilter(Report report, UpdateReportRequest request) {
+        JsonNode snapshot = report.getFilterSnapshot();
+        return new ReportFilterRequest(
+                coalesce(request.startDate(), snapshotText(snapshot, "startDate")),
+                coalesce(request.endDate(), snapshotText(snapshot, "endDate")),
+                coalesce(request.category(), snapshotText(snapshot, "category")),
+                coalesce(request.country(), snapshotText(snapshot, "country")),
+                coalesce(request.city(), snapshotText(snapshot, "city")),
+                coalesce(request.storeName(), snapshotText(snapshot, "storeName")),
+                coalesce(request.search(), snapshotText(snapshot, "search")),
+                request.searchKeywords() != null ? request.searchKeywords() : snapshotTextArray(snapshot, "searchKeywords")
+        );
+    }
+
+    private JsonNode resolveUpdatedChartDefinitions(Report report, UpdateReportRequest request, ReportGroupBy groupBy) {
+        if (request.chartDefinitions() != null) {
+            return request.chartDefinitions();
+        }
+        if (report.getChartDefinitions() != null) {
+            return report.getChartDefinitions();
+        }
+        return buildDefaultChartDefinitions(groupBy);
+    }
+
+    private String resolveUpdatedTitle(String currentTitle, String requestedTitle, ReportGroupBy groupBy) {
+        if (requestedTitle != null && !requestedTitle.isBlank()) {
+            return requestedTitle.trim();
+        }
+        if (currentTitle != null && !currentTitle.isBlank()) {
+            return currentTitle;
+        }
+        return resolveTitle(null, groupBy);
+    }
+
+    private String snapshotText(JsonNode snapshot, String field) {
+        if (snapshot == null || !snapshot.hasNonNull(field)) return null;
+        String value = snapshot.get(field).asText(null);
+        return value != null && !value.isBlank() ? value.trim() : null;
+    }
+
+    private List<String> snapshotTextArray(JsonNode snapshot, String field) {
+        if (snapshot == null || !snapshot.has(field) || !snapshot.get(field).isArray()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        snapshot.get(field).forEach(node -> {
+            String value = node.asText(null);
+            if (value != null && !value.isBlank()) {
+                values.add(value.trim());
+            }
+        });
+        return values;
+    }
+
+    private String coalesce(String primary, String fallback) {
+        return primary != null ? primary : fallback;
+    }
+
+    private List<String> normalizeKeywords(List<String> keywords, String search) {
+        LinkedHashSet<String> unique = new LinkedHashSet<>();
+        if (keywords != null) {
+            keywords.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(s -> !s.isBlank())
+                    .forEach(unique::add);
+        }
+        if (search != null && !search.isBlank()) {
+            for (String token : search.split("[,;\\n]")) {
+                String trimmed = token.trim();
+                if (!trimmed.isBlank()) {
+                    unique.add(trimmed);
+                }
+            }
+        }
+        return List.copyOf(unique);
     }
 
     private JsonNode buildDefaultChartDefinitions(ReportGroupBy groupBy) {

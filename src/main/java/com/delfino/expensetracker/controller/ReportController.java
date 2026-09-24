@@ -5,6 +5,7 @@ import com.delfino.expensetracker.dto.common.ErrorResponse;
 import com.delfino.expensetracker.dto.common.MessageResponse;
 import com.delfino.expensetracker.dto.report.CreateReportRequest;
 import com.delfino.expensetracker.dto.report.ReportResponse;
+import com.delfino.expensetracker.dto.report.UpdateReportRequest;
 import com.delfino.expensetracker.model.Report;
 import com.delfino.expensetracker.service.ReportPdfService;
 import com.delfino.expensetracker.service.ReportQueryService;
@@ -62,6 +63,23 @@ public class ReportController {
                 .<ResponseEntity<Object>>map(ResponseEntity::ok)
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(new ErrorResponse(REPORT_NOT_FOUND)));
+    }
+
+    @PutMapping("/{reportId}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Object> updateReport(@PathVariable Long reportId,
+                                               @RequestBody @Valid UpdateReportRequest body,
+                                               UserToken userToken) {
+        try {
+            Report updated = reportService.updateReport(userToken.getUserId(), reportId, body);
+            ReportResponse response = reportQueryService.toResponse(updated);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException ex) {
+            if (REPORT_NOT_FOUND.equalsIgnoreCase(ex.getMessage())) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse(REPORT_NOT_FOUND));
+            }
+            return ResponseEntity.badRequest().body(new ErrorResponse(ex.getMessage()));
+        }
     }
 
     @GetMapping("/{reportId}/pdf")

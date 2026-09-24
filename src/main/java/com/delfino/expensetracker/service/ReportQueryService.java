@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -131,12 +132,16 @@ public class ReportQueryService {
     }
 
     private ReportSummaryResponse toSummaryResponse(Report report) {
+        List<Expense> expenses = loadReportExpenses(report);
         return new ReportSummaryResponse(
                 report.getId(),
                 report.getTitle(),
                 report.getDescription(),
                 report.getGroupBy(),
                 report.getExpenseIds() != null ? report.getExpenseIds().size() : 0,
+                expenses.stream()
+                        .map(Expense::getBaseAmountOrAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add),
                 report.getCreatedAt(),
                 report.getUpdatedAt()
         );

@@ -9,8 +9,12 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class ReportExpenseFilterService {
@@ -24,9 +28,10 @@ public class ReportExpenseFilterService {
     }
 
     public List<Expense> filterExpenses(Long userId, ReportFilterRequest filter) {
-        String search = trimToNull(filter.search());
+        List<String> keywords = normalizeKeywords(filter.searchKeywords(), filter.search());
+        List<Expense> searchMatches = searchByKeywords(userId, keywords);
         List<Expense> expenses = filterByDateRange(
-                new ArrayList<>(expenseService.search(userId, search, false)),
+                new ArrayList<>(searchMatches),
                 filter.startDate(),
                 filter.endDate()
         );
@@ -83,6 +88,33 @@ public class ReportExpenseFilterService {
         sortedExpenses.sort(Comparator.comparing(Expense::getTransactionDatetime,
                 Comparator.nullsLast(Comparator.reverseOrder())));
         return sortedExpenses;
+    }
+
+    private List<Expense> searchByKeywords(Long userId, List<String> keywords) {
+        if (keywords.isEmpty()) {
+            return expenseService.search(userId, null, false);
+        }
+        Map<Long, Expense> merged = new LinkedHashMap<>();
+        for (String keyword : keywords) {
+            for (Expense expense : expenseService.search(userId, keyword, false)) {
+                merged.put(expense.getId(), expense);
+            }
+        }
+        return new ArrayList<>(merged.values());
+    }
+
+    private List<String> normalizeKeywords(List<String> keywords, String search) {
+        List<String> merged = new ArrayList<>();
+        if (keywords != null) {
+            merged.addAll(keywords);
+        }
+        if (search != null && !search.isBlank()) {
+            merged.addAll(List.of(search.split("[,;\n]")));
+        }
+        return merged.stream()
+                .map(this::trimToNull)
+                .filter(v -> v != null && !v.isBlank())
+                .map(String::toLowerCase).distinct().toList();
     }
 
     private List<Expense> filterByDateRange(List<Expense> expenses, String startDate, String endDate) {

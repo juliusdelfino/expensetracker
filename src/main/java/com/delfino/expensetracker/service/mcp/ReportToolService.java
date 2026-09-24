@@ -69,6 +69,7 @@ public class ReportToolService {
                     trimToNull(storeName),
                     trimToNull(keyword),
                     null,
+                    null,
                     null
             ));
             chatReportContext.trackReport(report.getId());
