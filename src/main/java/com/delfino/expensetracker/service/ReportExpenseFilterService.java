@@ -10,11 +10,8 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 public class ReportExpenseFilterService {
@@ -28,7 +25,7 @@ public class ReportExpenseFilterService {
     }
 
     public List<Expense> filterExpenses(Long userId, ReportFilterRequest filter) {
-        List<String> keywords = normalizeKeywords(filter.searchKeywords(), filter.search());
+        List<String> keywords = ReportFilterSupport.normalizeKeywords(filter.searchKeywords(), filter.search());
         List<Expense> searchMatches = searchByKeywords(userId, keywords);
         List<Expense> expenses = filterByDateRange(
                 new ArrayList<>(searchMatches),
@@ -36,7 +33,7 @@ public class ReportExpenseFilterService {
                 filter.endDate()
         );
 
-        String category = trimToNull(filter.category());
+        String category = ReportFilterSupport.trimToNull(filter.category());
         if (category != null) {
             expenses = expenses.stream()
                     .filter(e -> e.getCategory() != null && e.getCategory().equalsIgnoreCase(category))
@@ -45,7 +42,7 @@ public class ReportExpenseFilterService {
 
         Map<Long, Store> storeMap = expenseService.getStoreMapForUser(userId);
 
-        String country = trimToNull(filter.country());
+        String country = ReportFilterSupport.trimToNull(filter.country());
         if (country != null) {
             String countryLower = country.toLowerCase();
             String resolvedCode = countryService.findCodeByName(country);
@@ -58,7 +55,7 @@ public class ReportExpenseFilterService {
                     .toList();
         }
 
-        String city = trimToNull(filter.city());
+        String city = ReportFilterSupport.trimToNull(filter.city());
         if (city != null) {
             String cityLower = city.toLowerCase();
             expenses = expenses.stream()
@@ -71,7 +68,7 @@ public class ReportExpenseFilterService {
                     .toList();
         }
 
-        String storeName = trimToNull(filter.storeName());
+        String storeName = ReportFilterSupport.trimToNull(filter.storeName());
         if (storeName != null) {
             String storeLower = storeName.toLowerCase();
             expenses = expenses.stream()
@@ -103,31 +100,22 @@ public class ReportExpenseFilterService {
         return new ArrayList<>(merged.values());
     }
 
-    private List<String> normalizeKeywords(List<String> keywords, String search) {
-        List<String> merged = new ArrayList<>();
-        if (keywords != null) {
-            merged.addAll(keywords);
-        }
-        if (search != null && !search.isBlank()) {
-            merged.addAll(List.of(search.split("[,;\n]")));
-        }
-        return merged.stream()
-                .map(this::trimToNull)
-                .filter(v -> v != null && !v.isBlank())
-                .map(String::toLowerCase).distinct().toList();
-    }
-
     private List<Expense> filterByDateRange(List<Expense> expenses, String startDate, String endDate) {
         try {
-            if (startDate != null && !startDate.isBlank()) {
-                LocalDate start = LocalDate.parse(startDate);
+            LocalDate start = startDate != null && !startDate.isBlank() ? LocalDate.parse(startDate) : null;
+            LocalDate end = endDate != null && !endDate.isBlank() ? LocalDate.parse(endDate) : null;
+
+            if (start != null && end != null && start.isAfter(end)) {
+                throw new IllegalArgumentException("startDate must be on or before endDate");
+            }
+
+            if (start != null) {
                 expenses = expenses.stream()
                         .filter(e -> e.getTransactionDatetime() != null
                                 && !e.getTransactionDatetime().toLocalDate().isBefore(start))
                         .toList();
             }
-            if (endDate != null && !endDate.isBlank()) {
-                LocalDate end = LocalDate.parse(endDate);
+            if (end != null) {
                 expenses = expenses.stream()
                         .filter(e -> e.getTransactionDatetime() != null
                                 && !e.getTransactionDatetime().toLocalDate().isAfter(end))
@@ -146,12 +134,6 @@ public class ReportExpenseFilterService {
         if (storeCountry.equalsIgnoreCase(resolvedCode)) return true;
         String countryName = countryService.getName(store.getCountry());
         return countryName != null && countryName.toLowerCase().contains(countryFilterLower);
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) return null;
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 }
 

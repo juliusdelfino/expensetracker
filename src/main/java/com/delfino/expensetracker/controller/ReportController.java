@@ -52,8 +52,8 @@ public class ReportController {
 
     @GetMapping
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Object> listReports(UserToken userToken) {
-        return ResponseEntity.ok(reportQueryService.listReports(userToken.getUserId()));
+    public ResponseEntity<Object> listReports(@RequestParam(required = false) Integer limit, UserToken userToken) {
+        return ResponseEntity.ok(reportQueryService.listReports(userToken.getUserId(), limit));
     }
 
     @GetMapping("/{reportId}")

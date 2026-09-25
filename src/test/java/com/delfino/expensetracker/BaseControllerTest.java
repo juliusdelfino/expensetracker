@@ -15,6 +15,7 @@ import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.ReportRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
 import com.delfino.expensetracker.repository.UserRepository;
+import com.delfino.expensetracker.service.AiUsageService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -159,7 +160,7 @@ public abstract class BaseControllerTest {
     @Autowired protected AiUsageRepository aiUsageRepository;
     @Autowired protected ExchangeRateCacheRepository exchangeRateCacheRepository;
     @Autowired protected PasswordEncoder passwordEncoder;
-    @Autowired protected com.delfino.expensetracker.service.AiUsageService aiUsageService;
+    @Autowired protected AiUsageService aiUsageService;
     @Autowired protected MeterRegistry meterRegistry;
 
     // -------------------------------------------------------------------------

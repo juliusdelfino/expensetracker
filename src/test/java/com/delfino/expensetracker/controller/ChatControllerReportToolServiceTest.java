@@ -10,6 +10,7 @@ import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.test.context.TestPropertySource;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -23,6 +24,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+@TestPropertySource(properties = "reports.ai.max-creates-per-hour=1")
 class ChatControllerReportToolServiceTest extends BaseControllerTest {
 
     @Test
@@ -100,6 +102,61 @@ class ChatControllerReportToolServiceTest extends BaseControllerTest {
                 .andExpect(jsonPath("$.reportCards.length()").value(2))
                 .andExpect(jsonPath("$.reportCards[0].title").value(second.getTitle()))
                 .andExpect(jsonPath("$.reportCards[1].title").value(first.getTitle()));
+    }
+
+    @Test
+    void generateExpenseReport_toolInvokedTwice_secondAttemptIsRateLimited() throws Exception {
+        User user = createTestUser("alice", "pass");
+        createTestExpense(user.getId(), "Food", BigDecimal.valueOf(12.00), "USD");
+
+        WIRE_MOCK.stubFor(WireMock.post(urlPathEqualTo("/api/chat"))
+                .inScenario("generateExpenseReportRateLimited")
+                .whenScenarioStateIs(Scenario.STARTED)
+                .atPriority(1)
+                .willReturn(okJson(ollamaToolCallResponse("generateExpenseReport",
+                        "{\"groupBy\":\"CATEGORY\",\"startDate\":\"\",\"endDate\":\"\",\"keyword\":\"\",\"category\":\"Food\",\"country\":\"\",\"storeName\":\"\"}"))
+                        .withHeader("Connection", "close"))
+                .willSetStateTo("firstToolCalled"));
+
+        WIRE_MOCK.stubFor(WireMock.post(urlPathEqualTo("/api/chat"))
+                .inScenario("generateExpenseReportRateLimited")
+                .whenScenarioStateIs("firstToolCalled")
+                .atPriority(1)
+                .willReturn(okJson(ollamaChatResponse("First report created."))
+                        .withHeader("Connection", "close"))
+                .willSetStateTo("secondStart"));
+
+        WIRE_MOCK.stubFor(WireMock.post(urlPathEqualTo("/api/chat"))
+                .inScenario("generateExpenseReportRateLimited")
+                .whenScenarioStateIs("secondStart")
+                .atPriority(1)
+                .willReturn(okJson(ollamaToolCallResponse("generateExpenseReport",
+                        "{\"groupBy\":\"CATEGORY\",\"startDate\":\"\",\"endDate\":\"\",\"keyword\":\"\",\"category\":\"Food\",\"country\":\"\",\"storeName\":\"\"}"))
+                        .withHeader("Connection", "close"))
+                .willSetStateTo("secondToolCalled"));
+
+        WIRE_MOCK.stubFor(WireMock.post(urlPathEqualTo("/api/chat"))
+                .inScenario("generateExpenseReportRateLimited")
+                .whenScenarioStateIs("secondToolCalled")
+                .atPriority(1)
+                .willReturn(okJson(ollamaChatResponse("Second request handled."))
+                        .withHeader("Connection", "close")));
+
+        MockHttpSession session = loginAs("alice", "pass");
+
+        mockMvc.perform(post("/api/chat")
+                        .session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("message", "Create a food report"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/chat")
+                        .session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("message", "Create another food report"))))
+                .andExpect(status().isOk());
+
+        assertThat(reportRepository.count()).isEqualTo(1);
     }
 
     private Report saveReport(Long userId, String title, LocalDateTime createdAt) {

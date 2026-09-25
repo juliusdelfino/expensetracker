@@ -45,18 +45,21 @@ public class ReportInsightService {
         }
 
         Expense largestExpense = expenses.stream()
+                .filter(expense -> expense.getBaseAmountOrAmount() != null)
                 .max(Comparator.comparing(Expense::getBaseAmountOrAmount))
                 .orElse(null);
-        String dateText = largestExpense.getTransactionDatetime() != null
-                ? largestExpense.getTransactionDatetime().toLocalDate().toString()
-                : "an unknown date";
-        String category = largestExpense.getCategory() != null ? largestExpense.getCategory() : "Uncategorized";
-        String location = storeMap.containsKey(largestExpense.getStoreId())
-                ? storeMap.get(largestExpense.getStoreId()).getName()
-                : null;
-        insights.add("Largest expense was " + largestExpense.getBaseAmountOrAmount().setScale(2, RoundingMode.HALF_UP)
-                + " in " + category + " on " + dateText
-                + (location != null && !location.isBlank() ? " at " + location : "") + ".");
+        if (largestExpense != null) {
+            String dateText = largestExpense.getTransactionDatetime() != null
+                    ? largestExpense.getTransactionDatetime().toLocalDate().toString()
+                    : "an unknown date";
+            String category = largestExpense.getCategory() != null ? largestExpense.getCategory() : "Uncategorized";
+            String location = storeMap.containsKey(largestExpense.getStoreId())
+                    ? storeMap.get(largestExpense.getStoreId()).getName()
+                    : null;
+            insights.add("Largest expense was " + largestExpense.getBaseAmountOrAmount().setScale(2, RoundingMode.HALF_UP)
+                    + " in " + category + " on " + dateText
+                    + (location != null && !location.isBlank() ? " at " + location : "") + ".");
+        }
 
         if (summary.averageAmount() != null) {
             insights.add("Average spend per expense was " + summary.averageAmount().setScale(2, RoundingMode.HALF_UP) + ".");

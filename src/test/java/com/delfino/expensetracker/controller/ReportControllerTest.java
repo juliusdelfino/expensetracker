@@ -8,6 +8,7 @@ import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.math.BigDecimal;
@@ -26,6 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+@TestPropertySource(properties = "reports.max-expenses=3")
 class ReportControllerTest extends BaseControllerTest {
 
     @Test
@@ -130,6 +132,98 @@ class ReportControllerTest extends BaseControllerTest {
                 .andExpect(jsonPath("$.insights[0]").value("Most spending happened in Tampines, Singapore."))
                 .andExpect(jsonPath("$.expenses.length()").value(3))
                 .andExpect(jsonPath("$.expenses[0].locationLabel").value("Tampines, Singapore"));
+    }
+
+    @Test
+    void createReport_shouldRejectInvertedDateRange() throws Exception {
+        createTestUser("alice", "pass");
+        MockHttpSession session = loginAs("alice", "pass");
+
+        mockMvc.perform(post("/api/reports")
+                        .session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "groupBy", "CATEGORY",
+                                "startDate", "2026-04-30",
+                                "endDate", "2026-04-01"
+                        ))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("startDate must be on or before endDate"));
+    }
+
+    @Test
+    void createReport_shouldRejectReportsThatExceedConfiguredExpenseCap() throws Exception {
+        var alice = createTestUser("alice", "pass");
+        createTestExpense(alice.getId(), "Food", BigDecimal.valueOf(10), "USD");
+        createTestExpense(alice.getId(), "Food", BigDecimal.valueOf(12), "USD");
+        createTestExpense(alice.getId(), "Food", BigDecimal.valueOf(14), "USD");
+        createTestExpense(alice.getId(), "Food", BigDecimal.valueOf(16), "USD");
+        MockHttpSession session = loginAs("alice", "pass");
+
+        mockMvc.perform(post("/api/reports")
+                        .session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "groupBy", "CATEGORY",
+                                "category", "Food"
+                        ))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Report cannot include more than 3 expenses"));
+    }
+
+    @Test
+    void createReport_shouldRejectUnfilteredReportWhenUserHistoryExceedsCap() throws Exception {
+        var alice = createTestUser("alice", "pass");
+        createTestExpense(alice.getId(), "Food", BigDecimal.valueOf(10), "USD");
+        createTestExpense(alice.getId(), "Travel", BigDecimal.valueOf(12), "USD");
+        createTestExpense(alice.getId(), "Bills", BigDecimal.valueOf(14), "USD");
+        createTestExpense(alice.getId(), "Shopping", BigDecimal.valueOf(16), "USD");
+        MockHttpSession session = loginAs("alice", "pass");
+
+        mockMvc.perform(post("/api/reports")
+                        .session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "groupBy", "KEYWORD"
+                        ))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Refine filters before creating this report. Unfiltered reports are limited to 3 expenses"));
+    }
+
+    @Test
+    void createReport_shouldApplyDayChartLimitAndSort() throws Exception {
+        var alice = createTestUser("alice", "pass");
+
+        var expense1 = createTestExpense(alice.getId(), "Food", BigDecimal.valueOf(10), "USD");
+        setExpenseDateAndStore(expense1, LocalDateTime.of(2026, 4, 10, 10, 0), null);
+
+        var expense2 = createTestExpense(alice.getId(), "Food", BigDecimal.valueOf(20), "USD");
+        setExpenseDateAndStore(expense2, LocalDateTime.of(2026, 4, 11, 10, 0), null);
+
+        var expense3 = createTestExpense(alice.getId(), "Food", BigDecimal.valueOf(30), "USD");
+        setExpenseDateAndStore(expense3, LocalDateTime.of(2026, 4, 12, 10, 0), null);
+
+        MockHttpSession session = loginAs("alice", "pass");
+
+        mockMvc.perform(post("/api/reports")
+                        .session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "groupBy", "CATEGORY",
+                                "chartDefinitions", List.of(Map.of(
+                                        "id", "daily",
+                                        "type", "LINE",
+                                        "title", "Daily Spend",
+                                        "metric", "TOTAL_AMOUNT",
+                                        "groupBy", "DAY",
+                                        "limit", 2,
+                                        "sort", "DESC"
+                                ))
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.charts[0].labels.length()").value(2))
+                .andExpect(jsonPath("$.charts[0].labels[0]").value("2026-04-12"))
+                .andExpect(jsonPath("$.charts[0].labels[1]").value("2026-04-11"));
     }
 
     @Test

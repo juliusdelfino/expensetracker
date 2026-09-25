@@ -167,8 +167,13 @@ public class ReportAggregationService {
         grouped.forEach((label, groupedExpenses) -> series.put(label, computeMetric(groupedExpenses, metric)));
 
         if ("DAY".equalsIgnoreCase(groupBy)) {
+            Comparator<Map.Entry<String, BigDecimal>> dayComparator = Map.Entry.comparingByKey();
+            if ("DESC".equalsIgnoreCase(sort)) {
+                dayComparator = dayComparator.reversed();
+            }
             return series.entrySet().stream()
-                    .sorted(Map.Entry.comparingByKey())
+                    .sorted(dayComparator.thenComparing(Map.Entry::getKey))
+                    .limit(limit > 0 ? limit : series.size())
                     .collect(Collectors.toMap(
                             Map.Entry::getKey,
                             Map.Entry::getValue,

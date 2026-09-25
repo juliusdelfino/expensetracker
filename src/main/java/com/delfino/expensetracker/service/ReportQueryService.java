@@ -11,18 +11,27 @@ import com.delfino.expensetracker.model.Store;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.ReportRepository;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class ReportQueryService {
+
+    private static final int DEFAULT_LIST_LIMIT = 50;
+    private static final int MAX_LIST_LIMIT = 200;
 
     private final ReportRepository reportRepository;
     private final ExpenseRepository expenseRepository;
@@ -43,16 +52,34 @@ public class ReportQueryService {
     }
 
     @Transactional(readOnly = true)
-    public List<ReportSummaryResponse> listReports(Long userId) {
-        return reportRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
-                .map(this::toSummaryResponse)
+    public List<ReportSummaryResponse> listReports(Long userId, Integer requestedLimit) {
+        int limit = sanitizeListLimit(requestedLimit);
+        List<Report> reports = reportRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, limit));
+        Map<Long, Expense> expensesById = loadExpensesByIds(reports.stream()
+                .flatMap(report -> report.getExpenseIds() != null ? report.getExpenseIds().stream() : Stream.empty())
+                .collect(Collectors.toCollection(LinkedHashSet::new)));
+
+        return reports.stream()
+                .map(report -> toSummaryResponse(report, expensesById))
                 .toList();
+    }
+
+    private int sanitizeListLimit(Integer requestedLimit) {
+        if (requestedLimit == null || requestedLimit <= 0) {
+            return DEFAULT_LIST_LIMIT;
+        }
+        return Math.min(requestedLimit, MAX_LIST_LIMIT);
     }
 
     @Transactional(readOnly = true)
     public Optional<ReportResponse> getReport(Long userId, Long reportId) {
         return reportRepository.findByIdAndUserId(reportId, userId)
                 .map(this::toResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public long countReportsCreatedSince(Long userId, LocalDateTime createdAfter) {
+        return reportRepository.countByUserIdAndCreatedAtAfter(userId, createdAfter);
     }
 
     public ReportResponse toResponse(Report report) {
@@ -86,12 +113,21 @@ public class ReportQueryService {
         if (report.getExpenseIds() == null || report.getExpenseIds().isEmpty()) {
             return List.of();
         }
-        Map<Long, Expense> expensesById = new LinkedHashMap<>();
-        expenseRepository.findAllById(report.getExpenseIds()).forEach(expense -> expensesById.put(expense.getId(), expense));
+        Map<Long, Expense> expensesById = loadExpensesByIds(report.getExpenseIds());
         return report.getExpenseIds().stream()
                 .map(expensesById::get)
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    private Map<Long, Expense> loadExpensesByIds(Collection<Long> expenseIds) {
+        if (expenseIds == null || expenseIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, Expense> expensesById = new LinkedHashMap<>();
+        expenseRepository.findAllById(expenseIds).forEach(expense -> expensesById.put(expense.getId(), expense));
+        return expensesById;
     }
 
     private List<ReportExpenseResponse> mapExpenses(List<Expense> expenses, Map<Long, Store> storeMap) {
@@ -131,8 +167,8 @@ public class ReportQueryService {
                 .toList();
     }
 
-    private ReportSummaryResponse toSummaryResponse(Report report) {
-        List<Expense> expenses = loadReportExpenses(report);
+    private ReportSummaryResponse toSummaryResponse(Report report, Map<Long, Expense> expensesById) {
+        List<Expense> expenses = loadReportExpenses(report, expensesById);
         return new ReportSummaryResponse(
                 report.getId(),
                 report.getTitle(),
@@ -145,6 +181,16 @@ public class ReportQueryService {
                 report.getCreatedAt(),
                 report.getUpdatedAt()
         );
+    }
+
+    private List<Expense> loadReportExpenses(Report report, Map<Long, Expense> expensesById) {
+        if (report.getExpenseIds() == null || report.getExpenseIds().isEmpty()) {
+            return List.of();
+        }
+        return report.getExpenseIds().stream()
+                .map(expensesById::get)
+                .filter(Objects::nonNull)
+                .toList();
     }
 }
 

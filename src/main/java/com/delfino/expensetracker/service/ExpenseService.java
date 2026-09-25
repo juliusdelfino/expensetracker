@@ -290,6 +290,10 @@ public class ExpenseService {
                 .toList();
     }
 
+    public long countActiveExpenses(Long userId) {
+        return expenseRepository.countByUserIdAndDeletedFalse(userId);
+    }
+
     private boolean matchesSearch(Expense e, String query,
                                   Map<Long, Store> storeMap,
                                   Map<Long, List<ExpenseItem>> itemsByExpenseId) {

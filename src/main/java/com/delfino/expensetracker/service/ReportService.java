@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +36,7 @@ public class ReportService {
     private final ReportInsightService reportInsightService;
     private final ExpenseService expenseService;
     private final ObjectMapper objectMapper;
+    private final int maxExpensesPerReport;
 
     public ReportService(ReportRepository reportRepository,
                          ExpenseRepository expenseRepository,
@@ -42,7 +44,8 @@ public class ReportService {
                          ReportAggregationService reportAggregationService,
                          ReportInsightService reportInsightService,
                          ExpenseService expenseService,
-                         ObjectMapper objectMapper) {
+                          ObjectMapper objectMapper,
+                          @Value("${reports.max-expenses:500}") int maxExpensesPerReport) {
         this.reportRepository = reportRepository;
         this.expenseRepository = expenseRepository;
         this.reportExpenseFilterService = reportExpenseFilterService;
@@ -50,11 +53,13 @@ public class ReportService {
         this.reportInsightService = reportInsightService;
         this.expenseService = expenseService;
         this.objectMapper = objectMapper;
+        this.maxExpensesPerReport = maxExpensesPerReport;
     }
 
     @Transactional
     public Report createReport(Long userId, CreateReportRequest request) {
         List<Expense> expenses = resolveExpenses(userId, request);
+        validateExpenseCount(expenses.size());
         List<Long> expenseIds = expenses.stream().map(Expense::getId).toList();
         Map<Long, Store> storeMap = expenseService.getStoreMapForUser(userId);
         JsonNode chartDefinitions = resolveChartDefinitions(request.chartDefinitions(), request.groupBy());
@@ -101,7 +106,9 @@ public class ReportService {
 
         ReportGroupBy groupBy = request.groupBy() != null ? request.groupBy() : report.getGroupBy();
         ReportFilterRequest filterRequest = mergeWithExistingFilter(report, request);
+        rejectOversizedUnboundedFilter(userId, filterRequest);
         List<Expense> expenses = reportExpenseFilterService.filterExpenses(userId, filterRequest);
+        validateExpenseCount(expenses.size());
         List<Long> expenseIds = expenses.stream().map(Expense::getId).toList();
 
         report.setTitle(resolveUpdatedTitle(report.getTitle(), request.title(), groupBy));
@@ -117,9 +124,12 @@ public class ReportService {
     private List<Expense> resolveExpenses(Long userId, CreateReportRequest request) {
         if (request.expenseIds() != null) {
             List<Long> expenseIds = normalizeExpenseIds(request.expenseIds());
+            validateExpenseCount(expenseIds.size());
             return validateExpenseOwnership(userId, expenseIds);
         }
-        return reportExpenseFilterService.filterExpenses(userId, request.toFilterRequest());
+        ReportFilterRequest filterRequest = request.toFilterRequest();
+        rejectOversizedUnboundedFilter(userId, filterRequest);
+        return reportExpenseFilterService.filterExpenses(userId, filterRequest);
     }
 
     private List<Long> normalizeExpenseIds(List<Long> expenseIds) {
@@ -159,6 +169,40 @@ public class ReportService {
         return expenseIds.stream().map(byId::get).filter(Objects::nonNull).toList();
     }
 
+    private void validateExpenseCount(int expenseCount) {
+        if (expenseCount > maxExpensesPerReport) {
+            throw new IllegalArgumentException("Report cannot include more than " + maxExpensesPerReport + " expenses");
+        }
+    }
+
+    private void rejectOversizedUnboundedFilter(Long userId, ReportFilterRequest filterRequest) {
+        if (!isUnboundedFilter(filterRequest)) {
+            return;
+        }
+        long activeExpenseCount = expenseService.countActiveExpenses(userId);
+        if (activeExpenseCount > maxExpensesPerReport) {
+            throw new IllegalArgumentException(
+                    "Refine filters before creating this report. Unfiltered reports are limited to "
+                            + maxExpensesPerReport + " expenses");
+        }
+    }
+
+    private boolean isUnboundedFilter(ReportFilterRequest filterRequest) {
+        return isBlank(filterRequest.startDate())
+                && isBlank(filterRequest.endDate())
+                && isBlank(filterRequest.category())
+                && isBlank(filterRequest.country())
+                && isBlank(filterRequest.city())
+                && isBlank(filterRequest.storeName())
+                && isBlank(filterRequest.search())
+                && (filterRequest.searchKeywords() == null
+                || filterRequest.searchKeywords().stream().map(ReportFilterSupport::trimToNull).allMatch(Objects::isNull));
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
     private String resolveTitle(String title, ReportGroupBy groupBy) {
         if (title != null && !title.isBlank()) {
             return title.trim();
@@ -176,49 +220,11 @@ public class ReportService {
     }
 
     private JsonNode buildFilterSnapshot(CreateReportRequest request, List<Long> expenseIds) {
-        ObjectNode node = objectMapper.createObjectNode();
-        node.put("groupBy", request.groupBy().name());
-
-        if (request.expenseIds() != null) {
-            node.put("mode", "EXPLICIT_EXPENSE_IDS");
-            ArrayNode ids = node.putArray("expenseIds");
-            expenseIds.forEach(ids::add);
-            return node;
-        }
-
-        node.put("mode", "FILTERS");
-        putIfHasText(node, "startDate", request.startDate());
-        putIfHasText(node, "endDate", request.endDate());
-        putIfHasText(node, "category", request.category());
-        putIfHasText(node, "country", request.country());
-        putIfHasText(node, "city", request.city());
-        putIfHasText(node, "storeName", request.storeName());
-        List<String> keywords = normalizeKeywords(request.searchKeywords(), request.search());
-        if (!keywords.isEmpty()) {
-            node.put("search", String.join(", ", keywords));
-            ArrayNode keywordArray = node.putArray("searchKeywords");
-            keywords.forEach(keywordArray::add);
-        }
-        return node;
+        return ReportFilterSupport.buildFilterSnapshot(objectMapper, request, expenseIds);
     }
 
     private JsonNode buildFilterSnapshot(ReportFilterRequest filterRequest, ReportGroupBy groupBy) {
-        ObjectNode node = objectMapper.createObjectNode();
-        node.put("groupBy", groupBy.name());
-        node.put("mode", "FILTERS");
-        putIfHasText(node, "startDate", filterRequest.startDate());
-        putIfHasText(node, "endDate", filterRequest.endDate());
-        putIfHasText(node, "category", filterRequest.category());
-        putIfHasText(node, "country", filterRequest.country());
-        putIfHasText(node, "city", filterRequest.city());
-        putIfHasText(node, "storeName", filterRequest.storeName());
-        List<String> keywords = normalizeKeywords(filterRequest.searchKeywords(), filterRequest.search());
-        if (!keywords.isEmpty()) {
-            node.put("search", String.join(", ", keywords));
-            ArrayNode keywordArray = node.putArray("searchKeywords");
-            keywords.forEach(keywordArray::add);
-        }
-        return node;
+        return ReportFilterSupport.buildFilterSnapshot(objectMapper, groupBy, filterRequest);
     }
 
     private ReportFilterRequest mergeWithExistingFilter(Report report, UpdateReportRequest request) {
@@ -279,26 +285,6 @@ public class ReportService {
         return primary != null ? primary : fallback;
     }
 
-    private List<String> normalizeKeywords(List<String> keywords, String search) {
-        LinkedHashSet<String> unique = new LinkedHashSet<>();
-        if (keywords != null) {
-            keywords.stream()
-                    .filter(Objects::nonNull)
-                    .map(String::trim)
-                    .filter(s -> !s.isBlank())
-                    .forEach(unique::add);
-        }
-        if (search != null && !search.isBlank()) {
-            for (String token : search.split("[,;\\n]")) {
-                String trimmed = token.trim();
-                if (!trimmed.isBlank()) {
-                    unique.add(trimmed);
-                }
-            }
-        }
-        return List.copyOf(unique);
-    }
-
     private JsonNode buildDefaultChartDefinitions(ReportGroupBy groupBy) {
         ArrayNode definitions = objectMapper.createArrayNode();
         switch (groupBy) {
@@ -343,11 +329,6 @@ public class ReportService {
         return node;
     }
 
-    private void putIfHasText(ObjectNode node, String key, String value) {
-        if (value != null && !value.isBlank()) {
-            node.put(key, value.trim());
-        }
-    }
 }
 
 

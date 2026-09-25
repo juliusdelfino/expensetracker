@@ -10,11 +10,13 @@ import com.delfino.expensetracker.service.ReportQueryService;
 import com.delfino.expensetracker.service.ReportService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -27,15 +29,18 @@ public class ReportToolService {
     private final ReportQueryService reportQueryService;
     private final UserContext userContext;
     private final ChatReportContext chatReportContext;
+    private final int maxReportCreatesPerHour;
 
     public ReportToolService(ReportService reportService,
                              ReportQueryService reportQueryService,
                              UserContext userContext,
-                             ChatReportContext chatReportContext) {
+                             ChatReportContext chatReportContext,
+                             @Value("${reports.ai.max-creates-per-hour:10}") int maxReportCreatesPerHour) {
         this.reportService = reportService;
         this.reportQueryService = reportQueryService;
         this.userContext = userContext;
         this.chatReportContext = chatReportContext;
+        this.maxReportCreatesPerHour = maxReportCreatesPerHour;
     }
 
     @Tool(description = "Generate and save a new expense report for the current user. " +
@@ -52,6 +57,10 @@ public class ReportToolService {
         Long userId = userContext.getUserId();
         log.info("Tool call: generateExpenseReport(groupBy={}, startDate={}, endDate={}, keyword={}, category={}, country={}, storeName={}, userId={})",
                 groupBy, startDate, endDate, keyword, category, country, storeName, userId);
+
+        if (isCreateRateLimited(userId)) {
+            return "Too many report creations in a short period. Please wait and try again later.";
+        }
 
         try {
             ReportGroupBy resolvedGroupBy = resolveGroupBy(groupBy, category, country, storeName, keyword);
@@ -90,18 +99,17 @@ public class ReportToolService {
         Long userId = userContext.getUserId();
         log.info("Tool call: listReports(limit={}, userId={})", limit, userId);
 
-        List<ReportSummaryResponse> reports = reportQueryService.listReports(userId);
+        int safeLimit = limit > 0 ? Math.min(limit, 20) : 5;
+        List<ReportSummaryResponse> reports = reportQueryService.listReports(userId, safeLimit);
         if (reports.isEmpty()) {
             return "No saved reports found.";
         }
 
-        int safeLimit = limit > 0 ? Math.min(limit, 20) : 5;
-        List<ReportSummaryResponse> limited = reports.stream().limit(safeLimit).toList();
-        limited.forEach(report -> chatReportContext.trackReport(report.id()));
+        reports.forEach(report -> chatReportContext.trackReport(report.id()));
 
         StringBuilder sb = new StringBuilder("Saved reports:\n");
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-        for (ReportSummaryResponse report : limited) {
+        for (ReportSummaryResponse report : reports) {
             sb.append("- #")
                     .append(report.id())
                     .append(" — ")
@@ -177,6 +185,14 @@ public class ReportToolService {
 
     private String safeValue(String value) {
         return StringUtils.hasText(value) ? value : "n/a";
+    }
+
+    private boolean isCreateRateLimited(Long userId) {
+        if (maxReportCreatesPerHour <= 0) {
+            return false;
+        }
+        LocalDateTime cutoff = LocalDateTime.now().minusHours(1);
+        return reportQueryService.countReportsCreatedSince(userId, cutoff) >= maxReportCreatesPerHour;
     }
 }
 
