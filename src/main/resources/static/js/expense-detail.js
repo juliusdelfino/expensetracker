@@ -4,6 +4,48 @@
 
 // Auto-refresh polling handle
 let _expenseDetailPollTimer = null;
+const _expenseDetailUiState = new Map();
+
+function _getExpenseDetailUiStateKey(id, options = {}) {
+    const isShared = !!options.shared;
+    const resolvedId = isShared ? (options.shareToken || id) : id;
+    return `${isShared ? 'shared' : 'owner'}:${resolvedId}`;
+}
+
+function _getExpenseDetailUiState(id, options = {}) {
+    const key = _getExpenseDetailUiStateKey(id, options);
+    if (!_expenseDetailUiState.has(key)) {
+        _expenseDetailUiState.set(key, {
+            sharePanelVisible: false,
+            sharedBannerDismissed: false
+        });
+    }
+    return _expenseDetailUiState.get(key);
+}
+
+function resetExpenseDetailTransientUiState() {
+    _expenseDetailUiState.clear();
+}
+
+function showExpenseShareStatusCard(expenseUrlId) {
+    if (!expenseUrlId) return;
+    const state = _getExpenseDetailUiState(expenseUrlId);
+    state.sharePanelVisible = true;
+}
+
+function dismissExpenseShareStatusCard(expenseUrlId) {
+    if (!expenseUrlId) return;
+    const state = _getExpenseDetailUiState(expenseUrlId);
+    state.sharePanelVisible = false;
+    document.querySelector('.share-status-card')?.remove();
+}
+
+function dismissSharedExpenseBanner(shareToken) {
+    if (!shareToken) return;
+    const state = _getExpenseDetailUiState(shareToken, { shared: true, shareToken });
+    state.sharedBannerDismissed = true;
+    document.querySelector('.shared-expense-banner')?.remove();
+}
 
 function _stopExpenseDetailPolling() {
     if (_expenseDetailPollTimer) {
@@ -109,6 +151,9 @@ function renderSharedExpenseBanner(options = {}) {
     if (!options.shared) return '';
 
     return `<div class="card shared-expense-banner">
+        <button type="button" class="share-card-dismiss-btn" onclick="dismissSharedExpenseBanner('${options.shareToken || options.expenseId || ''}')" aria-label="Hide shared expense banner">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
         <div class="shared-expense-banner-main">
             <div class="shared-expense-banner-icon"><i class="fa-solid fa-share-nodes"></i></div>
             <div>
@@ -152,12 +197,15 @@ function renderOwnerSharePanel(expenseUrlId, shareStatus) {
         const expiryLabel = `Expires ${expiryRelative || `in ${defaultTtlDays} days`}`;
 
         return `<div class="card share-status-card share-status-card-active">
+            <button type="button" class="share-card-dismiss-btn" onclick="dismissExpenseShareStatusCard('${expenseUrlId}')" aria-label="Hide share access card">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
             <div class="share-status-header-row">
                 <div>
-                    <h3 class="card-title"><i class="fa-solid fa-share-nodes"></i> Share access</h3>
+                    <h3 class="card-title"><i class="fa-solid fa-share-nodes"></i> Share access <span class="share-status-pill share-status-pill-active"><i class="fa-solid fa-check"></i> Active</span></h3>
                     <p class="share-status-subtitle">Anyone with the link below can open this expense and its receipts without signing in.</p>
                 </div>
-                <span class="share-status-pill share-status-pill-active"><i class="fa-solid fa-check"></i> Active</span>
+                
             </div>
 
             <div class="share-status-link-row">
@@ -165,22 +213,10 @@ function renderOwnerSharePanel(expenseUrlId, shareStatus) {
                 <button class="btn btn-outline btn-sm" onclick="copyExpenseLink('${expenseUrlId}', true)"><i class="fa-solid fa-copy"></i> Copy</button>
                 ${hasNativeShare ? `<button class="btn btn-primary btn-sm" onclick="nativeShareExpense('${expenseUrlId}', true)"><i class="fa-solid fa-paper-plane"></i> Share</button>` : ''}
             </div>
+            <span class="share-status-meta-subvalue">${esc(expiryLabel)}</span> -- 
+            ${expiryAbsolute ? `<span class="share-status-meta-subvalue">${esc(expiryAbsolute)}</span> --` : ''}
+            <span class="share-status-meta-subvalue"><a class="share-status-preview-link" href="${esc(absoluteUrl)}" target="_blank" rel="noopener noreferrer">Open shared view</a></span>
 
-            <div class="share-status-meta-grid">
-                <div class="share-status-meta-item">
-                    <span class="share-status-meta-label">Access</span>
-                    <span class="share-status-meta-value">Anyone with the link</span>
-                </div>
-                <div class="share-status-meta-item">
-                    <span class="share-status-meta-label">Expiry</span>
-                    <span class="share-status-meta-value">${esc(expiryLabel)}</span>
-                    ${expiryAbsolute ? `<span class="share-status-meta-subvalue">${esc(expiryAbsolute)}</span>` : ''}
-                </div>
-                <div class="share-status-meta-item">
-                    <span class="share-status-meta-label">Preview</span>
-                    <a class="share-status-preview-link" href="${esc(absoluteUrl)}" target="_blank" rel="noopener noreferrer">Open shared view</a>
-                </div>
-            </div>
 
             <div class="share-status-actions">
                 <button class="btn btn-danger btn-sm" onclick="revokeExpenseShare('${expenseUrlId}', true)"><i class="fa-solid fa-ban"></i> Revoke link</button>
@@ -199,12 +235,14 @@ function renderOwnerSharePanel(expenseUrlId, shareStatus) {
     const ttlOptions = getShareTtlOptions(defaultTtlDays);
 
     return `<div class="card share-status-card share-status-card-inactive">
+        <button type="button" class="share-card-dismiss-btn" onclick="dismissExpenseShareStatusCard('${expenseUrlId}')" aria-label="Hide share access card">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
         <div class="share-status-header-row">
             <div>
-                <h3 class="card-title"><i class="fa-solid fa-share-nodes"></i> Share access</h3>
+                <h3 class="card-title"><i class="fa-solid fa-share-nodes"></i> Share access <span class="share-status-pill share-status-pill-inactive"><i class="fa-solid fa-lock"></i> Not shared</span></h3>
                 <p class="share-status-subtitle">Create a temporary link so someone can view this expense and its receipt files.</p>
             </div>
-            <span class="share-status-pill share-status-pill-inactive"><i class="fa-solid fa-lock"></i> Not shared</span>
         </div>
 
         <div class="share-status-empty-state">
@@ -251,6 +289,7 @@ async function renderExpenseDetail(app, id, options = {}) {
     const store = data.store;
     const isOwner = !!data.isOwner;
     const shareStatus = isOwner && e.urlId ? await loadExpenseShareStatus(e.urlId) : null;
+    const expenseDetailUiState = _getExpenseDetailUiState(id, resolvedOptions);
     window._expenseIsOwner = isOwner;
 
     const isReceiptScan = e.type === 'RECEIPT_SCAN';
@@ -285,8 +324,10 @@ async function renderExpenseDetail(app, id, options = {}) {
             </div>
         </div>`;
 
-    html += renderSharedExpenseBanner(resolvedOptions);
-    if (isOwner && !isProcessing) {
+    if (!expenseDetailUiState.sharedBannerDismissed) {
+        html += renderSharedExpenseBanner({ ...resolvedOptions, expenseId: id });
+    }
+    if (isOwner && !isProcessing && expenseDetailUiState.sharePanelVisible) {
         html += renderOwnerSharePanel(e.urlId, shareStatus);
     }
 

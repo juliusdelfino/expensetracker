@@ -52,6 +52,7 @@ async function router() {
     const app = document.getElementById('app');
     // Stop any active expense-detail polling when navigating away
     if (typeof _stopExpenseDetailPolling === 'function') _stopExpenseDetailPolling();
+    if (typeof resetExpenseDetailTransientUiState === 'function') resetExpenseDetailTransientUiState();
 
     if (routeOnly === '#/login') { hideMobileUI(); renderLogin(app); return; }
     if (routeOnly === '#/register') { hideMobileUI(); renderRegister(app); return; }

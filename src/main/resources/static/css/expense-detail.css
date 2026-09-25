@@ -381,6 +381,8 @@
     justify-content: space-between;
     align-items: center;
     gap: 1rem;
+    position: relative;
+    padding-right: 3.5rem;
     border: 1px solid rgba(25, 118, 210, 0.18);
     background: linear-gradient(135deg, rgba(25, 118, 210, 0.08), rgba(25, 118, 210, 0.03));
 }
@@ -416,7 +418,34 @@
 }
 
 .share-status-card {
+    position: relative;
+    padding-right: 3.5rem;
     border: 1px solid var(--border-color);
+}
+.share-card-dismiss-btn {
+    position: absolute;
+    top: 0.85rem;
+    right: 0.85rem;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-card);
+    color: var(--text-light);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+}
+.share-card-dismiss-btn:hover {
+    color: var(--text);
+    background: var(--table-stripe);
+}
+.share-card-dismiss-btn:focus-visible {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.12);
 }
 .share-status-card-active {
     border-color: rgba(46, 125, 50, 0.18);
