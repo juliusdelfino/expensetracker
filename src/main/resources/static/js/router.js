@@ -52,25 +52,27 @@ async function router() {
     const app = document.getElementById('app');
     // Stop any active expense-detail polling when navigating away
     if (typeof _stopExpenseDetailPolling === 'function') _stopExpenseDetailPolling();
+    if (typeof resetExpenseDetailTransientUiState === 'function') resetExpenseDetailTransientUiState();
 
     if (routeOnly === '#/login') { hideMobileUI(); renderLogin(app); return; }
     if (routeOnly === '#/register') { hideMobileUI(); renderRegister(app); return; }
     if (routeOnly === '#/terms') { hideMobileUI(); document.getElementById('navbar').style.display = 'none'; renderTerms(app); return; }
     if (routeOnly === '#/privacy') { hideMobileUI(); document.getElementById('navbar').style.display = 'none'; renderPrivacy(app); return; }
 
-    // Expense detail pages are publicly accessible — try auth but never force redirect
-    if (routeOnly.match(/^#\/expenses\/[a-f0-9-]+$/)) {
+    // Owner expense detail pages require authentication
+    if (hash.match(/^#\/expenses\/[a-f0-9-]+$/)) {
         hideMobileUI();
-        await tryCheckAuth();
-        renderExpenseDetail(app, routeOnly.split('/')[2]);
+        const authed = await checkAuth();
+        if (!authed) { navigate('#/login'); return; }
+        renderExpenseDetail(app, hash.split('/')[2]);
         return;
     }
 
     // Shared expense detail pages are publicly accessible — try auth but never force redirect
-    if (routeOnly.match(/^#\/share\/[A-Za-z0-9-]+$/)) {
+    if (hash.match(/^#\/share\/[A-Za-z0-9-]+$/)) {
         hideMobileUI();
         await tryCheckAuth();
-        renderExpenseDetail(app, routeOnly.split('/')[2], { shared: true });
+        renderExpenseDetail(app, hash.split('/')[2], { shared: true });
         return;
     }
 

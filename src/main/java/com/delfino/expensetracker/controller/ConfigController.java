@@ -20,10 +20,14 @@ public class ConfigController {
     @Value("${logo-dev.token:}")
     private String logoDevToken;
 
+    @Value("${app.sharing.default-ttl-days:30}")
+    private long sharingDefaultTtlDays;
+
     @GetMapping
     public ResponseEntity<Map<String, Object>> config() {
         Map<String, Object> cfg = new HashMap<>();
         cfg.put("logoDevToken", logoDevToken);
+        cfg.put("sharingDefaultTtlDays", sharingDefaultTtlDays);
         return ResponseEntity.ok(cfg);
     }
 }
