@@ -12,8 +12,10 @@ import com.delfino.expensetracker.repository.AiUsageRepository;
 import com.delfino.expensetracker.repository.ExchangeRateCacheRepository;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
+import com.delfino.expensetracker.repository.ReportRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
 import com.delfino.expensetracker.repository.UserRepository;
+import com.delfino.expensetracker.service.AiUsageService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -151,13 +153,14 @@ public abstract class BaseControllerTest {
     @Autowired protected ObjectMapper objectMapper;
     @Autowired protected UserRepository userRepository;
     @Autowired protected ExpenseRepository expenseRepository;
+    @Autowired protected ReportRepository reportRepository;
     @Autowired protected ExpenseItemRepository expenseItemRepository;
     @Autowired protected StoreRepository storeRepository;
     @Autowired protected ChatMessageRepository chatMessageRepository;
     @Autowired protected AiUsageRepository aiUsageRepository;
     @Autowired protected ExchangeRateCacheRepository exchangeRateCacheRepository;
     @Autowired protected PasswordEncoder passwordEncoder;
-    @Autowired protected com.delfino.expensetracker.service.AiUsageService aiUsageService;
+    @Autowired protected AiUsageService aiUsageService;
     @Autowired protected MeterRegistry meterRegistry;
 
     // -------------------------------------------------------------------------
@@ -170,6 +173,7 @@ public abstract class BaseControllerTest {
         aiUsageRepository.deleteAll();
         expenseItemRepository.deleteAll();
         expenseRepository.deleteAll();
+        reportRepository.deleteAll();
         storeRepository.deleteAll();
         exchangeRateCacheRepository.deleteAll();
         userRepository.deleteAll();

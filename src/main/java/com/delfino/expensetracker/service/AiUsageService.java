@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class AiUsageService {
@@ -24,6 +25,7 @@ public class AiUsageService {
     private final UserRepository userRepository;
     private final UserAiSettingsService userAiSettingsService;
     private final MeterRegistry meterRegistry;
+    private final AiUsageRowCreator aiUsageRowCreator;
 
     @Value("${app.ai.quotas.chat-monthly:200}")
     private int chatMonthlyQuota;
@@ -34,21 +36,18 @@ public class AiUsageService {
     public AiUsageService(AiUsageRepository aiUsageRepository,
                           UserRepository userRepository,
                           UserAiSettingsService userAiSettingsService,
-                          MeterRegistry meterRegistry) {
+                          MeterRegistry meterRegistry,
+                          AiUsageRowCreator aiUsageRowCreator) {
         this.aiUsageRepository = aiUsageRepository;
         this.userRepository = userRepository;
         this.userAiSettingsService = userAiSettingsService;
         this.meterRegistry = meterRegistry;
+        this.aiUsageRowCreator = aiUsageRowCreator;
     }
 
     @Transactional
     public AiUsageStatusResponse getCurrentStatus(long userId) {
         return getStatus(userId, YearMonth.now());
-    }
-
-    @Transactional(readOnly = true)
-    public AiUsageStatusResponse getCurrentStatusSnapshot(long userId) {
-        return getStatusSnapshot(userId, YearMonth.now());
     }
 
     @Transactional
@@ -116,33 +115,32 @@ public class AiUsageService {
         return saved;
     }
 
-    @Transactional
-    public AiUsage ensureCurrentMonthRow(long userId, AiUsageType type) {
-        return ensureMonthRow(userId, type, YearMonth.now());
-    }
-
-    @Transactional
-    public AiUsage ensureMonthRow(long userId, AiUsageType type, YearMonth month) {
+    private AiUsage ensureMonthRow(long userId, AiUsageType type, YearMonth month) {
         return aiUsageRepository.findByUserIdAndTypeAndMonthYear(userId, type, month.toString())
                 .orElseGet(() -> createUsageRow(userId, type, month));
     }
 
     private AiUsage ensureMonthRowForUpdate(long userId, AiUsageType type, YearMonth month) {
+        Optional<AiUsage> existing = aiUsageRepository.findForUpdate(userId, type, month.toString());
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        // Row doesn't exist yet — try to create it in an isolated REQUIRES_NEW transaction.
+        try {
+            aiUsageRowCreator.tryCreate(userId, type, month, getQuota(type));
+        } catch (DataIntegrityViolationException ex) {
+            // A concurrent thread created the row first — that's fine, fall through.
+        }
+        // Always re-fetch with a pessimistic lock so the outer transaction owns the row.
         return aiUsageRepository.findForUpdate(userId, type, month.toString())
-                .orElseGet(() -> createUsageRow(userId, type, month));
+                .orElseThrow(() -> new IllegalStateException("Failed to ensure usage row for " + type));
     }
 
     private AiUsage createUsageRow(long userId, AiUsageType type, YearMonth month) {
-        AiUsage usage = new AiUsage();
-        usage.setUserId(userId);
-        usage.setType(type);
-        usage.setMonthYear(month.toString());
-        usage.setUsageCount(0);
-        usage.setQuota(getQuota(type));
         try {
-            return aiUsageRepository.saveAndFlush(usage);
+            return aiUsageRowCreator.tryCreate(userId, type, month, getQuota(type));
         } catch (DataIntegrityViolationException ex) {
-            return aiUsageRepository.findForUpdate(userId, type, month.toString())
+            return aiUsageRepository.findByUserIdAndTypeAndMonthYear(userId, type, month.toString())
                     .orElseThrow(() -> ex);
         }
     }

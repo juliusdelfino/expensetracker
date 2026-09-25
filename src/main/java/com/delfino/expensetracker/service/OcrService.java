@@ -15,6 +15,7 @@ import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
 import com.delfino.expensetracker.util.JsonUtils;
 import com.delfino.expensetracker.util.MediaUtils;
+import com.delfino.expensetracker.util.MoneyUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -405,9 +406,11 @@ public class OcrService {
                 String rawItemName = itemDto.itemName() != null ? itemDto.itemName() : "";
                 if (rawItemName.length() > 100) { itemNameTruncated = true; rawItemName = truncate(rawItemName, 100); }
                 item.setItemName(rawItemName);
-                item.setQuantity(itemDto.quantity() != null ? itemDto.quantity() : BigDecimal.ONE);
-                item.setUnitPrice(itemDto.unitPrice() != null ? itemDto.unitPrice() : BigDecimal.ZERO);
-                if (itemDto.adjustment() != null) item.setAdjustment(itemDto.adjustment());
+                MoneyUtils.LineItemPricing pricing = MoneyUtils.normalizeLineItemPricing(
+                        itemDto.quantity(), itemDto.unitPrice(), itemDto.adjustment());
+                item.setQuantity(pricing.quantity());
+                item.setUnitPrice(pricing.unitPrice());
+                item.setAdjustment(pricing.adjustment());
                 item.setDeleted(false);
                 items.add(item);
             }

@@ -307,7 +307,6 @@
 .action-bar-left, .action-bar-right {
     display: flex;
     gap: 0.5rem;
-    align-items: center;
 }
 
 /* ===================== EXPENSE FILTERS BAR ===================== */

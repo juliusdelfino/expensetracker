@@ -12,6 +12,7 @@ import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
 import com.delfino.expensetracker.repository.UserRepository;
+import com.delfino.expensetracker.util.MoneyUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -289,6 +290,10 @@ public class ExpenseService {
                 .toList();
     }
 
+    public long countActiveExpenses(Long userId) {
+        return expenseRepository.countByUserIdAndDeletedFalse(userId);
+    }
+
     private boolean matchesSearch(Expense e, String query,
                                   Map<Long, Store> storeMap,
                                   Map<Long, List<ExpenseItem>> itemsByExpenseId) {
@@ -400,6 +405,13 @@ public class ExpenseService {
                 .orElseThrow(() -> new IllegalStateException("Expense not found"));
         item.setExpenseId(expense.getId());
         item.setDeleted(false);
+        // Round quantity/unitPrice to the precision allowed by ExpenseItem, folding any
+        // rounding delta into adjustment so quantity*unitPrice+adjustment == original total.
+        MoneyUtils.LineItemPricing pricing = MoneyUtils.normalizeLineItemPricing(
+                item.getQuantity(), item.getUnitPrice(), item.getAdjustment());
+        item.setQuantity(pricing.quantity());
+        item.setUnitPrice(pricing.unitPrice());
+        item.setAdjustment(pricing.adjustment());
         expenseItemRepository.save(item);
         recomputeTotal(expense.getId());
         return item;

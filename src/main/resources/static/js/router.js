@@ -48,20 +48,29 @@ async function tryCheckAuth() {
 
 async function router() {
     const hash = window.location.hash || '#/login';
+    const routeOnly = hash.split('?')[0];
     const app = document.getElementById('app');
     // Stop any active expense-detail polling when navigating away
     if (typeof _stopExpenseDetailPolling === 'function') _stopExpenseDetailPolling();
 
-    if (hash === '#/login') { hideMobileUI(); renderLogin(app); return; }
-    if (hash === '#/register') { hideMobileUI(); renderRegister(app); return; }
-    if (hash === '#/terms') { hideMobileUI(); document.getElementById('navbar').style.display = 'none'; renderTerms(app); return; }
-    if (hash === '#/privacy') { hideMobileUI(); document.getElementById('navbar').style.display = 'none'; renderPrivacy(app); return; }
+    if (routeOnly === '#/login') { hideMobileUI(); renderLogin(app); return; }
+    if (routeOnly === '#/register') { hideMobileUI(); renderRegister(app); return; }
+    if (routeOnly === '#/terms') { hideMobileUI(); document.getElementById('navbar').style.display = 'none'; renderTerms(app); return; }
+    if (routeOnly === '#/privacy') { hideMobileUI(); document.getElementById('navbar').style.display = 'none'; renderPrivacy(app); return; }
 
     // Expense detail pages are publicly accessible — try auth but never force redirect
-    if (hash.match(/^#\/expenses\/[a-f0-9-]+$/)) {
+    if (routeOnly.match(/^#\/expenses\/[a-f0-9-]+$/)) {
         hideMobileUI();
         await tryCheckAuth();
-        renderExpenseDetail(app, hash.split('/')[2]);
+        renderExpenseDetail(app, routeOnly.split('/')[2]);
+        return;
+    }
+
+    // Shared expense detail pages are publicly accessible — try auth but never force redirect
+    if (routeOnly.match(/^#\/share\/[A-Za-z0-9-]+$/)) {
+        hideMobileUI();
+        await tryCheckAuth();
+        renderExpenseDetail(app, routeOnly.split('/')[2], { shared: true });
         return;
     }
 
@@ -70,7 +79,7 @@ async function router() {
 
     if (isMobile()) {
         // On mobile, #/dashboard shows the swipe panels always starting at Home (panel 1)
-        if (hash === '#/dashboard' || hash === '' || hash === '#/') {
+        if (routeOnly === '#/dashboard' || routeOnly === '' || routeOnly === '#/') {
             app.innerHTML = '';
             currentPanel = 1; // Always snap to Home when navigating to dashboard
             showMobileUI();
@@ -86,11 +95,13 @@ async function router() {
         hideMobileUI();
     }
 
-    if (hash === '#/dashboard') renderDashboard(app);
-    else if (hash === '#/expenses' || hash.startsWith('#/expenses?')) renderExpenseList(app);
-    else if (hash === '#/expenses/new' || hash.startsWith('#/expenses/new?')) renderNewExpense(app);
-    else if (hash === '#/profile' || hash.startsWith('#/profile?')) renderProfile(app);
-    else if (hash === '#/admin') {
+    if (routeOnly === '#/dashboard') renderDashboard(app);
+    else if (routeOnly === '#/expenses') renderExpenseList(app);
+    else if (routeOnly === '#/expenses/new') renderNewExpense(app);
+    else if (routeOnly === '#/reports') renderReportsPage(app);
+    else if (routeOnly.match(/^#\/reports\/\d+$/)) renderReportDetail(app, routeOnly.split('/')[2]);
+    else if (routeOnly === '#/profile') renderProfile(app);
+    else if (routeOnly === '#/admin') {
         if (!isAdminUser()) {
             toast('Admin access is required to open this page.', 'error');
             navigate('#/dashboard');
@@ -98,7 +109,7 @@ async function router() {
         }
         renderAdminPage(app);
     }
-    else if (hash === '#/chat') { toggleDesktopChat(); navigate('#/dashboard'); }
+    else if (routeOnly === '#/chat') { toggleDesktopChat(); navigate('#/dashboard'); }
     else renderDashboard(app);
 }
 

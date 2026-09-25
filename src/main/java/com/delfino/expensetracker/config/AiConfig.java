@@ -3,6 +3,7 @@ package com.delfino.expensetracker.config;
 import com.delfino.expensetracker.service.mcp.ExpenseCrudToolService;
 import com.delfino.expensetracker.service.mcp.ExpenseToolService;
 import com.delfino.expensetracker.service.mcp.ProfileToolService;
+import com.delfino.expensetracker.service.mcp.ReportToolService;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.ollama.api.OllamaApi;
@@ -25,6 +26,7 @@ import org.springframework.web.reactive.function.client.WebClient;
  * - ExpenseToolService: read-only queries (item price, totals, list, summary)
  * - ExpenseCrudToolService: CRUD on expenses, items, stores
  * - ProfileToolService: view/update user profile
+ * - ReportToolService: create/list/summarize saved reports
  */
 @Configuration
 public class AiConfig {
@@ -96,9 +98,10 @@ public class AiConfig {
     public ToolCallbackProvider expenseToolCallbackProvider(
             ExpenseToolService expenseToolService,
             ExpenseCrudToolService expenseCrudToolService,
-            ProfileToolService profileToolService) {
+            ProfileToolService profileToolService,
+            ReportToolService reportToolService) {
         return MethodToolCallbackProvider.builder()
-                .toolObjects(expenseToolService, expenseCrudToolService, profileToolService)
+                .toolObjects(expenseToolService, expenseCrudToolService, profileToolService, reportToolService)
                 .build();
     }
 }

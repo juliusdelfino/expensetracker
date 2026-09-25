@@ -28,6 +28,9 @@ async function renderExpenseList(app) {
                 <h2 style="color:var(--primary-dark)"><i class="fa-solid fa-receipt"></i> Expenses</h2>
             </div>
             <div class="action-bar-right">
+                <a class="btn btn-primary btn-sm" href="#/expenses/new">
+                    <i class="fa-solid fa-plus"></i> New Expense
+                </a>
                 <button class="btn btn-outline btn-sm expense-desktop-only" onclick="exportExpenses('csv')">
                     <i class="fa-solid fa-file-csv"></i> CSV
                 </button>
@@ -432,3 +435,17 @@ async function exportExpenses(format) {
     }
     toast(`Exported as ${format.toUpperCase()}`, 'success');
 }
+
+function getCurrentExpenseReportFilters() {
+    return {
+        title: '',
+        description: '',
+        startDate: document.getElementById('expFilterStartDate')?.value || '',
+        endDate: document.getElementById('expFilterEndDate')?.value || '',
+        category: document.getElementById('expFilterCategory')?.value || '',
+        country: document.getElementById('expFilterCountry')?.value || '',
+        search: document.getElementById('expenseSearch')?.value?.trim() || '',
+        groupBy: 'KEYWORD'
+    };
+}
+
