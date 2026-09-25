@@ -4,6 +4,8 @@ import com.delfino.expensetracker.config.ChatBotProperties;
 import com.delfino.expensetracker.dto.chat.ChatExpenseDto;
 import com.delfino.expensetracker.dto.chat.ChatExpenseItemDto;
 import com.delfino.expensetracker.dto.chat.ChatExpenseResponseDto;
+import com.delfino.expensetracker.exception.AiQuotaExceededException;
+import com.delfino.expensetracker.model.AiUsageType;
 import com.delfino.expensetracker.model.ChatMessage;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.ExpenseItem;
@@ -12,7 +14,11 @@ import com.delfino.expensetracker.repository.ChatMessageRepository;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.UserRepository;
+import com.delfino.expensetracker.service.mcp.ChatReportContext;
+import com.delfino.expensetracker.util.MoneyUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -34,33 +40,44 @@ import java.util.*;
 public class ChatService {
 
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
+    private static final String PROVIDER_TAG = "provider";
+    private static final String MODEL_TAG = "model";
+    private static final String OUTCOME_TAG = "outcome";
     private final ChatMessageRepository chatMessageRepository;
     private final ExpenseService expenseService;
     private final ExpenseRepository expenseRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
-    private final ChatClient chatClient;
+    private final ChatModelResolver chatModelResolver;
+    private final ToolCallbackProvider toolCallbackProvider;
     private final ChatBotProperties chatBotProperties;
     private final ExpenseItemRepository expenseItemRepository;
+    private final AiUsageService aiUsageService;
+    private final MeterRegistry meterRegistry;
+    private final Map<String, ChatClient> chatClients = new HashMap<>();
+    private final ChatReportContext chatReportContext;
 
     public ChatService(ChatMessageRepository chatMessageRepository, ExpenseService expenseService,
                        ExpenseRepository expenseRepository, UserRepository userRepository,
-                       ObjectMapper objectMapper, ChatClient.Builder chatClientBuilder,
+                       ObjectMapper objectMapper, ChatModelResolver chatModelResolver,
                        ToolCallbackProvider toolCallbackProvider,
                        ChatBotProperties chatBotProperties,
-                       ExpenseItemRepository expenseItemRepository) {
+                       ExpenseItemRepository expenseItemRepository,
+                       AiUsageService aiUsageService,
+                       MeterRegistry meterRegistry,
+                       ChatReportContext chatReportContext) {
         this.chatMessageRepository = chatMessageRepository;
         this.expenseService = expenseService;
         this.expenseRepository = expenseRepository;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
+        this.chatModelResolver = chatModelResolver;
+        this.toolCallbackProvider = toolCallbackProvider;
         this.chatBotProperties = chatBotProperties;
         this.expenseItemRepository = expenseItemRepository;
-
-        // Build the ChatClient with all registered tool callbacks
-        this.chatClient = chatClientBuilder
-                .defaultToolCallbacks(toolCallbackProvider)
-                .build();
+        this.aiUsageService = aiUsageService;
+        this.meterRegistry = meterRegistry;
+        this.chatReportContext = chatReportContext;
     }
 
     public List<ChatMessage> getHistoryPage(Long userId, int limit, int offset) {
@@ -77,6 +94,18 @@ public class ChatService {
     }
 
     public ChatMessage processUserMessage(Long userId, String messageText) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
+        AiUsageService.QuotaCheckResult chatQuota = aiUsageService.checkQuota(userId, AiUsageType.CHAT);
+        if (!chatQuota.allowed()) {
+            throw new AiQuotaExceededException(
+                    AiUsageType.CHAT,
+                    chatQuota.usageCount(),
+                    chatQuota.quota(),
+                    chatQuota.requestedUnits());
+        }
+        chatReportContext.clear();
+
         // Save user message
         ChatMessage userMsg = new ChatMessage();
         userMsg.setUserId(userId);
@@ -84,8 +113,6 @@ public class ChatService {
         userMsg.setText(messageText);
         userMsg.setCreatedAt(LocalDateTime.now());
         chatMessageRepository.save(userMsg);
-
-        User user = userRepository.findById(userId).get();
 
         try {
             String resolvedSystemPrompt = chatBotProperties.getSystemPrompt()
@@ -95,19 +122,23 @@ public class ChatService {
             log.info("Processing chat message for user {}: '{}'", userId, messageText);
 
             List<Message> conversationMessages = buildConversationHistory(userId);
-            String llmResponse = callLlm(resolvedSystemPrompt, conversationMessages, messageText);
+            String llmResponse = callLlm(user, resolvedSystemPrompt, conversationMessages, messageText);
+            aiUsageService.consume(userId, AiUsageType.CHAT);
 
             log.info("LLM response for user {}: {}", userId, llmResponse);
 
             // Try to parse as JSON (expense-creation flow)
             ProcessedResponse result = processLlmResponse(llmResponse, userId, user);
-            return saveBotMessage(userId, result.botText(), result.savedExpenseIds());
+            return saveBotMessage(userId, result.botText(), result.savedExpenseIds(), chatReportContext.getLinkedReportIds());
 
+        } catch (AiQuotaExceededException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Chatbot processing failed", e);
             return saveBotMessage(userId,
                     "Sorry, I had trouble processing that. Could you try rephrasing? " +
                             "For example: \"lunch 12.50 SGD\" or \"How much did I spend on groceries last month?\"",
+                    List.of(),
                     List.of());
         }
     }
@@ -139,13 +170,43 @@ public class ChatService {
     /**
      * Call the LLM with system prompt, conversation history, and user message.
      */
-    private String callLlm(String systemPrompt, List<Message> conversationMessages, String userMessage) {
-        return chatClient.prompt()
-                .system(systemPrompt)
-                .messages(conversationMessages)
-                .user(userMessage)
-                .call()
-                .content();
+    private String callLlm(User user, String systemPrompt, List<Message> conversationMessages, String userMessage) {
+        ChatModelResolver.ResolvedChatModel resolvedChatModel = chatModelResolver.resolveForUser(user);
+        String providerKey = resolvedChatModel.modelDefinition().getProvider().name();
+        String modelId = resolvedChatModel.modelDefinition().getId();
+        ChatClient chatClient = chatClients.computeIfAbsent(providerKey, ignored -> ChatClient.builder(resolvedChatModel.chatModel())
+                .defaultToolCallbacks(toolCallbackProvider)
+                .build());
+
+        Timer.Sample sample = Timer.start(meterRegistry);
+        log.info("Resolved chat provider for user {}: provider={} model={}", user.getId(), providerKey, modelId);
+
+        try {
+            String content = chatClient.prompt()
+                    .system(systemPrompt)
+                    .options(resolvedChatModel.chatOptions())
+                    .messages(conversationMessages)
+                    .user(userMessage)
+                    .call()
+                    .content();
+
+            recordChatMetrics(sample, providerKey, modelId, "success");
+            return content;
+        } catch (RuntimeException ex) {
+            recordChatMetrics(sample, providerKey, modelId, "error");
+            throw ex;
+        }
+    }
+
+    private void recordChatMetrics(Timer.Sample sample, String providerKey, String modelId, String outcome) {
+        String normalizedProvider = providerKey.toLowerCase(Locale.ROOT);
+        meterRegistry.counter("app.ai.chat.calls", PROVIDER_TAG, normalizedProvider, MODEL_TAG, modelId, OUTCOME_TAG, outcome)
+                .increment();
+        sample.stop(Timer.builder("app.ai.chat.latency")
+                .tag(PROVIDER_TAG, normalizedProvider)
+                .tag(MODEL_TAG, modelId)
+                .tag(OUTCOME_TAG, outcome)
+                .register(meterRegistry));
     }
 
     /**
@@ -231,9 +292,13 @@ public class ChatService {
             ExpenseItem item = new ExpenseItem();
             item.setExpenseId(expenseId);
             item.setItemName(itemDto.itemName() != null ? itemDto.itemName() : "");
-            item.setQuantity(itemDto.quantity() != null ? itemDto.quantity() : BigDecimal.ONE);
-            item.setUnitPrice(itemDto.unitPrice() != null ? itemDto.unitPrice() : BigDecimal.ZERO);
-            item.setAdjustment(itemDto.adjustment() != null ? itemDto.adjustment() : BigDecimal.ZERO);
+            // Round quantity/unitPrice to the precision allowed by ExpenseItem, folding any
+            // rounding delta into adjustment so quantity*unitPrice+adjustment == original total.
+            MoneyUtils.LineItemPricing pricing = MoneyUtils.normalizeLineItemPricing(
+                    itemDto.quantity(), itemDto.unitPrice(), itemDto.adjustment());
+            item.setQuantity(pricing.quantity());
+            item.setUnitPrice(pricing.unitPrice());
+            item.setAdjustment(pricing.adjustment());
             item.setDeleted(false);
             items.add(item);
         }
@@ -249,9 +314,18 @@ public class ChatService {
         return todaysExpenses.stream()
                 .filter(e -> e.getTransactionDatetime() != null
                         && e.getTransactionDatetime().toLocalDate().equals(today))
-                .map(e -> e.getAmountInBase() != null ? e.getAmountInBase()
-                        : (e.getAmount() != null ? e.getAmount() : BigDecimal.ZERO))
+                .map(this::resolveExpenseAmountForTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private BigDecimal resolveExpenseAmountForTotal(Expense expense) {
+        if (expense.getAmountInBase() != null) {
+            return expense.getAmountInBase();
+        }
+        if (expense.getAmount() != null) {
+            return expense.getAmount();
+        }
+        return BigDecimal.ZERO;
     }
 
     /**
@@ -274,12 +348,13 @@ public class ChatService {
         return cleaned;
     }
 
-    private ChatMessage saveBotMessage(Long userId, String text, List<Long> linkedExpenseIds) {
+    private ChatMessage saveBotMessage(Long userId, String text, List<Long> linkedExpenseIds, List<Long> linkedReportIds) {
         ChatMessage botMsg = new ChatMessage();
         botMsg.setUserId(userId);
         botMsg.setRole("BOT");
         botMsg.setText(text);
         botMsg.setLinkedExpenseIds(linkedExpenseIds);
+        botMsg.setLinkedReportIds(linkedReportIds);
         botMsg.setCreatedAt(LocalDateTime.now());
         chatMessageRepository.save(botMsg);
         return botMsg;

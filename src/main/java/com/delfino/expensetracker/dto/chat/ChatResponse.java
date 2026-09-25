@@ -4,4 +4,4 @@ import com.delfino.expensetracker.model.ChatMessage;
 
 import java.util.List;
 
-public record ChatResponse(ChatMessage message, List<ExpenseCard> expenseCards) {}
+public record ChatResponse(ChatMessage message, List<ExpenseCard> expenseCards, List<ReportCard> reportCards) {}

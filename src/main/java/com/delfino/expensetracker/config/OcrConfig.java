@@ -23,13 +23,14 @@ public class OcrConfig {
         return objectMapper.readValue(toolSchemaResource.getInputStream(), Map.class);
     }
 
-    @Bean
-    public OcrProvider ocrProvider(@Value("${ocr.api.format:ollama}") String format,
-                                   ObjectMapper objectMapper) {
-        if ("openai".equalsIgnoreCase(format)) {
-            return new OpenAiOcrProvider(objectMapper);
-        }
+    @Bean("ollamaOcrProvider")
+    public OcrProvider ollamaOcrProvider(ObjectMapper objectMapper) {
         return new OllamaOcrProvider(objectMapper);
+    }
+
+    @Bean("openAiOcrProvider")
+    public OcrProvider openAiOcrProvider(ObjectMapper objectMapper) {
+        return new OpenAiOcrProvider(objectMapper);
     }
 }
 

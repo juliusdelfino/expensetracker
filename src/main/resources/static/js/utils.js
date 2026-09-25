@@ -5,6 +5,10 @@
 let currentUser = null;
 let chartInstances = {};
 let appConfig = {}; // populated by loadAppConfig() on startup
+let currentAiStatus = null;
+let availableAiModels = null;
+let _aiStatusRequest = null;
+let _aiModelsRequest = null;
 
 // ---- ESC key handler registry for dialogs ----
 const _escHandlers = {}; // overlayId -> handler function
@@ -29,6 +33,110 @@ async function loadAppConfig() {
         const cfg = await api('/api/config', { noAuthRedirect: true });
         if (cfg) Object.assign(appConfig, cfg);
     } catch { /* keep defaults */ }
+}
+
+function clearAiClientState() {
+    currentAiStatus = null;
+    availableAiModels = null;
+    _aiStatusRequest = null;
+    _aiModelsRequest = null;
+    renderNavigationState();
+    syncAiQuotaState();
+}
+
+function isAdminUser(user = currentUser) {
+    return user?.role === 'ADMIN';
+}
+
+function renderNavigationState() {
+    const navAdminLink = document.getElementById('navAdminLink');
+    const drawerAdminLink = document.getElementById('drawerAdminLink');
+    const usernameEl = document.getElementById('nav-username');
+
+    if (usernameEl) usernameEl.textContent = currentUser?.username || '';
+    if (navAdminLink) navAdminLink.style.display = isAdminUser() ? 'flex' : 'none';
+    if (drawerAdminLink) drawerAdminLink.style.display = isAdminUser() ? 'flex' : 'none';
+}
+
+function getAiModelOption(modelId) {
+    if (!availableAiModels?.models || !modelId) return null;
+    return availableAiModels.models.find(model => model.id === modelId) || null;
+}
+
+function getAiModelLabel(modelId) {
+    const model = getAiModelOption(modelId);
+    return model?.label || modelId || 'Default';
+}
+
+function getAiDefaultOptionLabel(modelsResponse = availableAiModels) {
+    if (!modelsResponse) return 'Default (configured by admin)';
+    const chatLabel = getAiModelLabel(modelsResponse.defaultChatModel);
+    const ocrLabel = getAiModelLabel(modelsResponse.defaultOcrModel);
+    if (modelsResponse.defaultChatModel && modelsResponse.defaultChatModel === modelsResponse.defaultOcrModel) {
+        return `Default (${chatLabel})`;
+    }
+    return `Default (Chat: ${chatLabel} • OCR: ${ocrLabel})`;
+}
+
+function getEffectiveAiModelSummary(status = currentAiStatus) {
+    if (!status) return 'AI status unavailable';
+    if (status.effectiveChatModel && status.effectiveChatModel === status.effectiveOcrModel) {
+        return getAiModelLabel(status.effectiveChatModel);
+    }
+    return `Chat: ${getAiModelLabel(status.effectiveChatModel)} • OCR: ${getAiModelLabel(status.effectiveOcrModel)}`;
+}
+
+function syncAiQuotaState() {
+    if (typeof applyChatQuotaState === 'function') applyChatQuotaState();
+    if (typeof applyOcrQuotaState === 'function') applyOcrQuotaState();
+}
+
+async function loadAiStatus(force = false) {
+    if (!currentUser) {
+        clearAiClientState();
+        return null;
+    }
+    if (!force && currentAiStatus) {
+        syncAiQuotaState();
+        return currentAiStatus;
+    }
+    if (!force && _aiStatusRequest) return _aiStatusRequest;
+
+    _aiStatusRequest = (async () => {
+        const result = await apiResult('/api/user/ai/status', { noAuthRedirect: true });
+        currentAiStatus = result.ok ? result.data : null;
+        syncAiQuotaState();
+        return currentAiStatus;
+    })();
+
+    try {
+        return await _aiStatusRequest;
+    } finally {
+        _aiStatusRequest = null;
+    }
+}
+
+async function loadAiModels(force = false) {
+    if (!currentUser) {
+        availableAiModels = null;
+        _aiModelsRequest = null;
+        return null;
+    }
+    if (!force && availableAiModels) return availableAiModels;
+    if (!force && _aiModelsRequest) return _aiModelsRequest;
+
+    _aiModelsRequest = (async () => {
+        const result = await apiResult('/api/user/ai/models', { noAuthRedirect: true });
+        availableAiModels = result.ok ? result.data : null;
+        syncAiQuotaState();
+        return availableAiModels;
+    })();
+
+    try {
+        return await _aiModelsRequest;
+    } finally {
+        _aiModelsRequest = null;
+    }
 }
 
 /**
@@ -73,6 +181,11 @@ function isMobile() { return window.innerWidth < 900; }
 
 // --- API Helper ---
 async function api(url, options = {}) {
+    const result = await apiResult(url, options);
+    return result.data;
+}
+
+async function apiResult(url, options = {}) {
     const { noAuthRedirect, ...fetchOptions } = options;
     const defaults = { headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
     if (fetchOptions.body && !(fetchOptions.body instanceof FormData)) {
@@ -81,9 +194,16 @@ async function api(url, options = {}) {
         delete defaults.headers['Content-Type'];
     }
     const res = await fetch(url, { ...defaults, ...fetchOptions });
-    if (res.status === 401 && !noAuthRedirect) { currentUser = null; navigate('#/login'); return null; }
+    if (res.status === 401 && !noAuthRedirect) {
+        currentUser = null;
+        clearAiClientState();
+        navigate('#/login');
+        return { ok: false, status: 401, data: null };
+    }
     const text = await res.text();
-    try { return JSON.parse(text); } catch { return text; }
+    let data;
+    try { data = JSON.parse(text); } catch { data = text; }
+    return { ok: res.ok, status: res.status, data };
 }
 
 // --- Toast ---
@@ -334,15 +454,15 @@ function renderPrivacy(app) {
         <ul>
             <li>Expense records and receipt images are kept for the lifetime of your account.</li>
             <li>You can delete individual receipts, attachments, and expenses at any time within the app.</li>
-            <li>On <strong>account deletion</strong>, all personal data (expense records, receipt images, attachments, account information) is permanently deleted within <strong>30 days</strong>. Encrypted backups may hold the data for up to <strong>30 additional days</strong> before purge.</li>
+            <li>On <strong>account deletion</strong>, all personal data (expense records, receipt images, attachments, account information) is permanently and immediately deleted. Encrypted backups may hold the data for up to <strong>30 additional days</strong> before purge.</li>
             <li>Application logs are retained for up to <strong>90 days</strong> for security and debugging, then automatically deleted.</li>
         </ul>
 
         <h3>4. Your Rights &amp; Controls</h3>
         <ul>
             <li><strong>Delete receipts/attachments:</strong> Available within the app on any expense detail page.</li>
-            <li><strong>Export your data:</strong> Use the built-in CSV/JSON export in the Expenses page. For a full data export including attachments, email <a href="mailto:admin@rizibo.com">admin@rizibo.com</a>.</li>
-            <li><strong>Delete your account:</strong> To permanently delete your account and all associated data, email <a href="mailto:admin@rizibo.com">admin@rizibo.com</a>. Deletion is completed within 30 days.</li>
+            <li><strong>Export your data:</strong> Use the <strong>Data &amp; Export</strong> tab on the Account page to download a full archive (ZIP) that includes your profile, all expenses, receipt images, and attachments. Individual JSON/CSV exports are also available from the Expenses page.</li>
+            <li><strong>Delete your account:</strong> You can permanently delete your account and all associated data directly in the app via the <strong>Danger Zone</strong> tab on the Account page. Deletion is immediate and irreversible. If you need assistance, email <a href="mailto:admin@rizibo.com">admin@rizibo.com</a>.</li>
             <li><strong>Correction:</strong> You can edit or delete any expense record, note, or tag within the app at any time.</li>
         </ul>
 
@@ -394,3 +514,5 @@ function renderPrivacy(app) {
         <a href="mailto:admin@rizibo.com">admin@rizibo.com</a></p>
     </div>`;
 }
+
+

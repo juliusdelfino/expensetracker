@@ -26,6 +26,8 @@ public class Expense {
     private String currency;
 
     private BigDecimal amountInBase;
+
+    @Column(precision = 18, scale = 8)
     private BigDecimal exchangeRate;
 
     @Size(max = 50)

@@ -6,19 +6,11 @@ import com.delfino.expensetracker.model.ExpenseItem;
 import com.delfino.expensetracker.model.ExpenseStatus;
 import com.delfino.expensetracker.model.ExpenseType;
 import com.delfino.expensetracker.model.User;
-import com.delfino.expensetracker.service.ocr.OcrProvider;
-import com.delfino.expensetracker.service.ocr.OpenAiOcrProvider;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -29,19 +21,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Integration tests for OcrService with OpenAI format responses.
- * Overrides the OcrProvider bean to use OpenAiOcrProvider.
+ * Uses a user-level AI model override so provider selection happens through the Phase 2 runtime resolver.
  */
-@Import(OcrServiceOpenAiTest.OpenAiProviderOverride.class)
 class OcrServiceOpenAiTest extends BaseControllerTest {
-
-    @TestConfiguration
-    static class OpenAiProviderOverride {
-        @Bean
-        @Primary
-        public OcrProvider ocrProviderOpenAi(ObjectMapper objectMapper) {
-            return new OpenAiOcrProvider(objectMapper);
-        }
-    }
 
     @Autowired
     private OcrService ocrService;
@@ -74,12 +56,12 @@ class OcrServiceOpenAiTest extends BaseControllerTest {
 
     @Test
     void processReceiptSync_openAiToolCall_savesExpenseAndItems() throws Exception {
-        User user = createTestUser("openaiocr1", "pass");
+        User user = createTestUser("openaiocr1", "pass", "USD", com.delfino.expensetracker.model.UserRole.USER, "qwen3.5-397b-a17b");
         Expense expense = createProcessingExpense(user.getId());
         Path imgPath = createTestImage();
 
         // Stub OpenAI-format tool_call response
-        WIRE_MOCK.stubFor(WireMock.post(urlPathEqualTo("/api/chat"))
+        WIRE_MOCK.stubFor(WireMock.post(urlPathMatching("/(v1/)?chat/completions"))
                 .withRequestBody(containing("submit_receipt"))
                 .atPriority(0)
                 .willReturn(okJson(openAiToolCallResponse("submit_receipt", RECEIPT_ARGS))
@@ -102,11 +84,11 @@ class OcrServiceOpenAiTest extends BaseControllerTest {
 
     @Test
     void processReceiptSync_openAiApiError_marksExpenseFailed() throws Exception {
-        User user = createTestUser("openaiocr2", "pass");
+        User user = createTestUser("openaiocr2", "pass", "USD", com.delfino.expensetracker.model.UserRole.USER, "qwen3.5-397b-a17b");
         Expense expense = createProcessingExpense(user.getId());
         Path imgPath = createTestImage();
 
-        WIRE_MOCK.stubFor(WireMock.post(urlPathEqualTo("/api/chat"))
+        WIRE_MOCK.stubFor(WireMock.post(urlPathMatching("/(v1/)?chat/completions"))
                 .withRequestBody(containing("submit_receipt"))
                 .atPriority(0)
                 .willReturn(aResponse().withStatus(400)
@@ -121,7 +103,7 @@ class OcrServiceOpenAiTest extends BaseControllerTest {
 
     @Test
     void processReceiptSync_openAiValidationRetry_correctsAmount() throws Exception {
-        User user = createTestUser("openaiocr3", "pass");
+        User user = createTestUser("openaiocr3", "pass", "USD", com.delfino.expensetracker.model.UserRole.USER, "qwen3.5-397b-a17b");
         Expense expense = createProcessingExpense(user.getId());
         Path imgPath = createTestImage();
 
@@ -131,7 +113,7 @@ class OcrServiceOpenAiTest extends BaseControllerTest {
                 "\"store\":{\"name\":\"Shop\"}}";
 
         // First call: bad amount
-        WIRE_MOCK.stubFor(WireMock.post(urlPathEqualTo("/api/chat"))
+        WIRE_MOCK.stubFor(WireMock.post(urlPathMatching("/(v1/)?chat/completions"))
                 .withRequestBody(containing("submit_receipt"))
                 .withRequestBody(WireMock.notMatching(".*Validation failed.*"))
                 .atPriority(0)
@@ -139,7 +121,7 @@ class OcrServiceOpenAiTest extends BaseControllerTest {
                         .withHeader("Connection", "close")));
 
         // Second call (retry with validation error): corrected amount
-        WIRE_MOCK.stubFor(WireMock.post(urlPathEqualTo("/api/chat"))
+        WIRE_MOCK.stubFor(WireMock.post(urlPathMatching("/(v1/)?chat/completions"))
                 .withRequestBody(containing("Validation failed"))
                 .atPriority(0)
                 .willReturn(okJson(openAiToolCallResponse("submit_receipt", RECEIPT_ARGS))

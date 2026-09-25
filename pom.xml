@@ -13,7 +13,7 @@
 
     <groupId>com.delfino</groupId>
     <artifactId>expensetracker</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
@@ -218,11 +218,49 @@
     </dependencies>
 
     <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
+         <resources>
+             <!-- Default: copy everything under src/main/resources WITHOUT filtering. -->
+             <resource>
+                 <directory>src/main/resources</directory>
+                 <filtering>false</filtering>
+             </resource>
+             <!-- Config files ONLY: explicitly whitelisted for variable substitution
+                  (e.g. ${project.version} in application.yml). Keep this list narrow —
+                  do NOT add js/css/html/json here. -->
+             <resource>
+                 <directory>src/main/resources</directory>
+                 <filtering>true</filtering>
+                 <includes>
+                     <include>**/*.yml</include>
+                     <include>**/*.yaml</include>
+                     <include>**/*.properties</include>
+                 </includes>
+             </resource>
+             <!-- Launch scripts ONLY: filtered for variable substitution -->
+             <resource>
+                 <directory>src/shl</directory>
+                 <filtering>true</filtering>
+                 <targetPath>../shl-filtered</targetPath>
+                 <includes>
+                     <include>**/*.sh</include>
+                     <include>**/*.bat</include>
+                 </includes>
+             </resource>
+         </resources>
+         <plugins>
+             <plugin>
+                 <groupId>org.apache.maven.plugins</groupId>
+                 <artifactId>maven-resources-plugin</artifactId>
+                 <configuration>
+                     <delimiters>
+                         <delimiter>${*}</delimiter>
+                     </delimiters>
+                 </configuration>
+             </plugin>
+             <plugin>
+                 <groupId>org.springframework.boot</groupId>
+                 <artifactId>spring-boot-maven-plugin</artifactId>
+             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>

@@ -290,6 +290,13 @@
     font-size: 0.9rem;
     flex-shrink: 0;
 }
+.mini-card-logo {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    border-radius: 32px;
+    display: block;
+}
 .mini-card-info { flex: 1; min-width: 0; }
 .mini-card-category {
     font-weight: 600;
@@ -409,7 +416,7 @@
 
 /* ===================== CARD TITLE ROW (with dropdown) ===================== */
 .card {
-    padding: 1.5rem 0.5rem;
+    padding: 1.5rem;
 }
 .card-title-row {
     display: flex;

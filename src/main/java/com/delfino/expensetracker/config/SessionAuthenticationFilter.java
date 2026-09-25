@@ -2,6 +2,7 @@ package com.delfino.expensetracker.config;
 
 import com.delfino.expensetracker.dto.auth.UserContext;
 import com.delfino.expensetracker.dto.auth.UserToken;
+import com.delfino.expensetracker.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -24,9 +25,11 @@ import java.util.List;
 public class SessionAuthenticationFilter extends OncePerRequestFilter {
 
     private final UserContext userContext;
+    private final UserRepository userRepository;
 
-    public SessionAuthenticationFilter(UserContext userContext) {
+    public SessionAuthenticationFilter(UserContext userContext, UserRepository userRepository) {
         this.userContext = userContext;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -36,10 +39,14 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
         if (session != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             Long userId = (Long) session.getAttribute("userId");
             if (userId != null) {
-                var auth = new UserToken(
-                        userId, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
-                SecurityContextHolder.getContext().setAuthentication(auth);
-                userContext.setUserId(userId);
+                userRepository.findById(userId).ifPresent(user -> {
+                    var auth = new UserToken(
+                            userId,
+                            null,
+                            List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                    userContext.setUserId(userId);
+                });
             }
         }
         filterChain.doFilter(request, response);

@@ -13,11 +13,14 @@ async function checkAuth() {
     if (data && data.id) {
         currentUser = data;
         document.getElementById('navbar').style.display = 'flex';
-        document.getElementById('nav-username').textContent = data.username;
+        renderNavigationState();
+        await loadAiStatus(true);
+        await loadAiModels();
         return true;
     }
     currentUser = null;
     document.getElementById('navbar').style.display = 'none';
+    clearAiClientState();
     return false;
 }
 
@@ -30,26 +33,30 @@ async function tryCheckAuth() {
             if (data && data.id) {
                 currentUser = data;
                 document.getElementById('navbar').style.display = 'flex';
-                document.getElementById('nav-username').textContent = data.username;
+                renderNavigationState();
+                await loadAiStatus(true);
+                await loadAiModels();
                 return true;
             }
         }
     } catch (e) { /* ignore */ }
     currentUser = null;
     document.getElementById('navbar').style.display = 'none';
+    clearAiClientState();
     return false;
 }
 
 async function router() {
     const hash = window.location.hash || '#/login';
+    const routeOnly = hash.split('?')[0];
     const app = document.getElementById('app');
     // Stop any active expense-detail polling when navigating away
     if (typeof _stopExpenseDetailPolling === 'function') _stopExpenseDetailPolling();
 
-    if (hash === '#/login') { hideMobileUI(); renderLogin(app); return; }
-    if (hash === '#/register') { hideMobileUI(); renderRegister(app); return; }
-    if (hash === '#/terms') { hideMobileUI(); document.getElementById('navbar').style.display = 'none'; renderTerms(app); return; }
-    if (hash === '#/privacy') { hideMobileUI(); document.getElementById('navbar').style.display = 'none'; renderPrivacy(app); return; }
+    if (routeOnly === '#/login') { hideMobileUI(); renderLogin(app); return; }
+    if (routeOnly === '#/register') { hideMobileUI(); renderRegister(app); return; }
+    if (routeOnly === '#/terms') { hideMobileUI(); document.getElementById('navbar').style.display = 'none'; renderTerms(app); return; }
+    if (routeOnly === '#/privacy') { hideMobileUI(); document.getElementById('navbar').style.display = 'none'; renderPrivacy(app); return; }
 
     // Owner expense detail pages require authentication
     if (hash.match(/^#\/expenses\/[a-f0-9-]+$/)) {
@@ -73,7 +80,7 @@ async function router() {
 
     if (isMobile()) {
         // On mobile, #/dashboard shows the swipe panels always starting at Home (panel 1)
-        if (hash === '#/dashboard' || hash === '' || hash === '#/') {
+        if (routeOnly === '#/dashboard' || routeOnly === '' || routeOnly === '#/') {
             app.innerHTML = '';
             currentPanel = 1; // Always snap to Home when navigating to dashboard
             showMobileUI();
@@ -89,11 +96,21 @@ async function router() {
         hideMobileUI();
     }
 
-    if (hash === '#/dashboard') renderDashboard(app);
-    else if (hash === '#/expenses' || hash.startsWith('#/expenses?')) renderExpenseList(app);
-    else if (hash === '#/expenses/new' || hash.startsWith('#/expenses/new?')) renderNewExpense(app);
-    else if (hash === '#/profile') renderProfile(app);
-    else if (hash === '#/chat') { toggleDesktopChat(); navigate('#/dashboard'); }
+    if (routeOnly === '#/dashboard') renderDashboard(app);
+    else if (routeOnly === '#/expenses') renderExpenseList(app);
+    else if (routeOnly === '#/expenses/new') renderNewExpense(app);
+    else if (routeOnly === '#/reports') renderReportsPage(app);
+    else if (routeOnly.match(/^#\/reports\/\d+$/)) renderReportDetail(app, routeOnly.split('/')[2]);
+    else if (routeOnly === '#/profile') renderProfile(app);
+    else if (routeOnly === '#/admin') {
+        if (!isAdminUser()) {
+            toast('Admin access is required to open this page.', 'error');
+            navigate('#/dashboard');
+            return;
+        }
+        renderAdminPage(app);
+    }
+    else if (routeOnly === '#/chat') { toggleDesktopChat(); navigate('#/dashboard'); }
     else renderDashboard(app);
 }
 
@@ -133,6 +150,7 @@ async function logout() {
     currentUser = null;
     mobilePanelsRendered = false;
     document.getElementById('navbar').style.display = 'none';
+    clearAiClientState();
     hideMobileUI();
     navigate('#/login');
 }

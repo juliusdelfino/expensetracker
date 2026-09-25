@@ -31,24 +31,24 @@
     </fileSets>
 
     <files>
-        <file>
-            <source>src/shl/run-app.sh</source>
-            <outputDirectory>.</outputDirectory>
-            <fileMode>0755</fileMode>
-            <lineEnding>unix</lineEnding>
-        </file>
-        <file>
-            <source>src/shl/run-app.bat</source>
-            <outputDirectory>.</outputDirectory>
-            <fileMode>0755</fileMode>
-        </file>
-        <file>
-            <source>src/shl/stop-app.sh</source>
-            <outputDirectory>.</outputDirectory>
-            <fileMode>0755</fileMode>
-            <lineEnding>unix</lineEnding>
-        </file>
-    </files>
+         <file>
+             <source>target/shl-filtered/run-app.sh</source>
+             <outputDirectory>.</outputDirectory>
+             <fileMode>0755</fileMode>
+             <lineEnding>unix</lineEnding>
+         </file>
+         <file>
+             <source>target/shl-filtered/run-app.bat</source>
+             <outputDirectory>.</outputDirectory>
+             <fileMode>0755</fileMode>
+         </file>
+         <file>
+             <source>target/shl-filtered/stop-app.sh</source>
+             <outputDirectory>.</outputDirectory>
+             <fileMode>0755</fileMode>
+             <lineEnding>unix</lineEnding>
+         </file>
+     </files>
 
     <dependencySets>
         <dependencySet>
