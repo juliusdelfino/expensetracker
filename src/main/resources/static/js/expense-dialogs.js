@@ -25,6 +25,52 @@ function _getUserLocation() {
     });
 }
 
+function _setStoreFieldValue(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = value || '';
+}
+
+function _applyReverseAddress(address) {
+    if (!address) return false;
+    const road = [address.road, address.house_number].filter(Boolean).join(' ') || address.pedestrian || address.path || '';
+    const city = address.city || address.town || address.village || address.municipality || '';
+    const countryCode = (address.country_code || '').toUpperCase();
+    const postalCode = address.postcode || '';
+
+    const hasAny = !!(road || city || countryCode || postalCode);
+    if (!hasAny) return false;
+
+    _setStoreFieldValue('csAddress', road);
+    _setStoreFieldValue('csCity', city);
+    _setStoreFieldValue('csCountry', countryCode);
+    _setStoreFieldValue('csPostal', postalCode);
+    return true;
+}
+
+async function reverseGeocodeStoreLocation(lat, lng) {
+    try {
+        const url = `https://nominatim.openstreetmap.org/reverse?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&format=json&addressdetails=1`;
+        const result = await fetch(url, {
+            headers: { 'Accept-Language': 'en', 'User-Agent': 'ExpenseTracker/1.0' }
+        }).then(r => r.json());
+
+        const updated = _applyReverseAddress(result?.address);
+        if (updated) {
+            window._nominatimPlaceId = result?.place_id ? String(result.place_id) : null;
+            window._nominatimSnapshot = {
+                address: document.getElementById('csAddress')?.value || '',
+                city: document.getElementById('csCity')?.value || '',
+                country: document.getElementById('csCountry')?.value || '',
+                postalCode: document.getElementById('csPostal')?.value || ''
+            };
+            _selectedDbStoreId = null;
+        }
+    } catch (e) {
+        // Reverse geocoding is best-effort; keep coordinate update even if this fails.
+    }
+}
+
 async function openChangeStoreDialog(expenseId) {
     if (!window._expenseIsOwner) return;
     const data = await api(`/api/expenses/${expenseId}`);
@@ -106,7 +152,18 @@ async function openChangeStoreDialog(expenseId) {
     setTimeout(() => initChangeStoreMap(store), 200);
 }
 
-function initChangeStoreMap(store) {
+async function initChangeStoreMap(store) {
+    try {
+        await ensureLeafletLoaded();
+    } catch (e) {
+        toast('Map failed to load. Please try again.', 'error');
+        return;
+    }
+    if (typeof L === 'undefined') {
+        toast('Map library is unavailable.', 'error');
+        return;
+    }
+
     const mapEl = document.getElementById('changeStoreMap');
     if (!mapEl) return;
 
@@ -126,12 +183,13 @@ function initChangeStoreMap(store) {
     }).addTo(_changeStoreMap);
 
     _changeStoreMarker = L.marker([lat, lng], { draggable: true }).addTo(_changeStoreMap);
-    _changeStoreMarker.on('dragend', function() {
+    _changeStoreMarker.on('dragend', async function() {
         const pos = _changeStoreMarker.getLatLng();
         const latEl = document.getElementById('csLat');
         const lngEl = document.getElementById('csLng');
         if (latEl) latEl.value = pos.lat.toFixed(6);
         if (lngEl) lngEl.value = pos.lng.toFixed(6);
+        await reverseGeocodeStoreLocation(pos.lat, pos.lng);
     });
 
     // Custom "locate me" control — placed below the zoom buttons
@@ -157,6 +215,7 @@ function initChangeStoreMap(store) {
                               const lngEl = document.getElementById('csLng');
                               if (latEl) latEl.value = latitude.toFixed(6);
                               if (lngEl) lngEl.value = longitude.toFixed(6);
+                              reverseGeocodeStoreLocation(latitude, longitude);
                               btn.disabled = false;
                               btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i>';
                           }, () => {
