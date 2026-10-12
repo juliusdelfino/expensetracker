@@ -48,16 +48,18 @@ public class DbMigrationRunner implements CommandLineRunner {
             "ai_usage",
             "stores",
             "expenses",
+            "expense_shares",
             "expense_items",
             "expense_tags",
             "expense_attachments",
+            "share_access_log",
             "chat_messages",
             "chat_message_linked_expenses"
     );
 
     /** Tables that have a serial/identity "id" column whose sequence must be reset. */
     private static final List<String> ID_TABLES = List.of(
-            "users", "ai_usage", "stores", "expenses", "expense_items", "chat_messages"
+            "users", "ai_usage", "stores", "expenses", "expense_shares", "expense_items", "share_access_log", "chat_messages"
     );
 
     private final DataSource pgDataSource;

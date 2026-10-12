@@ -25,6 +25,52 @@ function _getUserLocation() {
     });
 }
 
+function _setStoreFieldValue(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = value || '';
+}
+
+function _applyReverseAddress(address) {
+    if (!address) return false;
+    const road = [address.road, address.house_number].filter(Boolean).join(' ') || address.pedestrian || address.path || '';
+    const city = address.city || address.town || address.village || address.municipality || '';
+    const countryCode = (address.country_code || '').toUpperCase();
+    const postalCode = address.postcode || '';
+
+    const hasAny = !!(road || city || countryCode || postalCode);
+    if (!hasAny) return false;
+
+    _setStoreFieldValue('csAddress', road);
+    _setStoreFieldValue('csCity', city);
+    _setStoreFieldValue('csCountry', countryCode);
+    _setStoreFieldValue('csPostal', postalCode);
+    return true;
+}
+
+async function reverseGeocodeStoreLocation(lat, lng) {
+    try {
+        const url = `https://nominatim.openstreetmap.org/reverse?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&format=json&addressdetails=1`;
+        const result = await fetch(url, {
+            headers: { 'Accept-Language': 'en', 'User-Agent': 'ExpenseTracker/1.0' }
+        }).then(r => r.json());
+
+        const updated = _applyReverseAddress(result?.address);
+        if (updated) {
+            window._nominatimPlaceId = result?.place_id ? String(result.place_id) : null;
+            window._nominatimSnapshot = {
+                address: document.getElementById('csAddress')?.value || '',
+                city: document.getElementById('csCity')?.value || '',
+                country: document.getElementById('csCountry')?.value || '',
+                postalCode: document.getElementById('csPostal')?.value || ''
+            };
+            _selectedDbStoreId = null;
+        }
+    } catch (e) {
+        // Reverse geocoding is best-effort; keep coordinate update even if this fails.
+    }
+}
+
 async function openChangeStoreDialog(expenseId) {
     if (!window._expenseIsOwner) return;
     const data = await api(`/api/expenses/${expenseId}`);
@@ -106,7 +152,18 @@ async function openChangeStoreDialog(expenseId) {
     setTimeout(() => initChangeStoreMap(store), 200);
 }
 
-function initChangeStoreMap(store) {
+async function initChangeStoreMap(store) {
+    try {
+        await ensureLeafletLoaded();
+    } catch (e) {
+        toast('Map failed to load. Please try again.', 'error');
+        return;
+    }
+    if (typeof L === 'undefined') {
+        toast('Map library is unavailable.', 'error');
+        return;
+    }
+
     const mapEl = document.getElementById('changeStoreMap');
     if (!mapEl) return;
 
@@ -126,12 +183,13 @@ function initChangeStoreMap(store) {
     }).addTo(_changeStoreMap);
 
     _changeStoreMarker = L.marker([lat, lng], { draggable: true }).addTo(_changeStoreMap);
-    _changeStoreMarker.on('dragend', function() {
+    _changeStoreMarker.on('dragend', async function() {
         const pos = _changeStoreMarker.getLatLng();
         const latEl = document.getElementById('csLat');
         const lngEl = document.getElementById('csLng');
         if (latEl) latEl.value = pos.lat.toFixed(6);
         if (lngEl) lngEl.value = pos.lng.toFixed(6);
+        await reverseGeocodeStoreLocation(pos.lat, pos.lng);
     });
 
     // Custom "locate me" control — placed below the zoom buttons
@@ -157,6 +215,7 @@ function initChangeStoreMap(store) {
                               const lngEl = document.getElementById('csLng');
                               if (latEl) latEl.value = latitude.toFixed(6);
                               if (lngEl) lngEl.value = longitude.toFixed(6);
+                              reverseGeocodeStoreLocation(latitude, longitude);
                               btn.disabled = false;
                               btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i>';
                           }, () => {
@@ -571,16 +630,18 @@ function openShareMenu(expenseId, btn) {
     menu.id = 'shareMenu';
     menu.className = 'share-menu';
 
-    const url = window.location.origin + '/view/expenses/' + expenseId;
     const hasNativeShare = typeof navigator.share === 'function';
 
     menu.innerHTML = `
-        <div class="share-menu-item" onclick="copyExpenseLink('${url}')">
+        <div class="share-menu-item" onclick="copyExpenseLink('${expenseId}', true)">
             <i class="fa-solid fa-link"></i> Copy link
         </div>
-        ${hasNativeShare ? `<div class="share-menu-item" onclick="nativeShareExpense('${url}')">
-            <i class="fa-solid fa-share-nodes"></i> Share\u2026
+        ${hasNativeShare ? `<div class="share-menu-item" onclick="nativeShareExpense('${expenseId}', true)">
+            <i class="fa-solid fa-share-nodes"></i> Share…
         </div>` : ''}
+        <div class="share-menu-item" onclick="revokeExpenseShare('${expenseId}', true)">
+            <i class="fa-solid fa-ban"></i> Revoke share link
+        </div>
     `;
 
     document.body.appendChild(menu);
@@ -601,22 +662,99 @@ function closeShareMenu() {
     if (menu) menu.remove();
 }
 
-async function copyExpenseLink(url) {
+function refreshExpenseShareUI(expenseId) {
+    if (window.location.hash === `#/expenses/${expenseId}`) {
+        renderExpenseDetail(document.getElementById('app'), expenseId);
+    }
+}
+
+function revealExpenseShareStatusCard(expenseId) {
+    if (typeof showExpenseShareStatusCard === 'function') {
+        showExpenseShareStatusCard(expenseId);
+    }
+}
+
+async function copyTextToClipboard(text) {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const input = document.createElement('textarea');
+    input.value = text;
+    input.setAttribute('readonly', 'readonly');
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    input.remove();
+}
+
+async function createExpenseShare(expenseId, refreshAfter = false, ttlDays = null) {
+    revealExpenseShareStatusCard(expenseId);
+    const body = ttlDays ? { ttlDays } : {};
+    const created = await api(`/api/expenses/${expenseId}/share`, { method: 'POST', body });
+    if (created && created.active && created.shareUrl) {
+        toast('Share link ready', 'success');
+        if (refreshAfter) refreshExpenseShareUI(expenseId);
+        return created;
+    }
+
+    toast('Could not create share link', 'error');
+    return null;
+}
+
+async function getOrCreateExpenseShareLink(expenseId) {
+    const existing = await api(`/api/expenses/${expenseId}/share`, { noAuthRedirect: true });
+    if (existing && existing.active && existing.shareUrl) {
+        return { url: getAbsoluteShareUrl(existing.shareUrl), created: false };
+    }
+
+    const created = await createExpenseShare(expenseId, true);
+    return created && created.shareUrl
+        ? { url: getAbsoluteShareUrl(created.shareUrl), created: true }
+        : { url: null, created: false };
+}
+
+async function copyExpenseLink(expenseId, refreshAfter = false) {
     closeShareMenu();
+    revealExpenseShareStatusCard(expenseId);
     try {
-        await navigator.clipboard.writeText(url);
-        toast('Link copied!', 'success');
+        const { url, created } = await getOrCreateExpenseShareLink(expenseId);
+        if (!url) throw new Error('share-link-missing');
+        await copyTextToClipboard(url);
+        if (refreshAfter || created) refreshExpenseShareUI(expenseId);
+        toast(created ? 'Share link created and copied!' : 'Link copied!', 'success');
     } catch {
+        if (refreshAfter) refreshExpenseShareUI(expenseId);
         toast('Could not copy link', 'error');
     }
 }
 
-async function nativeShareExpense(url) {
+async function nativeShareExpense(expenseId, refreshAfter = false) {
     closeShareMenu();
+    revealExpenseShareStatusCard(expenseId);
     try {
+        const { url, created } = await getOrCreateExpenseShareLink(expenseId);
+        if (!url) throw new Error('share-link-missing');
+        if (refreshAfter || created) refreshExpenseShareUI(expenseId);
         await navigator.share({ title: 'Expense', url });
     } catch (err) {
+        if (refreshAfter && err?.name !== 'AbortError') refreshExpenseShareUI(expenseId);
         if (err.name !== 'AbortError') toast('Share failed', 'error');
     }
 }
 
+async function revokeExpenseShare(expenseId, refreshAfter = false) {
+    closeShareMenu();
+    revealExpenseShareStatusCard(expenseId);
+    const result = await api(`/api/expenses/${expenseId}/share`, { method: 'DELETE' });
+    if (result && result.active === false) {
+        if (refreshAfter) refreshExpenseShareUI(expenseId);
+        toast('Share link revoked', 'success');
+    } else {
+        if (refreshAfter) refreshExpenseShareUI(expenseId);
+        toast('No active share link', 'info');
+    }
+}

@@ -13,9 +13,12 @@ import com.delfino.expensetracker.repository.ExchangeRateCacheRepository;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.ReportRepository;
+import com.delfino.expensetracker.repository.ExpenseShareRepository;
+import com.delfino.expensetracker.repository.ShareAccessLogRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
 import com.delfino.expensetracker.repository.UserRepository;
 import com.delfino.expensetracker.service.AiUsageService;
+import com.delfino.expensetracker.service.PublicShareRateLimitService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -43,13 +46,18 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.web.client.RestClient;
 
+import java.io.UncheckedIOException;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.net.http.HttpClient;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executor;
+import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -154,6 +162,9 @@ public abstract class BaseControllerTest {
     @Autowired protected UserRepository userRepository;
     @Autowired protected ExpenseRepository expenseRepository;
     @Autowired protected ReportRepository reportRepository;
+    @Autowired protected ExpenseShareRepository expenseShareRepository;
+    @Autowired protected ShareAccessLogRepository shareAccessLogRepository;
+    @Autowired protected PublicShareRateLimitService publicShareRateLimitService;
     @Autowired protected ExpenseItemRepository expenseItemRepository;
     @Autowired protected StoreRepository storeRepository;
     @Autowired protected ChatMessageRepository chatMessageRepository;
@@ -171,6 +182,9 @@ public abstract class BaseControllerTest {
         // 1. Clean all data for test isolation
         chatMessageRepository.deleteAll();
         aiUsageRepository.deleteAll();
+        shareAccessLogRepository.deleteAll();
+        expenseShareRepository.deleteAll();
+        publicShareRateLimitService.clear();
         expenseItemRepository.deleteAll();
         expenseRepository.deleteAll();
         reportRepository.deleteAll();
@@ -178,9 +192,32 @@ public abstract class BaseControllerTest {
         exchangeRateCacheRepository.deleteAll();
         userRepository.deleteAll();
 
+        // 1b. Clean filesystem test data for receipt/attachment assertions
+        cleanTestDataDirectory(Path.of("target/test-data/receipts"));
+        cleanTestDataDirectory(Path.of("target/test-data/attachments"));
+
         // 2. Reset and re-register default WireMock stubs
         WIRE_MOCK.resetAll();
         registerDefaultStubs();
+    }
+
+    private void cleanTestDataDirectory(Path dir) {
+        if (!Files.exists(dir)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.walk(dir)) {
+            paths.sorted(Comparator.reverseOrder())
+                    .filter(path -> !path.equals(dir))
+                    .forEach(path -> {
+                        try {
+                            Files.deleteIfExists(path);
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);
+                        }
+                    });
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     /**

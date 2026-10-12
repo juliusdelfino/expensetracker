@@ -37,9 +37,9 @@ function renderHomePanel() {
                     <div class="quick-action-icon"><i class="fa-solid fa-receipt"></i></div>
                     <span>Expenses</span>
                 </a>
-                <a href="#/profile" class="quick-action-btn" onclick="closeNavDrawer()">
-                    <div class="quick-action-icon"><i class="fa-solid fa-user-gear"></i></div>
-                    <span>Profile</span>
+                <a href="#/reports" class="quick-action-btn" onclick="closeNavDrawer()">
+                    <div class="quick-action-icon"><i class="fa-solid fa-chart-line"></i></div>
+                    <span>Reports</span>
                 </a>
                 <a href="#/chat" class="quick-action-btn" onclick="openChat(event); closeNavDrawer()">
                     <div class="quick-action-icon"><i class="fa-solid fa-comment"></i></div>
@@ -99,6 +99,7 @@ function renderHomePanel() {
 }
 
 async function loadHomeFeed() {
+    await ensureDashboardLibraries();
     // First load: fetch all data to build hero dropdown, then filter to current month
     const data = await api('/api/dashboard');
     if (!data) return;
@@ -262,6 +263,7 @@ async function renderDashboard(app) {
 }
 
 async function loadDashboardDesktop() {
+    await ensureDashboardLibraries();
     const data = await api('/api/dashboard');
     if (!data) return;
     _desktopData = data;

@@ -8,6 +8,13 @@ let _chatOffset = 0;
 const _chatPageSize = 10;
 let _chatHasMore = false;
 let _chatLoadingOlder = false;
+let _chatRuntimeLoadPromise = null;
+
+function ensureChatRuntimeLoaded() {
+    if (_chatRuntimeLoadPromise) return _chatRuntimeLoadPromise;
+    _chatRuntimeLoadPromise = ensureMarkedLoaded().catch(() => null);
+    return _chatRuntimeLoadPromise;
+}
 
 function renderChatPanel(container) {
     const panel = container || document.getElementById('panel-chat');
@@ -37,7 +44,7 @@ function renderChatPanel(container) {
     chatExpenseMap = {};
     chatReportMap = {};
     applyChatQuotaState();
-    loadChatHistory();
+    ensureChatRuntimeLoaded().finally(() => loadChatHistory());
 }
 
 function applyChatQuotaState() {
@@ -215,6 +222,7 @@ function chatKeydown(e) {
 }
 
 async function sendChat() {
+    ensureChatRuntimeLoaded();
     const input = document.getElementById('chatInput');
     if (!input || (currentAiStatus && !currentAiStatus.chatAllowed)) {
         applyChatQuotaState();

@@ -1,6 +1,7 @@
 package com.delfino.expensetracker.controller;
 
 import com.delfino.expensetracker.BaseControllerTest;
+import com.delfino.expensetracker.util.ReceiptStorageUtils;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.ExpenseItem;
 import com.delfino.expensetracker.model.ExpenseStatus;
@@ -13,6 +14,8 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -171,30 +174,41 @@ class ExpenseControllerTest extends BaseControllerTest {
     // ==================== GET /api/expenses/{urlId} ====================
 
     @Test
-    void getExpense_existingUrl_returnsExpenseData() throws Exception {
+    void getExpense_unauthenticated_returns401() throws Exception {
         User user = createTestUser("alice", "pass");
         Expense expense = createTestExpense(user.getId(), "Food", BigDecimal.TEN, "USD");
-        Store store = createTestStore(user.getId(), "FairPrice", "Singapore", "SG");
-        linkExpenseToStore(expense, store);
-        createTestItem(expense.getId(), "Bread", BigDecimal.ONE, BigDecimal.valueOf(2));
 
         mockMvc.perform(get("/api/expenses/" + expense.getUrlId()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.expense.category").value("Food"))
-                .andExpect(jsonPath("$.store.name").value("FairPrice"))
-                .andExpect(jsonPath("$.items.length()").value(1))
-                .andExpect(jsonPath("$.isOwner").value(false));
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
     void getExpense_authenticatedOwner_isOwnerTrue() throws Exception {
         User user = createTestUser("alice", "pass");
         Expense expense = createTestExpense(user.getId(), "Food", BigDecimal.TEN, "USD");
+        Store store = createTestStore(user.getId(), "FairPrice", "Singapore", "SG");
+        linkExpenseToStore(expense, store);
+        createTestItem(expense.getId(), "Bread", BigDecimal.ONE, BigDecimal.valueOf(2));
         MockHttpSession session = loginAs("alice", "pass");
 
         mockMvc.perform(get("/api/expenses/" + expense.getUrlId()).session(session))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.expense.category").value("Food"))
+                .andExpect(jsonPath("$.store.name").value("FairPrice"))
+                .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.isOwner").value(true));
+    }
+
+    @Test
+    void getExpense_otherAuthenticatedUser_returns403() throws Exception {
+        User owner = createTestUser("alice", "pass");
+        createTestUser("bob", "pass");
+        Expense expense = createTestExpense(owner.getId(), "Food", BigDecimal.TEN, "USD");
+        MockHttpSession otherSession = loginAs("bob", "pass");
+
+        mockMvc.perform(get("/api/expenses/" + expense.getUrlId()).session(otherSession))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Access denied"));
     }
 
     @Test
@@ -301,6 +315,30 @@ class ExpenseControllerTest extends BaseControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.type").value("RECEIPT_SCAN"));
+    }
+
+    @Test
+    void scanReceipt_storesReceiptInUserMonthlyUuidLayout() throws Exception {
+        User user = createTestUser("alice", "pass");
+        MockHttpSession session = loginAs("alice", "pass");
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "receipt.final.JPG", MediaType.IMAGE_JPEG_VALUE, new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0}
+        );
+
+        String response = mockMvc.perform(multipart("/api/expenses/scan")
+                        .file(file)
+                        .session(session))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        Expense saved = objectMapper.readValue(response, Expense.class);
+        assertThat(saved.getImagePath()).matches("receipts/" + user.getId() + "/\\d{4}_\\d{2}/[0-9a-fA-F-]+\\.jpg");
+
+        Path storedFile = ReceiptStorageUtils.resolveStoredPath("target/test-data", saved.getImagePath());
+        assertThat(Files.exists(storedFile)).isTrue();
     }
 
     @Test

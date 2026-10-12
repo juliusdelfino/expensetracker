@@ -28,9 +28,9 @@ async function renderExpenseList(app) {
                 <h2 style="color:var(--primary-dark)"><i class="fa-solid fa-receipt"></i> Expenses</h2>
             </div>
             <div class="action-bar-right">
-                <a class="btn btn-primary btn-sm" href="#/expenses/new">
+                <button class="btn btn-primary btn-sm" type="button" onclick="navigate('#/expenses/new')">
                     <i class="fa-solid fa-plus"></i> New Expense
-                </a>
+                </button>
                 <button class="btn btn-outline btn-sm expense-desktop-only" onclick="exportExpenses('csv')">
                     <i class="fa-solid fa-file-csv"></i> CSV
                 </button>
@@ -60,8 +60,9 @@ async function renderExpenseList(app) {
             </div>
             <div class="hero-filter-badges" id="expFilterBadges"></div>
         </div>
-        <div class="card">
-            <div class="table-responsive">
+        <div class="card expense-list-card" id="expenseListCard">
+            <div class="expense-desktop-view">
+                <div class="table-responsive">
                 <table class="expense-table">
                     <thead><tr>
                         <th class="th-status" style="width:36px;"></th>
@@ -73,6 +74,11 @@ async function renderExpenseList(app) {
                     </tr></thead>
                     <tbody id="expenseTableBody"></tbody>
                 </table>
+            </div>
+            </div>
+            <div class="expense-mobile-view">
+                <div class="expense-mobile-sortbar" id="expenseMobileSortbar"></div>
+                <div id="expenseMobileList"></div>
             </div>
             <div class="pagination-bar" id="expensePagination"></div>
         </div>
@@ -143,6 +149,11 @@ function sortExpenses(field) {
     renderExpenseTable();
 }
 
+function getSortIconClass(field) {
+    if (_expenseSortField !== field) return 'fa-sort';
+    return _expenseSortDir === 'asc' ? 'fa-sort-up' : 'fa-sort-down';
+}
+
 function getSortedExpenses() {
     const sorted = [..._allExpenses];
     sorted.sort((a, b) => {
@@ -156,6 +167,11 @@ function getSortedExpenses() {
         if (va == null && vb == null) return 0;
         if (va == null) return 1;
         if (vb == null) return -1;
+        if (_expenseSortField === 'transactionDatetime') {
+            const ta = va ? new Date(va).getTime() : 0;
+            const tb = vb ? new Date(vb).getTime() : 0;
+            return _expenseSortDir === 'asc' ? ta - tb : tb - ta;
+        }
         if (typeof va === 'number' || (_expenseSortField === 'amount' || _expenseSortField === 'amountInBase')) {
             va = Number(va) || 0;
             vb = Number(vb) || 0;
@@ -331,6 +347,40 @@ function renderExpenseTable() {
         return rows;
     }).join('');
 
+    initExpenseStatusIcons();
+
+    const mobileSortbar = document.getElementById('expenseMobileSortbar');
+    if (mobileSortbar) {
+        mobileSortbar.innerHTML = `
+            <button class="expense-sort-btn ${_expenseSortField === 'transactionDatetime' ? 'active' : ''}" onclick="sortExpenses('transactionDatetime')">
+                <i class="fa-solid ${getSortIconClass('transactionDatetime')}"></i> Date
+            </button>
+            <button class="expense-sort-btn ${_expenseSortField === 'displayName' ? 'active' : ''}" onclick="sortExpenses('displayName')">
+                <i class="fa-solid ${getSortIconClass('displayName')}"></i> Description
+            </button>
+            <button class="expense-sort-btn ${_expenseSortField === 'amount' ? 'active' : ''}" onclick="sortExpenses('amount')">
+                <i class="fa-solid ${getSortIconClass('amount')}"></i> Amount
+            </button>`;
+    }
+
+    const mobileList = document.getElementById('expenseMobileList');
+    if (mobileList) {
+        mobileList.innerHTML = page.length ? page.map(e => {
+            const isFailed = e.status === 'FAILED';
+            const failTitle = isFailed && e.notes ? esc(e.notes).replace(/"/g, '&quot;') : '';
+            const amount = e.amount != null ? `${Number(e.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${e.currency || ''}`.trim() : '-';
+            const date = e.transactionDatetime ? new Date(e.transactionDatetime).toLocaleDateString() : '-';
+            return `<div class="expense-mobile-card ${e.deleted ? 'deleted' : ''} ${isFailed ? 'row-failed' : ''}" role="link" tabindex="0" onclick="navigate('#/expenses/${e.urlId}')" onkeydown="if(event.key==='Enter' || event.key===' '){ event.preventDefault(); navigate('#/expenses/${e.urlId}'); }" ${isFailed ? `title="${failTitle}"` : ''}>
+                <div class="expense-mobile-top">
+                    <span class="expense-mobile-icon">${statusBadge(e.status, e.category, e.storeName, e.storeWebsite)}</span>
+                    <span class="expense-mobile-description">${esc(e.displayName || e.category || '-')}</span>
+                    <span class="expense-mobile-amount">${amount}</span>
+                </div>
+                <div class="expense-mobile-date">${date}</div>
+            </div>`;
+        }).join('') : '<div class="expense-empty-state">No expenses found.</div>';
+    }
+
     document.querySelectorAll('.expense-table th .fa-sort, .expense-table th .fa-sort-up, .expense-table th .fa-sort-down').forEach(icon => {
         const field = icon.id.replace('sort-', '');
         icon.className = field === _expenseSortField
@@ -350,7 +400,7 @@ function statusBadge(status, category, storeName, storeWebsite) {
                 if (domain) {
                     const label = esc(storeName || 'Store');
                     return `<span class="status-dot status-completed" title="Completed · ${label}">
-                        <img class="status-inline-logo" src="https://img.logo.dev/${encodeURIComponent(domain)}?token=${encodeURIComponent(appConfig.logoDevToken)}" alt="${label}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block'">
+                        <img class="status-inline-logo" data-fallback-selector=".status-fallback-icon" src="https://img.logo.dev/${encodeURIComponent(domain)}?token=${encodeURIComponent(appConfig.logoDevToken)}" alt="${label}">
                         <i class="fa-solid fa-store status-fallback-icon" style="display:none"></i>
                     </span>`;
                 }
@@ -393,7 +443,24 @@ function renderPagination(totalPages) {
 function goExpensePage(p) {
     _expensePage = p;
     renderExpenseTable();
-    document.querySelector('.expense-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('expenseListCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function initExpenseStatusIcons() {
+    document.querySelectorAll('.status-inline-logo').forEach(img => {
+        const fallback = img.parentElement?.querySelector(img.dataset.fallbackSelector || '.status-fallback-icon');
+        const handleError = () => {
+            img.style.display = 'none';
+            if (fallback) fallback.style.display = 'inline-block';
+        };
+        const handleLoad = () => {
+            if (fallback) fallback.style.display = 'none';
+            img.style.display = 'inline-block';
+        };
+        img.addEventListener('error', handleError, { once: true });
+        img.addEventListener('load', handleLoad, { once: true });
+        if (img.complete && img.naturalWidth > 0) handleLoad();
+    });
 }
 
 async function deleteExpense(id) {
@@ -434,18 +501,5 @@ async function exportExpenses(format) {
         URL.revokeObjectURL(url);
     }
     toast(`Exported as ${format.toUpperCase()}`, 'success');
-}
-
-function getCurrentExpenseReportFilters() {
-    return {
-        title: '',
-        description: '',
-        startDate: document.getElementById('expFilterStartDate')?.value || '',
-        endDate: document.getElementById('expFilterEndDate')?.value || '',
-        category: document.getElementById('expFilterCategory')?.value || '',
-        country: document.getElementById('expFilterCountry')?.value || '',
-        search: document.getElementById('expenseSearch')?.value?.trim() || '',
-        groupBy: 'KEYWORD'
-    };
 }
 

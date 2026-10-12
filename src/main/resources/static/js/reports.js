@@ -13,6 +13,9 @@ let _reportCurrentTitle = '';
 let _reportCurrentDescription = '';
 let _reportCurrentFilters = {};
 let _reportCurrentChartDefs = [];
+let _reportExpensePage = 0;
+const _reportExpensePageSize = 20;
+let _reportExpenseRows = [];
 
 function getReportsHashQuery() {
     return new URLSearchParams((window.location.hash.split('?')[1] || ''));
@@ -56,6 +59,7 @@ async function loadReportFilterOptions() {
 }
 
 async function renderReportsPage(app) {
+    await ensureChartJsLoaded();
     destroyReportCharts();
     const reports = await api('/api/reports');
     if (!reports || !Array.isArray(reports)) return;
@@ -76,13 +80,11 @@ async function renderReportsPage(app) {
             </div>
         </div>
 
-        <div class="card">
-            <div class="reports-list-header">
-                <h3 class="card-title"><i class="fa-solid fa-folder-open"></i> Saved Reports</h3>
-                <span class="reports-count">${reports.length} report${reports.length !== 1 ? 's' : ''}</span>
-            </div>
-            <div id="reportsList">${renderReportsListCards(reports)}</div>
+        <div class="reports-list-header">
+            <h3 class="card-title"><i class="fa-solid fa-folder-open"></i> Saved Reports</h3>
+            <span class="reports-count">${reports.length} report${reports.length !== 1 ? 's' : ''}</span>
         </div>
+        <div id="reportsList">${renderReportsListCards(reports)}</div>
     </div>`;
 
     if (prefill.autoOpen && !_reportsAutoOpenHandled) {
@@ -107,7 +109,10 @@ function renderReportsListCards(reports) {
              onkeydown="if(event.key==='Enter' || event.key===' '){ event.preventDefault(); navigate('#/reports/${report.id}'); }">
             <div class="report-card-top">
                 <div>
-                    <div class="report-card-title">${esc(report.title)}</div>
+                    <div class="report-card-title-row">
+                        <span class="report-card-icon"><i class="fa-solid fa-chart-line"></i></span>
+                        <div class="report-card-title">${esc(report.title)}</div>
+                    </div>
                     <div class="report-card-meta">
                         <span><i class="fa-solid fa-layer-group"></i> ${formatGroupBy(report.groupBy)}</span>
                         <span><i class="fa-solid fa-wallet"></i> ${formatMoney(report.totalAmount, currentUser?.baseCurrency || 'USD')}</span>
@@ -126,6 +131,7 @@ function renderReportsListCards(reports) {
 }
 
 async function renderReportDetail(app, reportId) {
+    await ensureChartJsLoaded();
     destroyReportCharts();
     const report = await api(`/api/reports/${reportId}`);
     if (!report || report.error) {
@@ -153,6 +159,8 @@ async function renderReportDetail(app, reportId) {
     _reportCurrentFilters = filters;
     _reportCurrentChartDefs = chartDefinitions;
     _reportEditKeywords = [...filters.searchKeywords];
+    _reportExpenseRows = report.expenses || [];
+    _reportExpensePage = 0;
 
     app.innerHTML = `
     <div class="container">
@@ -266,14 +274,16 @@ async function renderReportDetail(app, reportId) {
                 <h3 class="card-title"><i class="fa-solid fa-table"></i> Expenses in Report</h3>
                 <span class="reports-count">${report.expenses?.length || 0} rows</span>
             </div>
-            ${renderReportExpensesTable(report.expenses || [])}
+            <div id="reportExpensesBody"></div>
+            <div class="pagination-bar" id="reportExpensePagination"></div>
         </div>
     </div>`;
 
     // Inject edit-charts button into charts-grid header by prepending a row above it
-    _injectChartsEditButton(report.id);
+    _injectChartsEditButton();
     initReportKeywordEditor();
     renderReportCharts(report.charts || []);
+    renderReportExpensesTable();
 }
 
 function renderSummaryCard(label, value, icon) {
@@ -354,7 +364,7 @@ function renderFilterBadgesHtml(filters) {
 }
 
 // ── Charts grid edit button injection ─────────────────────────────────
-function _injectChartsEditButton(reportId) {
+function _injectChartsEditButton() {
     const grid = document.getElementById('reportChartsGrid');
     if (!grid) return;
     const wrap = document.createElement('div');
@@ -465,18 +475,6 @@ function _buildReportUpdateBody(overrides) {
         search: _reportEditKeywords.join(', '),
         chartDefinitions: _reportCurrentChartDefs
     }, overrides);
-}
-
-// ── Legacy combined save (kept for backward-compat if called elsewhere) ──
-async function saveReportDetailEdits(reportId, groupBy) {
-    const chartDefinitions = collectReportChartDefinitions();
-    if (!chartDefinitions.length) { toast('Please keep at least one chart.', 'info'); return; }
-    const body = _buildReportUpdateBody({ chartDefinitions });
-    const result = await api(`/api/reports/${reportId}`, { method: 'PUT', body });
-    if (!result || result.error) { toast(result?.error || 'Failed to update report', 'error'); return; }
-    toast('Report updated', 'success');
-    const app = document.getElementById('app');
-    if (app) renderReportDetail(app, reportId);
 }
 
 function initReportKeywordEditor() {
@@ -595,37 +593,6 @@ function collectReportChartDefinitions() {
     }));
 }
 
-async function saveReportDetailEdits(reportId, groupBy) {
-    const chartDefinitions = collectReportChartDefinitions();
-    if (!chartDefinitions.length) {
-        toast('Please keep at least one chart.', 'info');
-        return;
-    }
-
-    const body = {
-        title: document.getElementById('reportTitleInput')?.value?.trim() || '',
-        description: document.getElementById('reportDescriptionInput')?.value?.trim() || '',
-        groupBy: groupBy,
-        startDate: document.getElementById('reportFilterStartDate')?.value || '',
-        endDate: document.getElementById('reportFilterEndDate')?.value || '',
-        category: document.getElementById('reportFilterCategory')?.value?.trim() || '',
-        country: document.getElementById('reportFilterCountry')?.value?.trim() || '',
-        city: document.getElementById('reportFilterCity')?.value?.trim() || '',
-        storeName: document.getElementById('reportFilterStoreName')?.value?.trim() || '',
-        searchKeywords: _reportEditKeywords,
-        search: (_reportEditKeywords || []).join(', '),
-        chartDefinitions
-    };
-
-    const result = await api(`/api/reports/${reportId}`, { method: 'PUT', body });
-    if (!result || result.error) {
-        toast(result?.error || 'Failed to update report', 'error');
-        return;
-    }
-    toast('Report updated', 'success');
-    const app = document.getElementById('app');
-    if (app) renderReportDetail(app, reportId);
-}
 
 function formatCoveredDateRange(startDate, endDate) {
     if (!startDate && !endDate) return '—';
@@ -657,10 +624,28 @@ function renderSimpleChartTable(chart) {
 }
 
 function renderReportExpensesTable(expenses) {
-    if (!expenses.length) {
-        return '<div class="report-empty-inline">No expenses are included in this report.</div>';
+    const body = document.getElementById('reportExpensesBody');
+    if (!body) return;
+    const source = Array.isArray(expenses) ? expenses : _reportExpenseRows;
+    const total = source.length;
+    if (!total) {
+        body.innerHTML = '<div class="report-empty-inline">No expenses are included in this report.</div>';
+        const pagination = document.getElementById('reportExpensePagination');
+        if (pagination) pagination.innerHTML = '';
+        return;
     }
-    return `<div class="table-responsive">
+
+    const totalPages = Math.max(1, Math.ceil(total / _reportExpensePageSize));
+    if (_reportExpensePage >= totalPages) _reportExpensePage = totalPages - 1;
+    const start = _reportExpensePage * _reportExpensePageSize;
+    const pageRows = source.slice(start, start + _reportExpensePageSize);
+
+    body.innerHTML = renderReportExpensesDesktopTable(pageRows) + renderReportExpensesMobileList(pageRows);
+    renderReportExpensePagination(totalPages, total);
+}
+
+function renderReportExpensesDesktopTable(expenses) {
+    return `<div class="table-responsive report-expenses-desktop">
         <table>
             <thead>
                 <tr>
@@ -675,14 +660,74 @@ function renderReportExpensesTable(expenses) {
                 ${expenses.map(expense => `
                     <tr onclick="navigate('#/expenses/${expense.urlId}')" style="cursor:pointer;">
                         <td>${expense.transactionDatetime ? new Date(expense.transactionDatetime).toLocaleDateString() : '—'}</td>
-                        <td>${esc(expense.category || expense.notes || 'Expense')}</td>
+                        <td>${esc(`${expense.category || expense.notes || 'Expense'} -- ${expense.storeName || expense.locationLabel || '—'}`)}</td>
                         <td>${esc(expense.locationLabel || expense.storeName || '—')}</td>
-                        <td class="amount-primary">${expense.amount != null ? Number(expense.amount).toFixed(2) : '—'} ${esc(expense.currency || '')}</td>
-                        <td class="amount-secondary">${expense.amountInBase != null ? Number(expense.amountInBase).toFixed(2) + ' ' + esc(currentUser?.baseCurrency || '') : '—'}</td>
+                        <td class="amount-primary">${formatMoney(expense.amount, expense.currency || '')}</td>
+                        <td class="amount-secondary">${formatMoney(expense.amountInBase, currentUser?.baseCurrency || '')}</td>
                     </tr>`).join('')}
             </tbody>
         </table>
     </div>`;
+}
+
+function renderReportExpensesMobileList(expenses) {
+    return `<div class="report-expenses-mobile">
+        ${expenses.map(expense => {
+            const store = expense.storeName || expense.locationLabel || 'Store';
+            const dateLabel = expense.transactionDatetime ? new Date(expense.transactionDatetime).toLocaleDateString() : '—';
+            return `<a class="report-expense-mobile-card" href="#/expenses/${expense.urlId}">
+                <div class="report-expense-mobile-top">
+                    <span class="expense-mobile-icon">${getReportExpenseIconHtml(expense)}</span>
+                    <span class="report-expense-mobile-title">${esc(store)}</span>
+                    <span class="report-expense-mobile-amount">${formatMoney(expense.amount, expense.currency || '')}</span>
+                </div>
+                <div class="report-expense-mobile-date">${dateLabel}</div>
+            </a>`;
+        }).join('')}
+    </div>`;
+}
+
+function getReportExpenseIconHtml(expense) {
+    if (expense?.storeWebsite && appConfig?.logoDevToken) {
+        const domain = getRootDomain(expense.storeWebsite);
+        if (domain) {
+            const label = esc(expense.storeName || expense.locationLabel || 'Store');
+            return `<img class="status-inline-logo" src="https://img.logo.dev/${encodeURIComponent(domain)}?token=${encodeURIComponent(appConfig.logoDevToken)}" alt="${label}" title="${label}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block'">
+                    <i class="fa-solid fa-store status-fallback-icon" style="display:none"></i>`;
+        }
+    }
+    return `<i class="fa-solid fa-${categoryIcon(expense?.category)}"></i>`;
+}
+
+function renderReportExpensePagination(totalPages, totalRows) {
+    const container = document.getElementById('reportExpensePagination');
+    if (!container) return;
+    if (totalPages <= 1) {
+        container.innerHTML = `<span class="pagination-info">${totalRows} expense${totalRows !== 1 ? 's' : ''}</span>`;
+        return;
+    }
+    const mobile = isMobile();
+    const maxPageBtns = mobile ? 3 : 5;
+    const half = Math.floor(maxPageBtns / 2);
+    const startP = Math.max(0, Math.min(_reportExpensePage - half, totalPages - maxPageBtns));
+    const endP = Math.min(totalPages, startP + maxPageBtns);
+
+    let html = `<span class="pagination-info">${totalRows} expense${totalRows !== 1 ? 's' : ''} · Page ${_reportExpensePage + 1}/${totalPages}</span><div class="pagination-btns">`;
+    html += `<button class="btn btn-outline btn-sm" ${_reportExpensePage === 0 ? 'disabled' : ''} onclick="goReportExpensePage(0)"><i class="fa-solid fa-angles-left"></i></button>`;
+    html += `<button class="btn btn-outline btn-sm" ${_reportExpensePage === 0 ? 'disabled' : ''} onclick="goReportExpensePage(${_reportExpensePage - 1})"><i class="fa-solid fa-chevron-left"></i></button>`;
+    for (let i = startP; i < endP; i++) {
+        html += `<button class="btn btn-sm ${i === _reportExpensePage ? 'btn-primary' : 'btn-outline'}" onclick="goReportExpensePage(${i})">${i + 1}</button>`;
+    }
+    html += `<button class="btn btn-outline btn-sm" ${_reportExpensePage >= totalPages - 1 ? 'disabled' : ''} onclick="goReportExpensePage(${_reportExpensePage + 1})"><i class="fa-solid fa-chevron-right"></i></button>`;
+    html += `<button class="btn btn-outline btn-sm" ${_reportExpensePage >= totalPages - 1 ? 'disabled' : ''} onclick="goReportExpensePage(${totalPages - 1})"><i class="fa-solid fa-angles-right"></i></button>`;
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function goReportExpensePage(page) {
+    _reportExpensePage = page;
+    renderReportExpensesTable();
+    document.getElementById('reportExpensesBody')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderReportCharts(charts) {
@@ -980,7 +1025,8 @@ function formatGroupBy(groupBy) {
 
 function formatMoney(value, currency) {
     if (value == null || value === '') return '—';
-    return `${Number(value).toFixed(2)} ${currency || ''}`.trim();
+    const formatted = Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `${formatted} ${currency || ''}`.trim();
 }
 
 function formatReportDate(value) {

@@ -9,6 +9,56 @@ let currentAiStatus = null;
 let availableAiModels = null;
 let _aiStatusRequest = null;
 let _aiModelsRequest = null;
+const _externalScriptPromises = {};
+
+function loadExternalScriptOnce(src) {
+    if (!src) return Promise.reject(new Error('Script URL is required'));
+    if (_externalScriptPromises[src]) return _externalScriptPromises[src];
+
+    _externalScriptPromises[src] = new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[data-src="${src}"], script[src="${src}"]`);
+        if (existing) {
+            existing.addEventListener('load', () => resolve(), { once: true });
+            existing.addEventListener('error', () => reject(new Error(`Failed to load script: ${src}`)), { once: true });
+            if (existing.dataset.loaded === 'true' || existing.readyState === 'complete') {
+                resolve();
+            }
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.dataset.src = src;
+        script.onload = () => {
+            script.dataset.loaded = 'true';
+            resolve();
+        };
+        script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+        document.head.appendChild(script);
+    });
+
+    return _externalScriptPromises[src];
+}
+
+async function ensureChartJsLoaded() {
+    if (typeof window.Chart !== 'undefined') return;
+    await loadExternalScriptOnce('https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js');
+}
+
+async function ensureLeafletLoaded() {
+    if (typeof window.L !== 'undefined') return;
+    await loadExternalScriptOnce('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
+}
+
+async function ensureDashboardLibraries() {
+    await Promise.all([ensureChartJsLoaded(), ensureLeafletLoaded()]);
+}
+
+async function ensureMarkedLoaded() {
+    if (typeof window.marked !== 'undefined') return;
+    await loadExternalScriptOnce('https://cdn.jsdelivr.net/npm/marked@12/marked.min.js');
+}
 
 // ---- ESC key handler registry for dialogs ----
 const _escHandlers = {}; // overlayId -> handler function
