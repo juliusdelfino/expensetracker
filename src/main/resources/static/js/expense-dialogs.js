@@ -545,7 +545,11 @@ async function openExpenseDetailsDialog(expenseId) {
             <div class="change-store-dialog-body">
                 <div class="exp-dlg-fields-grid" style="margin-top:0.75rem;">
                     <div class="form-group exp-dlg-f-date"><label>Date &amp; Time</label>
-                        <input type="datetime-local" class="form-control" id="dlgExpDate" value="${e.transactionDatetime ? e.transactionDatetime.substring(0, 16) : ''}">
+                        <div class="detail-datetime-wrap">
+                            <input type="text" class="form-control" id="dlgExpDateDisplay" value="${e.transactionDatetime ? esc(formatShortHumanDateTime(e.transactionDatetime)) : ''}" placeholder="e.g. Oct 13, 2026, 3:45 PM" onblur="syncPickerDateTimeFromDisplay('dlgExpDateDisplay','dlgExpDate')">
+                            <input type="datetime-local" id="dlgExpDate" value="${toDateTimeLocalValue(e.transactionDatetime)}" style="position:absolute; opacity:0; pointer-events:none; width:1px; height:1px;" onchange="syncDisplayDateTimeFromPicker('dlgExpDateDisplay','dlgExpDate')">
+                            <button type="button" class="btn btn-outline btn-sm" onclick="openDateTimePicker('dlgExpDateDisplay','dlgExpDate')"><i class="fa-solid fa-calendar-days"></i></button>
+                        </div>
                     </div>
                     <div class="form-group exp-dlg-f-cat"><label>Category</label>
                         <input type="text" class="form-control" id="dlgExpCategory" value="${esc(e.category)}" list="dlgExpCategoryList" autocomplete="off">
@@ -596,8 +600,9 @@ async function openExpenseDetailsDialog(expenseId) {
 
 async function saveExpenseDetailsDialog(expenseId) {
     commitPendingTag('dlgExpTagInput', window._dlgExpTags || []);
+    const transactionDatetime = getDateTimeForApi('dlgExpDateDisplay', 'dlgExpDate');
     const updates = {
-        transactionDatetime: document.getElementById('dlgExpDate').value + ':00',
+        transactionDatetime,
         amount: parseFloat(document.getElementById('dlgExpAmount').value),
         currency: document.getElementById('dlgExpCurrency').value,
         category: document.getElementById('dlgExpCategory').value,

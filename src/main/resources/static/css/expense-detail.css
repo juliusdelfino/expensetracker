@@ -215,8 +215,13 @@
     border: 1px solid var(--border-color);
     border-radius: 6px;
     padding: 1.25rem 1rem;
-    font-family: 'Courier New', Courier, monospace;
+    font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
     font-size: 0.85rem;
+}
+.receipt-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 .receipt-store-section {
     text-align: center;
@@ -244,7 +249,22 @@
     color: var(--text-light);
     margin-top: 0.25rem;
 }
+.receipt-map-link {
+    appearance: none;
+    border: 0;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
 .receipt-store-contact { margin-top: 0.15rem; }
+.receipt-store-link {
+    color: var(--text-light);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.receipt-store-link:hover { color: var(--primary-dark); }
 .receipt-store-placeholder {
     color: var(--text-light);
     font-style: italic;
@@ -261,10 +281,14 @@
 .receipt-meta-section { padding: 0.25rem 0; }
 .receipt-meta-line {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
     font-size: 0.8rem;
     color: var(--text-light);
+    word-break: break-word;
+}
+.receipt-meta-line-secondary {
+    margin-top: 0.2rem;
 }
 .receipt-items-section { padding: 0.25rem 0; }
 .receipt-item-row {
@@ -333,6 +357,104 @@
     padding-left: 0.5rem;
     padding-right: 0.5rem;
     transition: background 0.15s ease;
+}
+.receipt-section-empty {
+    color: var(--text-light);
+    margin: 0;
+}
+.expense-reports-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+.expense-report-link {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    text-decoration: none;
+    color: var(--text);
+    transition: var(--transition);
+}
+.expense-report-link:hover {
+    border-color: var(--primary);
+    background: var(--table-stripe);
+}
+.expense-report-link-title {
+    font-weight: 600;
+    color: var(--primary-dark);
+}
+.expense-report-link-meta {
+    font-size: 0.8rem;
+    color: var(--text-light);
+    white-space: nowrap;
+}
+.similar-expenses-row {
+    display: flex;
+    gap: 0.75rem;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+}
+.similar-expense-card {
+    width: 170px;
+    min-width: 170px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 0.55rem;
+    text-decoration: none;
+    color: var(--text);
+    background: var(--bg-card);
+}
+.similar-expense-card:hover {
+    border-color: var(--primary);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+}
+.similar-expense-thumb {
+    width: 100%;
+    height: 88px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg);
+}
+.similar-expense-thumb-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-light);
+}
+.similar-expense-store {
+    margin-top: 0.45rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--primary-dark);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.similar-expense-total {
+    margin-top: 0.2rem;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+}
+.similar-expense-date {
+    margin-top: 0.15rem;
+    font-size: 0.72rem;
+    color: var(--text-light);
+}
+.detail-datetime-wrap {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    position: relative;
+}
+.store-map-highlight {
+    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.35);
+    transition: box-shadow 0.2s ease;
 }
 .receipt-clickable:hover {
     background: rgba(25, 118, 210, 0.06);

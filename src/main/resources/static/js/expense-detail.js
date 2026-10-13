@@ -100,6 +100,14 @@ async function loadExpenseShareStatus(expenseUrlId) {
         : null;
 }
 
+async function loadExpenseReports(expenseUrlId) {
+    return api(`/api/expenses/${expenseUrlId}/reports`, { noAuthRedirect: true });
+}
+
+async function loadSimilarExpenses(expenseUrlId, limit = 12) {
+    return api(`/api/expenses/${expenseUrlId}/similar?limit=${limit}`, { noAuthRedirect: true });
+}
+
 function getAbsoluteShareUrl(shareUrl) {
     if (!shareUrl) return '';
     if (/^https?:\/\//i.test(shareUrl)) return shareUrl;
@@ -117,6 +125,37 @@ function formatShareDateTime(dateValue) {
         hour: 'numeric',
         minute: '2-digit'
     });
+}
+
+function formatShortHumanDateTime(dateValue) {
+    if (!dateValue) return '\u2014';
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return '\u2014';
+    return date.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+    });
+}
+
+function toDateTimeLocalValue(dateValue) {
+    if (!dateValue) return '';
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function normalizeWebsiteUrl(url) {
+    if (!url) return '';
+    return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
+
+function formatAmountCurrency(value, currency) {
+    if (value == null || value === '') return '\u2014';
+    return `${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency || ''}`.trim();
 }
 
 function formatRelativeTimeFromNow(dateValue) {
@@ -260,6 +299,105 @@ function renderOwnerSharePanel(expenseUrlId, shareStatus) {
     </div>`;
 }
 
+function renderReceiptDetailsHeader(expenseId, isOwner, showScanToggle = false, isPdf = false) {
+    return `<div class="card-title-row">
+        <h3 class="card-title"><i class="fa-solid fa-receipt"></i> Receipt Details</h3>
+        <div class="receipt-header-actions">
+            ${showScanToggle ? `<button class="btn btn-outline btn-sm receipt-scan-toggle-btn" onclick="toggleScannedReceipt()">
+                <i class="fa-solid fa-${isPdf ? 'file-pdf' : 'image'}"></i> View Scan
+            </button>` : ''}
+            ${isOwner ? `<div class="action-menu-wrap" id="receiptSectionMenuWrap">
+                <button class="btn btn-outline btn-sm btn-icon" onclick="toggleReceiptSectionMenu()" title="Receipt actions"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                <div class="action-dropdown" id="receiptSectionMenuDropdown" style="display:none;">
+                    <button class="action-dropdown-item" onclick="closeReceiptSectionMenu(); openChangeStoreDialog('${expenseId}')"><i class="fa-solid fa-store"></i> Update Store</button>
+                    <button class="action-dropdown-item" onclick="closeReceiptSectionMenu(); openExpenseDetailsDialog('${expenseId}')"><i class="fa-solid fa-pen-to-square"></i> Update Details</button>
+                    <button class="action-dropdown-item" onclick="closeReceiptSectionMenu(); openItemDialog('${expenseId}')"><i class="fa-solid fa-plus"></i> Add Item</button>
+                </div>
+            </div>` : ''}
+        </div>
+    </div>`;
+}
+
+function renderExpenseReportsSection(reports) {
+    const safe = Array.isArray(reports) ? reports : [];
+    return `<div class="card">
+        <h3 class="card-title"><i class="fa-solid fa-chart-line"></i> Reports</h3>
+        ${safe.length === 0 ? '<p class="receipt-section-empty">This expense is not included in any report yet.</p>' : `<div class="expense-reports-list">${safe.map(r => `
+            <a href="#/reports/${r.id}" class="expense-report-link">
+                <span class="expense-report-link-title">${esc(r.title || `Report #${r.id}`)}</span>
+                <span class="expense-report-link-meta">${esc(typeof formatGroupBy === 'function' ? formatGroupBy(r.groupBy) : (r.groupBy || 'Report'))} \u00b7 ${Number(r.expenseCount || 0)} expense${Number(r.expenseCount || 0) === 1 ? '' : 's'}</span>
+            </a>`).join('')}</div>`}
+    </div>`;
+}
+
+function renderSimilarExpensesSection(similar, options = {}) {
+    const safe = Array.isArray(similar) ? similar : [];
+    return `<div class="card">
+        <h3 class="card-title"><i class="fa-solid fa-clone"></i> Similar Expenses</h3>
+        ${safe.length === 0 ? '<p class="receipt-section-empty">No similar expenses found.</p>' : `<div class="similar-expenses-row">${safe.map(exp => {
+            const href = options.shared ? `#/shared/${exp.urlId || ''}` : `#/expenses/${exp.urlId || ''}`;
+            const hasImage = !!exp.imagePath;
+            const thumb = hasImage
+                ? `<img src="${getReceiptUrl(exp.imagePath, options)}" alt="Receipt preview" class="similar-expense-thumb">`
+                : `<div class="similar-expense-thumb similar-expense-thumb-placeholder"><i class="fa-solid fa-receipt"></i></div>`;
+            return `<a class="similar-expense-card" href="${href}">
+                ${thumb}
+                <div class="similar-expense-store" title="${esc(exp.storeName || 'Store')}">${esc(exp.storeName || 'Store')}</div>
+                <div class="similar-expense-total">${formatAmountCurrency(exp.amount, exp.currency)}</div>
+                <div class="similar-expense-date">${formatShortHumanDateTime(exp.transactionDatetime)}</div>
+            </a>`;
+        }).join('')}</div>`}
+    </div>`;
+}
+
+function openDateTimePicker(displayId, pickerId) {
+    const picker = document.getElementById(pickerId);
+    if (!picker) return;
+    if (typeof picker.showPicker === 'function') picker.showPicker();
+    else picker.click();
+    picker.focus();
+}
+
+function syncDisplayDateTimeFromPicker(displayId, pickerId) {
+    const display = document.getElementById(displayId);
+    const picker = document.getElementById(pickerId);
+    if (!display || !picker) return;
+    display.value = picker.value ? formatShortHumanDateTime(picker.value) : '';
+}
+
+function syncPickerDateTimeFromDisplay(displayId, pickerId) {
+    const display = document.getElementById(displayId);
+    const picker = document.getElementById(pickerId);
+    if (!display || !picker) return;
+    const parsed = new Date(display.value);
+    if (!Number.isNaN(parsed.getTime())) {
+        picker.value = toDateTimeLocalValue(parsed.toISOString());
+        display.value = formatShortHumanDateTime(parsed.toISOString());
+    }
+}
+
+function getDateTimeForApi(displayId, pickerId) {
+    const picker = document.getElementById(pickerId);
+    if (picker?.value) return `${picker.value}:00`;
+    const display = document.getElementById(displayId);
+    const parsed = new Date(display?.value || '');
+    if (Number.isNaN(parsed.getTime())) return null;
+    const pad = n => String(n).padStart(2, '0');
+    return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:00`;
+}
+
+function scrollToStoreMapFromReceiptAddress() {
+    const section = document.getElementById('otherDetailsSection');
+    if (section && section.style.display === 'none') toggleOtherDetails();
+    const map = document.getElementById('storeOtherDetailsMap');
+    if (!map) return;
+    setTimeout(() => {
+        map.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        map.classList.add('store-map-highlight');
+        setTimeout(() => map.classList.remove('store-map-highlight'), 1400);
+    }, 120);
+}
+
 async function renderExpenseDetail(app, id, options = {}) {
     const resolvedOptions = options.shared && !options.shareToken
         ? { ...options, shareToken: id }
@@ -292,9 +430,13 @@ async function renderExpenseDetail(app, id, options = {}) {
     const expenseDetailUiState = _getExpenseDetailUiState(id, resolvedOptions);
     window._expenseIsOwner = isOwner;
 
-    const isReceiptScan = e.type === 'RECEIPT_SCAN';
+    const expenseType = String(e.type || 'MANUAL').toUpperCase();
+    const isReceiptScan = expenseType === 'RECEIPT_SCAN';
+    const isChatbot = expenseType === 'CHATBOT';
     const isCompleted = e.status === 'COMPLETED';
     const isProcessing = e.status === 'PROCESSING';
+    const linkedReports = isOwner && e.urlId ? await loadExpenseReports(e.urlId) : [];
+    const similarExpenses = isOwner && e.urlId ? await loadSimilarExpenses(e.urlId, 12) : [];
 
     if (isOwner && (!window._allExpenseCategories || window._allExpenseCategories.length === 0)) {
         window._allExpenseCategories = (await api('/api/expenses/categories')) || [];
@@ -338,12 +480,7 @@ async function renderExpenseDetail(app, id, options = {}) {
         const isPdf = ext === 'pdf';
         html += `<div class="side-by-side">
             <div class="card receipt-details-card">
-                <div class="card-title-row">
-                    <h3 class="card-title"><i class="fa-solid fa-receipt"></i> Receipt Details</h3>
-                    <button class="btn btn-outline btn-sm receipt-scan-toggle-btn" onclick="toggleScannedReceipt()">
-                        <i class="fa-solid fa-${isPdf ? 'file-pdf' : 'image'}"></i> View Scan
-                    </button>
-                </div>
+                ${renderReceiptDetailsHeader(id, isOwner, true, isPdf)}
                 <div style="text-align:center; padding:2rem 1rem;">
                     <i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--primary)"></i>
                     <p style="margin-top:1rem; color:var(--text-light)">Processing receipt...<br>This may take less than a minute.</p>
@@ -405,12 +542,7 @@ async function renderExpenseDetail(app, id, options = {}) {
         const isPdf = ext === 'pdf';
         html += `<div class="side-by-side">
             <div class="card receipt-details-card">
-                <div class="card-title-row">
-                    <h3 class="card-title"><i class="fa-solid fa-receipt"></i> Receipt Details</h3>
-                    <button class="btn btn-outline btn-sm receipt-scan-toggle-btn" onclick="toggleScannedReceipt()">
-                        <i class="fa-solid fa-${isPdf ? 'file-pdf' : 'image'}"></i> View Scan
-                    </button>
-                </div>
+                ${renderReceiptDetailsHeader(id, isOwner, true, isPdf)}
                 ${renderReceiptView(e, items, store, id, isOwner)}
             </div>
             <div class="card scanned-receipt-card">
@@ -431,7 +563,7 @@ async function renderExpenseDetail(app, id, options = {}) {
         </div>`;
     } else {
         html += `<div class="card">
-            <h3 class="card-title"><i class="fa-solid fa-receipt"></i> Receipt Details</h3>
+            ${renderReceiptDetailsHeader(id, isOwner, false, false)}
             ${renderReceiptView(e, items, store, id, isOwner)}
         </div>`;
     }
@@ -469,7 +601,7 @@ async function renderExpenseDetail(app, id, options = {}) {
                 <div class="other-detail-row">
                     <span class="other-detail-label">Type</span>
                     <span class="badge badge-${isReceiptScan ? 'scan' : 'manual'}">
-                        <i class="fa-solid fa-${isReceiptScan ? 'camera' : 'pen'}"></i> ${isReceiptScan ? 'Receipt Scan' : 'Manual'}
+                        <i class="fa-solid fa-${isReceiptScan ? 'camera' : (isChatbot ? 'robot' : 'pen')}"></i> ${isReceiptScan ? 'Receipt Scan' : (isChatbot ? 'Chatbot' : 'Manual')}
                     </span>
                 </div>
                 ${e.scannedAt ? `<div class="other-detail-row">
@@ -492,6 +624,11 @@ async function renderExpenseDetail(app, id, options = {}) {
         </div>
     </div>`;
 
+    if (isOwner) {
+        html += renderExpenseReportsSection(linkedReports);
+        html += renderSimilarExpensesSection(similarExpenses, resolvedOptions);
+    }
+
     html += '</div>';
     app.innerHTML = html;
 
@@ -500,8 +637,9 @@ async function renderExpenseDetail(app, id, options = {}) {
         editForm.onsubmit = async (ev) => {
             ev.preventDefault();
             commitPendingTag('eTagInput', window._editTags || []);
+            const transactionDatetime = getDateTimeForApi('eDateDisplay', 'eDate');
             const updates = {
-                transactionDatetime: document.getElementById('eDate').value + ':00',
+                transactionDatetime,
                 amount: parseFloat(document.getElementById('eAmount').value),
                 currency: document.getElementById('eCurrency').value,
                 category: document.getElementById('eCategory').value,
@@ -653,9 +791,7 @@ function renderReceiptView(e, items, store, id, isOwner) {
     const phone = store?.phoneNumber || '';
     const website = store?.website || '';
 
-    const receiptDate = e.transactionDatetime ? new Date(e.transactionDatetime) : null;
-    const dateStr = receiptDate ? receiptDate.toLocaleDateString() : '\u2014';
-    const timeStr = receiptDate ? receiptDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const dateTimeStr = formatShortHumanDateTime(e.transactionDatetime);
     const receiptNum = e.receiptNumber || '';
 
     const activeItems = (items || []).filter(i => !i.deleted);
@@ -672,8 +808,7 @@ function renderReceiptView(e, items, store, id, isOwner) {
     let html = `<div class="receipt-paper">`;
 
     // Store header
-    const storeClick = isOwner ? `onclick="openChangeStoreDialog('${id}')" title="Click to edit store details"` : '';
-    html += `<div class="receipt-store-section${isOwner ? ' receipt-clickable' : ''}" ${storeClick}>`;
+    html += `<div class="receipt-store-section">`;
     if (storeName) {
         // Logo: show only if the store has a website and a logo.dev token is configured
         if (website && appConfig.logoDevToken) {
@@ -685,25 +820,26 @@ function renderReceiptView(e, items, store, id, isOwner) {
             }
         }
         html += `<div class="receipt-store-name">${esc(storeName)}</div>`;
-        if (addressStr) html += `<div class="receipt-store-address">${esc(addressStr)}</div>`;
+        if (addressStr) html += `<button type="button" class="receipt-store-address receipt-map-link" onclick="scrollToStoreMapFromReceiptAddress()" title="Show store location map">${esc(addressStr)}</button>`;
         if (phone || website) {
             html += `<div class="receipt-store-contact">`;
-            if (phone) html += `<span>${esc(phone)}</span>`;
+            if (phone) html += `<a href="tel:${esc(phone)}" class="receipt-store-link">${esc(phone)}</a>`;
             if (phone && website) html += ' \u00b7 ';
-            if (website) html += `<span>${esc(website)}</span>`;
+            if (website) html += `<a href="${esc(normalizeWebsiteUrl(website))}" target="_blank" rel="noopener noreferrer" class="receipt-store-link">${esc(website)}</a>`;
             html += `</div>`;
         }
     } else {
-        html += `<div class="receipt-store-placeholder">${isOwner ? 'No store info \u2014 tap to add' : 'No store info'}</div>`;
+        html += `<div class="receipt-store-placeholder">No store info</div>`;
     }
     html += `</div><div class="receipt-divider"></div>`;
 
-    // Receipt number + date/time
-    const metaClick = isOwner ? `onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details"` : '';
-    html += `<div class="receipt-meta-section${isOwner ? ' receipt-clickable' : ''}" ${metaClick}>
+    // Receipt number + date/time (stacked to avoid wrapping conflicts on long values)
+    html += `<div class="receipt-meta-section">
         <div class="receipt-meta-line">
             <span>${receiptNum ? '#' + esc(receiptNum) : '<span style="color:var(--text-light);font-style:italic">No receipt #</span>'}</span>
-            <span>${dateStr}${timeStr ? ' ' + timeStr : ''}</span>
+        </div>
+        <div class="receipt-meta-line receipt-meta-line-secondary">
+            <span>${dateTimeStr}</span>
         </div>
     </div><div class="receipt-divider"></div>`;
 
@@ -738,17 +874,10 @@ function renderReceiptView(e, items, store, id, isOwner) {
     }
     html += `</div>`;
 
-    if (isOwner) {
-        html += `<div class="receipt-add-item">
-            <button class="btn btn-outline btn-sm" onclick="openItemDialog('${id}')"><i class="fa-solid fa-plus"></i> Add Item</button>
-        </div>`;
-    }
-
     html += `<div class="receipt-divider receipt-divider-thick"></div>`;
 
     // Total
-    const totalClick = isOwner ? `onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details"` : '';
-    html += `<div class="receipt-total-section${isOwner ? ' receipt-clickable' : ''}" ${totalClick}>
+    html += `<div class="receipt-total-section">
         <div class="receipt-total-line">
             <span class="receipt-total-label">TOTAL</span>
             <span class="receipt-total-amount">${total} ${esc(currency)}</span>
@@ -760,8 +889,7 @@ function renderReceiptView(e, items, store, id, isOwner) {
     const notesShownInItems = activeItems.length === 0 && !!e.notes;
     if (e.category || (e.tags && e.tags.length) || (e.notes && !notesShownInItems)) {
         html += `<div class="receipt-divider"></div>`;
-        const footerClick = isOwner ? `onclick="openExpenseDetailsDialog('${id}')" title="Click to edit expense details"` : '';
-        html += `<div class="receipt-footer-section${isOwner ? ' receipt-clickable' : ''}" ${footerClick}>`;
+        html += `<div class="receipt-footer-section">`;
         if (e.category) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Category:</span> ${esc(e.category)}</div>`;
         if (e.tags && e.tags.length) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Tags:</span> ${e.tags.map(t => esc(t)).join(', ')}</div>`;
         if (e.notes && !notesShownInItems) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Notes:</span> ${esc(e.notes)}</div>`;
@@ -779,7 +907,11 @@ function expenseForm(e, id, isOwner = true) {
     return `<form ${isOwner ? 'id="expenseEditForm"' : ''}>
         <div class="form-row">
             <div class="form-group"><label>Date & Time</label>
-                <input type="datetime-local" class="form-control detail-datetime" id="eDate" value="${e.transactionDatetime ? e.transactionDatetime.substring(0,16) : ''}" ${ro}>
+                <div class="detail-datetime-wrap">
+                    <input type="text" class="form-control detail-datetime" id="eDateDisplay" value="${e.transactionDatetime ? esc(formatShortHumanDateTime(e.transactionDatetime)) : ''}" placeholder="e.g. Oct 13, 2026, 3:45 PM" ${ro} onblur="syncPickerDateTimeFromDisplay('eDateDisplay','eDate')">
+                    <input type="datetime-local" id="eDate" value="${toDateTimeLocalValue(e.transactionDatetime)}" style="position:absolute; opacity:0; pointer-events:none; width:1px; height:1px;" onchange="syncDisplayDateTimeFromPicker('eDateDisplay','eDate')" ${isOwner ? '' : 'disabled'}>
+                    ${isOwner ? `<button type="button" class="btn btn-outline btn-sm" onclick="openDateTimePicker('eDateDisplay','eDate')"><i class="fa-solid fa-calendar-days"></i></button>` : ''}
+                </div>
             </div>
             <div class="form-group"><label>Category</label>
                 <input type="text" class="form-control" id="eCategory" maxlength="50" value="${esc(e.category)}" list="eCategoryList" autocomplete="off" ${ro}>
@@ -867,6 +999,28 @@ function toggleActionMenu() {
             });
         }, 10);
     }
+}
+
+function toggleReceiptSectionMenu() {
+    const dd = document.getElementById('receiptSectionMenuDropdown');
+    if (!dd) return;
+    const visible = dd.style.display !== 'none';
+    dd.style.display = visible ? 'none' : 'block';
+    if (!visible) {
+        setTimeout(() => {
+            document.addEventListener('click', function closeMenu(e) {
+                if (!document.getElementById('receiptSectionMenuWrap')?.contains(e.target)) {
+                    closeReceiptSectionMenu();
+                    document.removeEventListener('click', closeMenu);
+                }
+            });
+        }, 10);
+    }
+}
+
+function closeReceiptSectionMenu() {
+    const dd = document.getElementById('receiptSectionMenuDropdown');
+    if (dd) dd.style.display = 'none';
 }
 
 async function retryExpenseWithConfirm(id, status) {

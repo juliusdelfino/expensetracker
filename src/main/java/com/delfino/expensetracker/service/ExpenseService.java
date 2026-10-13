@@ -77,7 +77,9 @@ public class ExpenseService {
             userRepository.save(user);
         }
         expense.setUserId(userId);
-        expense.setType(ExpenseType.MANUAL);
+        if (expense.getType() == null) {
+            expense.setType(ExpenseType.MANUAL);
+        }
         expense.setStatus(ExpenseStatus.COMPLETED);
         expense.setCreatedAt(LocalDateTime.now());
         expense.setUpdatedAt(LocalDateTime.now());
