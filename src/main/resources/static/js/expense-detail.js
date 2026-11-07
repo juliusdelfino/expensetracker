@@ -386,6 +386,29 @@ function getDateTimeForApi(displayId, pickerId) {
     return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:00`;
 }
 
+function bindExchangeRateRefreshOnCurrencyChange(currencyInputId, exchangeRateInputId) {
+    const currencyInput = document.getElementById(currencyInputId);
+    const exchangeRateInput = document.getElementById(exchangeRateInputId);
+    if (!currencyInput || !exchangeRateInput) return;
+
+    const initialCurrency = (currencyInput.value || '').trim().toUpperCase();
+    const initialRate = (exchangeRateInput.value || '').trim();
+
+    const onCurrencyChanged = () => {
+        const currentCurrency = (currencyInput.value || '').trim().toUpperCase();
+        if (currentCurrency && currentCurrency !== initialCurrency) {
+            exchangeRateInput.value = '';
+            exchangeRateInput.placeholder = 'Auto-fetched on save';
+        } else {
+            exchangeRateInput.placeholder = 'Auto-fetched';
+            if (!exchangeRateInput.value && initialRate) exchangeRateInput.value = initialRate;
+        }
+    };
+
+    currencyInput.removeEventListener('change', onCurrencyChanged);
+    currencyInput.addEventListener('change', onCurrencyChanged);
+}
+
 function scrollToStoreMapFromReceiptAddress() {
     const section = document.getElementById('otherDetailsSection');
     if (section && section.style.display === 'none') toggleOtherDetails();
@@ -433,7 +456,6 @@ async function renderExpenseDetail(app, id, options = {}) {
     const expenseType = String(e.type || 'MANUAL').toUpperCase();
     const isReceiptScan = expenseType === 'RECEIPT_SCAN';
     const isChatbot = expenseType === 'CHATBOT';
-    const isCompleted = e.status === 'COMPLETED';
     const isProcessing = e.status === 'PROCESSING';
     const linkedReports = isOwner && e.urlId ? await loadExpenseReports(e.urlId) : [];
     const similarExpenses = isOwner && e.urlId ? await loadSimilarExpenses(e.urlId, 12) : [];
@@ -535,7 +557,7 @@ async function renderExpenseDetail(app, id, options = {}) {
         return;
     }
 
-    if (isReceiptScan && isCompleted && e.imagePath) {
+    if (isReceiptScan && !isProcessing && e.imagePath) {
         const receiptUrl = getReceiptUrl(e.imagePath, resolvedOptions);
         const imgFilename = e.imagePath.replace(/\\/g, '/').split('/').pop();
         const ext = (imgFilename.split('.').pop() || '').toLowerCase();
@@ -634,6 +656,7 @@ async function renderExpenseDetail(app, id, options = {}) {
 
     const editForm = document.getElementById('expenseEditForm');
     if (editForm) {
+        bindExchangeRateRefreshOnCurrencyChange('eCurrency', 'eExRate');
         editForm.onsubmit = async (ev) => {
             ev.preventDefault();
             commitPendingTag('eTagInput', window._editTags || []);
@@ -647,7 +670,7 @@ async function renderExpenseDetail(app, id, options = {}) {
                 notes: document.getElementById('eNotes').value,
                 tags: window._editTags || []
             };
-            const exRate = document.getElementById('eExRate').value;
+            const exRate = (document.getElementById('eExRate').value || '').trim();
             if (exRate) updates.exchangeRate = parseFloat(exRate);
             const data = await api(`/api/expenses/${id}`, { method: 'PUT', body: updates });
             if (data && data.error) toast(data.error, 'error');
@@ -1032,4 +1055,3 @@ async function retryExpenseWithConfirm(id, status) {
     toast('Retry initiated. Refreshing in a moment...', 'info');
     setTimeout(() => renderExpenseDetail(document.getElementById('app'), id), 1500);
 }
-

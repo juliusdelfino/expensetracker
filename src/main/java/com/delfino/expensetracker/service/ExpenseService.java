@@ -32,6 +32,7 @@ import java.util.*;
 public class ExpenseService {
 
     private static final Logger log = LoggerFactory.getLogger(ExpenseService.class);
+    private static final String EXPENSE_NOT_FOUND = "Expense not found";
 
     private final ExpenseRepository expenseRepository;
     private final ExpenseItemRepository expenseItemRepository;
@@ -144,8 +145,13 @@ public class ExpenseService {
     @Transactional
     public Expense updateExpense(String urlId, Expense updates, long userId) {
         Expense expense = expenseRepository.findByUrlId(urlId)
-                .orElseThrow(() -> new IllegalStateException("Expense not found"));
+                .orElseThrow(() -> new IllegalStateException(EXPENSE_NOT_FOUND));
         if (expense.getUserId() != userId) throw new AuthorizationDeniedException("Not authorized");
+
+        String previousCurrency = expense.getCurrency();
+        LocalDate previousRateDate = expense.getTransactionDatetime() != null
+                ? expense.getTransactionDatetime().toLocalDate()
+                : null;
 
         if (updates.getTransactionDatetime() != null) expense.setTransactionDatetime(updates.getTransactionDatetime());
         if (updates.getAmount() != null) expense.setAmount(updates.getAmount());
@@ -164,6 +170,21 @@ public class ExpenseService {
         if (updates.getNotes() != null) expense.setNotes(updates.getNotes());
         if (updates.getExchangeRate() != null) expense.setExchangeRate(updates.getExchangeRate());
 
+        boolean currencyChanged = StringUtils.hasText(updates.getCurrency())
+                && !Objects.equals(
+                previousCurrency == null ? null : previousCurrency.toUpperCase(Locale.ROOT),
+                expense.getCurrency() == null ? null : expense.getCurrency().toUpperCase(Locale.ROOT));
+        LocalDate currentRateDate = expense.getTransactionDatetime() != null
+                ? expense.getTransactionDatetime().toLocalDate()
+                : null;
+        boolean rateDateChanged = !Objects.equals(previousRateDate, currentRateDate);
+
+        // If currency/date changed and caller did not provide a new explicit rate,
+        // force a fresh Frankfurter lookup in computeCurrency.
+        if ((currencyChanged || rateDateChanged) && updates.getExchangeRate() == null) {
+            expense.setExchangeRate(null);
+        }
+
         expense.setUpdatedAt(LocalDateTime.now());
         computeCurrency(expense, userId);
         return expenseRepository.save(expense);
@@ -172,7 +193,7 @@ public class ExpenseService {
     @Transactional
     public void softDelete(String urlId, long userId) {
         Expense expense = expenseRepository.findByUrlId(urlId)
-                .orElseThrow(() -> new IllegalStateException("Expense not found"));
+                .orElseThrow(() -> new IllegalStateException(EXPENSE_NOT_FOUND));
         if (expense.getUserId() != userId) throw new AuthorizationDeniedException("Not authorized");
         expense.setDeleted(true);
         expense.setUpdatedAt(LocalDateTime.now());
@@ -183,7 +204,7 @@ public class ExpenseService {
     @Transactional
     public void restore(String urlId, long userId) {
         Expense expense = expenseRepository.findByUrlId(urlId)
-                .orElseThrow(() -> new IllegalStateException("Expense not found"));
+                .orElseThrow(() -> new IllegalStateException(EXPENSE_NOT_FOUND));
         if (expense.getUserId() != userId) throw new AuthorizationDeniedException("Not authorized");
         expense.setDeleted(false);
         expense.setUpdatedAt(LocalDateTime.now());
@@ -193,7 +214,7 @@ public class ExpenseService {
 
     public void retryOcr(String urlId, long userId) {
         Expense expense = expenseRepository.findByUrlId(urlId)
-                .orElseThrow(() -> new IllegalStateException("Expense not found"));
+                .orElseThrow(() -> new IllegalStateException(EXPENSE_NOT_FOUND));
         if (expense.getUserId() != userId) throw new AuthorizationDeniedException("Not authorized");
         expense.setStatus(ExpenseStatus.PROCESSING);
         expense.setUpdatedAt(LocalDateTime.now());
@@ -205,7 +226,7 @@ public class ExpenseService {
     @Transactional
     public Expense duplicate(String urlId, long userId) {
         Expense original = expenseRepository.findByUrlId(urlId)
-                .orElseThrow(() -> new IllegalStateException("Expense not found"));
+                .orElseThrow(() -> new IllegalStateException(EXPENSE_NOT_FOUND));
         if (original.getUserId() != userId) throw new AuthorizationDeniedException("Not authorized");
 
         Expense copy = new Expense();
@@ -249,7 +270,7 @@ public class ExpenseService {
 
     public void softDeleteItem(String urlId, Long itemId, long userId) {
         Expense expense = expenseRepository.findByUrlId(urlId)
-                .orElseThrow(() -> new IllegalStateException("Expense not found"));
+                .orElseThrow(() -> new IllegalStateException(EXPENSE_NOT_FOUND));
         if (expense.getUserId() != userId) throw new AuthorizationDeniedException("Not authorized");
 
         ExpenseItem item = expenseItemRepository.findById(itemId)
@@ -359,7 +380,7 @@ public class ExpenseService {
         Path filePath = attachDir.resolve(originalFilename);
         Files.write(filePath, fileBytes);
 
-        Expense expense = expenseRepository.findByUrlId(urlId).orElseThrow(() -> new IllegalStateException("Expense not found"));
+        Expense expense = expenseRepository.findByUrlId(urlId).orElseThrow(() -> new IllegalStateException(EXPENSE_NOT_FOUND));
         if (expense.getAttachments() == null) expense.setAttachments(new ArrayList<>());
         expense.getAttachments().add(filePath.toString());
         expense.setUpdatedAt(LocalDateTime.now());
@@ -368,7 +389,7 @@ public class ExpenseService {
     }
 
     public void removeAttachment(String urlId, String filename) throws IOException {
-        Expense expense = expenseRepository.findByUrlId(urlId).orElseThrow(() -> new IllegalStateException("Expense not found"));
+        Expense expense = expenseRepository.findByUrlId(urlId).orElseThrow(() -> new IllegalStateException(EXPENSE_NOT_FOUND));
         Path attachDir = Path.of(dataDir, "attachments", urlId);
         Path filePath = attachDir.resolve(filename);
         Files.deleteIfExists(filePath);
@@ -404,7 +425,7 @@ public class ExpenseService {
     // Item CRUD
     public ExpenseItem saveItem(String urlId, ExpenseItem item) {
         Expense expense = expenseRepository.findByUrlId(urlId)
-                .orElseThrow(() -> new IllegalStateException("Expense not found"));
+                .orElseThrow(() -> new IllegalStateException(EXPENSE_NOT_FOUND));
         item.setExpenseId(expense.getId());
         item.setDeleted(false);
         // Round quantity/unitPrice to the precision allowed by ExpenseItem, folding any
@@ -426,7 +447,7 @@ public class ExpenseService {
      */
     public Store saveStore(String urlId, Store store, Long userId) {
         Expense expense = expenseRepository.findByUrlId(urlId)
-                .orElseThrow(() -> new IllegalStateException("Expense not found"));
+                .orElseThrow(() -> new IllegalStateException(EXPENSE_NOT_FOUND));
         store.setUserId(userId);
 
         // If the client sends a known store ID, update that store directly

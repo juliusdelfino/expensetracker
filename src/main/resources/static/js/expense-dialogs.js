@@ -595,6 +595,9 @@ async function openExpenseDetailsDialog(expenseId) {
 
     document.body.appendChild(overlay);
     renderTags('dlgExpTagsContainer', 'dlgExpTagInput', window._dlgExpTags);
+    if (typeof bindExchangeRateRefreshOnCurrencyChange === 'function') {
+        bindExchangeRateRefreshOnCurrencyChange('dlgExpCurrency', 'dlgExpExRate');
+    }
     _registerEscHandler('expenseDetailsOverlay', closeExpenseDetailsDialog);
 }
 
@@ -610,7 +613,7 @@ async function saveExpenseDetailsDialog(expenseId) {
         notes: document.getElementById('dlgExpNotes').value,
         tags: window._dlgExpTags || []
     };
-    const exRate = document.getElementById('dlgExpExRate').value;
+    const exRate = (document.getElementById('dlgExpExRate').value || '').trim();
     if (exRate) updates.exchangeRate = parseFloat(exRate);
 
     await api(`/api/expenses/${expenseId}`, { method: 'PUT', body: updates });
