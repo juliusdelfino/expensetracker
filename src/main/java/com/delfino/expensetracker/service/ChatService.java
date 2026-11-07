@@ -9,6 +9,7 @@ import com.delfino.expensetracker.model.AiUsageType;
 import com.delfino.expensetracker.model.ChatMessage;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.ExpenseItem;
+import com.delfino.expensetracker.model.ExpenseType;
 import com.delfino.expensetracker.model.User;
 import com.delfino.expensetracker.repository.ChatMessageRepository;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
@@ -16,6 +17,7 @@ import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.UserRepository;
 import com.delfino.expensetracker.service.mcp.ChatReportContext;
 import com.delfino.expensetracker.util.MoneyUtils;
+import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -229,7 +231,7 @@ public class ChatService {
                             + dailyTotal.setScale(2, RoundingMode.HALF_UP).toPlainString()
                             + " " + user.getBaseCurrency();
                 }
-            } catch (Exception e) {
+            } catch (JacksonException e) {
                 // Not valid JSON — treat llmResponse as plain text (likely a query answer)
                 log.debug("LLM response is not parseable as expense JSON, treating as plain text reply");
             }
@@ -257,6 +259,7 @@ public class ChatService {
      */
     private Expense buildExpenseFromDto(ChatExpenseDto dto, User user) {
         Expense expense = new Expense();
+        expense.setType(ExpenseType.CHATBOT);
 
         if (dto.transactionDatetime() != null) {
             try {

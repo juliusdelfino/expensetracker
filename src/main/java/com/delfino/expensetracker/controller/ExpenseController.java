@@ -9,14 +9,17 @@ import com.delfino.expensetracker.dto.expense.AttachmentPathResponse;
 import com.delfino.expensetracker.dto.expense.EnrichedExpense;
 import com.delfino.expensetracker.dto.expense.ExpenseDetailResponse;
 import com.delfino.expensetracker.dto.expense.ExpenseItemRequest;
+import com.delfino.expensetracker.dto.expense.ExpenseReportLinkResponse;
 import com.delfino.expensetracker.dto.expense.ExpenseRequest;
 import com.delfino.expensetracker.dto.expense.MatchingItem;
+import com.delfino.expensetracker.dto.expense.SimilarExpenseResponse;
 import com.delfino.expensetracker.dto.expense.StoreRequest;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.ExpenseItem;
 import com.delfino.expensetracker.model.Store;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
+import com.delfino.expensetracker.repository.ReportRepository;
 import com.delfino.expensetracker.repository.StoreRepository;
 import com.delfino.expensetracker.service.ExpenseService;
 import com.delfino.expensetracker.service.SupportedCurrencyService;
@@ -36,6 +39,7 @@ import java.nio.file.*;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Stream;
 
 @RestController
 @RequestMapping("/api/expenses")
@@ -46,6 +50,7 @@ public class ExpenseController {
     private final ExpenseRepository expenseRepository;
     private final ExpenseItemRepository expenseItemRepository;
     private final StoreRepository storeRepository;
+    private final ReportRepository reportRepository;
     private final SupportedCurrencyService supportedCurrencyService;
     private final CountryService countryService;
 
@@ -60,11 +65,13 @@ public class ExpenseController {
 
     public ExpenseController(ExpenseService expenseService, ExpenseRepository expenseRepository,
                              ExpenseItemRepository expenseItemRepository, StoreRepository storeRepository,
+                             ReportRepository reportRepository,
                              SupportedCurrencyService supportedCurrencyService, CountryService countryService) {
         this.expenseService = expenseService;
         this.expenseRepository = expenseRepository;
         this.expenseItemRepository = expenseItemRepository;
         this.storeRepository = storeRepository;
+        this.reportRepository = reportRepository;
         this.supportedCurrencyService = supportedCurrencyService;
         this.countryService = countryService;
     }
@@ -162,6 +169,70 @@ public class ExpenseController {
                     ));
                 })
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/{expenseUrlId}/reports")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> expenseReports(@PathVariable String expenseUrlId, UserToken userToken) {
+        long userId = userToken.getUserId();
+        Expense expense = expenseRepository.findByUrlId(expenseUrlId).orElse(null);
+        if (expense == null || expense.getUserId() != userId) {
+            return ResponseEntity.status(404).body(new ErrorResponse("Expense not found"));
+        }
+
+        List<ExpenseReportLinkResponse> reports = reportRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .filter(r -> r.getExpenseIds() != null && r.getExpenseIds().contains(expense.getId()))
+                .map(r -> new ExpenseReportLinkResponse(
+                        r.getId(),
+                        r.getTitle(),
+                        r.getGroupBy() != null ? r.getGroupBy().name() : null,
+                        r.getCreatedAt(),
+                        r.getExpenseIds() != null ? r.getExpenseIds().size() : 0
+                ))
+                .toList();
+        return ResponseEntity.ok(reports);
+    }
+
+    @GetMapping("/{expenseUrlId}/similar")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> similarExpenses(@PathVariable String expenseUrlId,
+                                             @RequestParam(defaultValue = "12") int limit,
+                                             UserToken userToken) {
+        long userId = userToken.getUserId();
+        Expense expense = expenseRepository.findByUrlId(expenseUrlId).orElse(null);
+        if (expense == null || expense.getUserId() != userId) {
+            return ResponseEntity.status(404).body(new ErrorResponse("Expense not found"));
+        }
+
+        int safeLimit = Math.max(1, Math.min(limit, 30));
+        Map<Long, Store> storeMap = expenseService.getStoreMapForUser(userId);
+        Store currentStore = expense.getStoreId() != null ? storeMap.get(expense.getStoreId()) : null;
+        String currentStoreName = normalizeStoreName(currentStore != null ? currentStore.getName() : null);
+        String currentStoreAddress = normalizeStoreAddress(currentStore);
+
+        List<SimilarExpenseResponse> similar = expenseRepository.findByUserIdAndDeletedFalse(userId).stream()
+                .filter(e -> e.getId() != expense.getId())
+                .filter(e -> matchesSimilarExpense(e, expense, currentStoreName, currentStoreAddress, storeMap))
+                .sorted((a, b) -> {
+                    if (a.getTransactionDatetime() == null && b.getTransactionDatetime() == null) return 0;
+                    if (a.getTransactionDatetime() == null) return 1;
+                    if (b.getTransactionDatetime() == null) return -1;
+                    return b.getTransactionDatetime().compareTo(a.getTransactionDatetime());
+                })
+                .limit(safeLimit)
+                .map(e -> {
+                    Store s = e.getStoreId() != null ? storeMap.get(e.getStoreId()) : null;
+                    return new SimilarExpenseResponse(
+                            e.getUrlId(),
+                            e.getImagePath(),
+                            s != null ? s.getName() : null,
+                            formatStoreAddress(s),
+                            e.getAmount(),
+                            e.getCurrency(),
+                            e.getTransactionDatetime());
+                })
+                .toList();
+        return ResponseEntity.ok(similar);
     }
 
     @PostMapping("/manual")
@@ -543,6 +614,49 @@ public class ExpenseController {
     private static List<String> nonBlank(List<String> values) {
         if (values == null) return List.of();
         return values.stream().filter(v -> v != null && !v.isBlank()).toList();
+    }
+
+    private static boolean matchesSimilarExpense(Expense candidate,
+                                                 Expense target,
+                                                 String targetStoreName,
+                                                 String targetStoreAddress,
+                                                 Map<Long, Store> storeMap) {
+        boolean sameStore = target.getStoreId() != null && Objects.equals(candidate.getStoreId(), target.getStoreId());
+        if (sameStore) return true;
+
+        if (targetStoreName == null) return false;
+        Store candidateStore = candidate.getStoreId() != null ? storeMap.get(candidate.getStoreId()) : null;
+        String candidateName = normalizeStoreName(candidateStore != null ? candidateStore.getName() : null);
+        if (candidateName == null || !candidateName.equals(targetStoreName)) return false;
+
+        String candidateAddress = normalizeStoreAddress(candidateStore);
+        return !Objects.equals(candidateAddress, targetStoreAddress);
+    }
+
+    private static String normalizeStoreName(String value) {
+        if (value == null) return null;
+        String normalized = value.trim().toLowerCase();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private static String normalizeStoreAddress(Store store) {
+        if (store == null) return null;
+        return Stream.of(store.getAddress(), store.getCity(), store.getCountry(), store.getPostalCode())
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(String::toLowerCase)
+                .collect(java.util.stream.Collectors.joining("|"));
+    }
+
+    private static String formatStoreAddress(Store store) {
+        if (store == null) return null;
+        String value = Stream.of(store.getAddress(), store.getCity(), store.getCountry(), store.getPostalCode())
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(java.util.stream.Collectors.joining(", "));
+        return value.isEmpty() ? null : value;
     }
 
     private String escapeCsv(String val) {
