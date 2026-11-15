@@ -6,5 +6,6 @@ public record UpdateProfileRequest(
         String baseCurrency,
         String baseCity,
         String baseCountry,
+        String locale,
         String aiModel,
         String password) {}

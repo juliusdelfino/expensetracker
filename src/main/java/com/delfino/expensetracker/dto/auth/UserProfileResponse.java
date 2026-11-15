@@ -10,6 +10,7 @@ public record UserProfileResponse(
         String baseCurrency,
         String baseCity,
         String baseCountry,
+        String locale,
         String role,
         String aiModel) {
 
@@ -21,9 +22,10 @@ public record UserProfileResponse(
             String baseCurrency,
             String baseCity,
             String baseCountry,
+            String locale,
             UserRole role,
             String aiModel) {
-        this(id, username, email, phoneNumber, baseCurrency, baseCity, baseCountry,
+        this(id, username, email, phoneNumber, baseCurrency, baseCity, baseCountry, locale,
                 role != null ? role.name() : null, aiModel);
     }
 }

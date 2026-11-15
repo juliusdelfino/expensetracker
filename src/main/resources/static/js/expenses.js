@@ -25,37 +25,37 @@ async function renderExpenseList(app) {
     <div class="container">
         <div class="action-bar">
             <div class="action-bar-left">
-                <h2 style="color:var(--primary-dark)"><i class="fa-solid fa-receipt"></i> Expenses</h2>
+                <h2 style="color:var(--primary-dark)"><i class="fa-solid fa-receipt"></i> ${t('expenses.title', { defaultValue: 'Expenses' })}</h2>
             </div>
             <div class="action-bar-right">
                 <button class="btn btn-primary btn-sm" type="button" onclick="navigate('#/expenses/new')">
-                    <i class="fa-solid fa-plus"></i> New Expense
+                    <i class="fa-solid fa-plus"></i> ${t('expenses.new', { defaultValue: 'New Expense' })}
                 </button>
                 <button class="btn btn-outline btn-sm expense-desktop-only" onclick="exportExpenses('csv')">
-                    <i class="fa-solid fa-file-csv"></i> CSV
+                    <i class="fa-solid fa-file-csv"></i> ${t('expenses.csv', { defaultValue: 'CSV' })}
                 </button>
                 <button class="btn btn-outline btn-sm expense-desktop-only" onclick="exportExpenses('json')">
-                    <i class="fa-solid fa-file-code"></i> JSON
+                    <i class="fa-solid fa-file-code"></i> ${t('expenses.json', { defaultValue: 'JSON' })}
                 </button>
                 <label class="btn btn-outline btn-sm expense-desktop-only">
-                    <input type="checkbox" id="showDeleted" onchange="loadExpenses()"> <i class="fa-solid fa-trash-can"></i> Deleted
+                    <input type="checkbox" id="showDeleted" onchange="loadExpenses()"> <i class="fa-solid fa-trash-can"></i> ${t('expenses.deleted', { defaultValue: 'Deleted' })}
                 </label>
             </div>
         </div>
         <div class="expense-filters-bar">
             <div class="exp-search-row">
-                <input type="text" class="form-control form-control-sm" id="expenseSearch" placeholder="Search expenses, items, stores..." onkeyup="debounceSearch()">
+                <input type="text" class="form-control form-control-sm" id="expenseSearch" placeholder="${t('expenses.searchPlaceholder', { defaultValue: 'Search expenses, items, stores...' })}" onkeyup="debounceSearch()">
                 <button class="btn btn-outline btn-sm exp-more-filters-btn" id="expMoreFiltersBtn" onclick="toggleExpenseMoreFilters()">
-                    <i class="fa-solid fa-sliders"></i> <span id="expMoreFiltersLabel">More filters</span>
+                    <i class="fa-solid fa-sliders"></i> <span id="expMoreFiltersLabel">${t('expenses.moreFilters', { defaultValue: 'More filters' })}</span>
                 </button>
             </div>
             <div class="exp-extra-filters" id="expExtraFilters">
-                <input type="date" class="form-control form-control-sm" id="expFilterStartDate" onchange="loadExpenses()" title="Transaction date from">
-                <input type="date" class="form-control form-control-sm" id="expFilterEndDate" onchange="loadExpenses()" title="Transaction date to">
-                <input type="date" class="form-control form-control-sm" id="expFilterCreatedFrom" onchange="loadExpenses()" title="Created date from">
-                <input type="date" class="form-control form-control-sm" id="expFilterCreatedTo" onchange="loadExpenses()" title="Created date to">
-                <button class="btn btn-outline btn-sm" onclick="openExpenseFilterDialog()" title="Filter by category / country">
-                    <i class="fa-solid fa-filter"></i> Category / Country
+                <input type="date" class="form-control form-control-sm" id="expFilterStartDate" onchange="loadExpenses()" title="${t('expenses.txDateFrom', { defaultValue: 'Transaction date from' })}">
+                <input type="date" class="form-control form-control-sm" id="expFilterEndDate" onchange="loadExpenses()" title="${t('expenses.txDateTo', { defaultValue: 'Transaction date to' })}">
+                <input type="date" class="form-control form-control-sm" id="expFilterCreatedFrom" onchange="loadExpenses()" title="${t('expenses.createdFrom', { defaultValue: 'Created date from' })}">
+                <input type="date" class="form-control form-control-sm" id="expFilterCreatedTo" onchange="loadExpenses()" title="${t('expenses.createdTo', { defaultValue: 'Created date to' })}">
+                <button class="btn btn-outline btn-sm" onclick="openExpenseFilterDialog()" title="${t('expenses.filterCategoryCountry', { defaultValue: 'Filter by category / country' })}">
+                    <i class="fa-solid fa-filter"></i> ${t('expenses.categoryCountry', { defaultValue: 'Category / Country' })}
                 </button>
             </div>
             <div class="hero-filter-badges" id="expFilterBadges"></div>
@@ -66,11 +66,11 @@ async function renderExpenseList(app) {
                 <table class="expense-table">
                     <thead><tr>
                         <th class="th-status" style="width:36px;"></th>
-                        <th class="sortable" data-field="transactionDatetime" onclick="sortExpenses('transactionDatetime')">Date <i class="fa-solid fa-sort" id="sort-transactionDatetime"></i></th>
-                        <th class="sortable" data-field="displayName" onclick="sortExpenses('displayName')">Description <i class="fa-solid fa-sort" id="sort-displayName"></i></th>
-                        <th class="sortable" data-field="amount" onclick="sortExpenses('amount')">Amount <i class="fa-solid fa-sort" id="sort-amount"></i></th>
-                        <th class="sortable" data-field="amountInBase" onclick="sortExpenses('amountInBase')">Base <i class="fa-solid fa-sort" id="sort-amountInBase"></i></th>
-                        <th>Actions</th>
+                        <th class="sortable" data-field="transactionDatetime" onclick="sortExpenses('transactionDatetime')">${t('profile.trash.date', { defaultValue: 'Date' })} <i class="fa-solid fa-sort" id="sort-transactionDatetime"></i></th>
+                        <th class="sortable" data-field="displayName" onclick="sortExpenses('displayName')">${t('expenses.description', { defaultValue: 'Description' })} <i class="fa-solid fa-sort" id="sort-displayName"></i></th>
+                        <th class="sortable" data-field="amount" onclick="sortExpenses('amount')">${t('profile.trash.amount', { defaultValue: 'Amount' })} <i class="fa-solid fa-sort" id="sort-amount"></i></th>
+                        <th class="sortable" data-field="amountInBase" onclick="sortExpenses('amountInBase')">${t('expenses.base', { defaultValue: 'Base' })} <i class="fa-solid fa-sort" id="sort-amountInBase"></i></th>
+                        <th>${t('profile.trash.actions', { defaultValue: 'Actions' })}</th>
                     </tr></thead>
                     <tbody id="expenseTableBody"></tbody>
                 </table>
@@ -234,23 +234,23 @@ function openExpenseFilterDialog() {
     dialog.innerHTML = `
         <div class="modal-content" style="max-width:420px; max-height:80vh; display:flex; flex-direction:column; padding:0; overflow:hidden;">
             <div class="modal-header" style="padding:1.25rem 1.5rem 1rem; flex-shrink:0;">
-                <h3><i class="fa-solid fa-filter"></i> Filter Expenses</h3>
+                <h3><i class="fa-solid fa-filter"></i> ${t('expenses.filterExpenses', { defaultValue: 'Filter Expenses' })}</h3>
                 <button class="modal-close" onclick="closeExpenseFilterDialog()">&times;</button>
             </div>
             <div style="overflow-y:auto; flex:1; min-height:0; padding:0 1.5rem;">
                 <div class="form-group">
-                    <label>Category</label>
+                    <label>${t('profile.trash.category', { defaultValue: 'Category' })}</label>
                     ${_checkboxList('efCategory', cats, selCat)}
                 </div>
                 <div class="form-group">
-                    <label>Country</label>
+                    <label>${t('expenses.country', { defaultValue: 'Country' })}</label>
                     ${_checkboxListCountries('efCountry', countryCodes, selCountry)}
                 </div>
             </div>
             <div style="display:flex; gap:0.5rem; padding:1rem 1.5rem; flex-shrink:0; border-top:1px solid var(--border-color); background:var(--bg-card);">
-                <button class="btn btn-primary" onclick="saveExpenseFilters()"><i class="fa-solid fa-check"></i> Apply</button>
-                <button class="btn btn-outline" onclick="clearExpenseFilters()"><i class="fa-solid fa-eraser"></i> Clear</button>
-                <button class="btn btn-outline" onclick="closeExpenseFilterDialog()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveExpenseFilters()"><i class="fa-solid fa-check"></i> ${t('expenses.apply', { defaultValue: 'Apply' })}</button>
+                <button class="btn btn-outline" onclick="clearExpenseFilters()"><i class="fa-solid fa-eraser"></i> ${t('expenses.clear', { defaultValue: 'Clear' })}</button>
+                <button class="btn btn-outline" onclick="closeExpenseFilterDialog()">${t('common.cancel', { defaultValue: 'Cancel' })}</button>
             </div>
         </div>`;
     dialog.addEventListener('click', e => { if (e.target === dialog) closeExpenseFilterDialog(); });
@@ -293,9 +293,9 @@ function renderExpenseFilterBadges() {
     const el = document.getElementById('expFilterBadges');
     if (!el) return;
     const badges = [];
-    (_expFilters.category || []).forEach(v => badges.push({ key: 'category', label: 'Category', value: v }));
-    (_expFilters.country || []).forEach(v => badges.push({ key: 'country', label: 'Country', value: v, display: getCountryName(v) || v }));
-    (_expFilters.storeName || []).forEach(v => badges.push({ key: 'storeName', label: 'Store', value: v }));
+    (_expFilters.category || []).forEach(v => badges.push({ key: 'category', label: t('profile.trash.category', { defaultValue: 'Category' }), value: v }));
+    (_expFilters.country || []).forEach(v => badges.push({ key: 'country', label: t('expenses.country', { defaultValue: 'Country' }), value: v, display: getCountryName(v) || v }));
+    (_expFilters.storeName || []).forEach(v => badges.push({ key: 'storeName', label: t('reports.storeFallback', { defaultValue: 'Store' }), value: v }));
     el.innerHTML = badges.map(b =>
         `<span class="filter-badge">${b.label}: <strong>${esc(b.display || b.value)}</strong>
             <button class="filter-badge-x" onclick="removeExpenseFilterValue('${b.key}','${esc(b.value)}')">&times;</button>
@@ -321,10 +321,10 @@ function renderExpenseTable() {
             onclick="navigate('#/expenses/${e.urlId}')"
             ${isFailed ? `title="${failTitle}"` : ''}>
             <td class="td-status">${statusBadge(e.status, e.category, e.storeName, e.storeWebsite)}</td>
-            <td>${e.transactionDatetime ? new Date(e.transactionDatetime).toLocaleDateString() : '-'}</td>
-            <td class="td-description">${e.displayName || e.category || '-'}</td>
-            <td class="amount-primary">${e.amount != null ? Number(e.amount).toFixed(2) : '-'} ${e.currency || ''}</td>
-            <td class="amount-secondary">${e.amountInBase != null ? Number(e.amountInBase).toFixed(2) + ' ' + (currentUser?.baseCurrency||'') : '-'}</td>
+            <td>${e.transactionDatetime ? formatDate(e.transactionDatetime) : t('common.na', { defaultValue: '-' })}</td>
+            <td class="td-description">${e.displayName || e.category || t('common.na', { defaultValue: '-' })}</td>
+            <td class="amount-primary">${e.amount != null ? formatCurrency(e.amount, e.currency || '') : t('common.na', { defaultValue: '-' })}</td>
+            <td class="amount-secondary">${e.amountInBase != null ? formatCurrency(e.amountInBase, currentUser?.baseCurrency || '') : t('common.na', { defaultValue: '-' })}</td>
             <td class="td-actions" onclick="event.stopPropagation()">
                 ${e.deleted ? `<button class="btn btn-success btn-sm btn-icon" onclick="restoreExpense('${e.urlId}')"><i class="fa-solid fa-rotate-left"></i></button>` : `
                     <button class="btn btn-secondary btn-sm btn-icon" onclick="duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i></button>
@@ -339,7 +339,7 @@ function renderExpenseTable() {
                 <tr class="item-child-row" onclick="navigate('#/expenses/${e.urlId}')">
                     <td></td><td></td>
                     <td class="td-description item-child-name"><i class="fa-solid fa-arrow-turn-up fa-rotate-90" style="font-size:0.65rem; opacity:0.4; margin-right:0.3rem;"></i> ${esc(item.itemName)}</td>
-                    <td class="amount-primary item-child-amount">${item.unitPrice != null ? Number(item.unitPrice).toFixed(2) : '-'} ${e.currency || ''}</td>
+                    <td class="amount-primary item-child-amount">${item.unitPrice != null ? formatCurrency(item.unitPrice, e.currency || '') : t('common.na', { defaultValue: '-' })}</td>
                     <td></td><td></td>
                 </tr>`;
             }
@@ -353,13 +353,13 @@ function renderExpenseTable() {
     if (mobileSortbar) {
         mobileSortbar.innerHTML = `
             <button class="expense-sort-btn ${_expenseSortField === 'transactionDatetime' ? 'active' : ''}" onclick="sortExpenses('transactionDatetime')">
-                <i class="fa-solid ${getSortIconClass('transactionDatetime')}"></i> Date
+                <i class="fa-solid ${getSortIconClass('transactionDatetime')}"></i> ${t('profile.trash.date', { defaultValue: 'Date' })}
             </button>
             <button class="expense-sort-btn ${_expenseSortField === 'displayName' ? 'active' : ''}" onclick="sortExpenses('displayName')">
-                <i class="fa-solid ${getSortIconClass('displayName')}"></i> Description
+                <i class="fa-solid ${getSortIconClass('displayName')}"></i> ${t('expenses.description', { defaultValue: 'Description' })}
             </button>
             <button class="expense-sort-btn ${_expenseSortField === 'amount' ? 'active' : ''}" onclick="sortExpenses('amount')">
-                <i class="fa-solid ${getSortIconClass('amount')}"></i> Amount
+                <i class="fa-solid ${getSortIconClass('amount')}"></i> ${t('profile.trash.amount', { defaultValue: 'Amount' })}
             </button>`;
     }
 
@@ -368,17 +368,17 @@ function renderExpenseTable() {
         mobileList.innerHTML = page.length ? page.map(e => {
             const isFailed = e.status === 'FAILED';
             const failTitle = isFailed && e.notes ? esc(e.notes).replace(/"/g, '&quot;') : '';
-            const amount = e.amount != null ? `${Number(e.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${e.currency || ''}`.trim() : '-';
-            const date = e.transactionDatetime ? new Date(e.transactionDatetime).toLocaleDateString() : '-';
+            const amount = e.amount != null ? formatCurrency(e.amount, e.currency || '') : t('common.na', { defaultValue: '-' });
+            const date = e.transactionDatetime ? formatDate(e.transactionDatetime) : t('common.na', { defaultValue: '-' });
             return `<div class="expense-mobile-card ${e.deleted ? 'deleted' : ''} ${isFailed ? 'row-failed' : ''}" role="link" tabindex="0" onclick="navigate('#/expenses/${e.urlId}')" onkeydown="if(event.key==='Enter' || event.key===' '){ event.preventDefault(); navigate('#/expenses/${e.urlId}'); }" ${isFailed ? `title="${failTitle}"` : ''}>
                 <div class="expense-mobile-top">
                     <span class="expense-mobile-icon">${statusBadge(e.status, e.category, e.storeName, e.storeWebsite)}</span>
-                    <span class="expense-mobile-description">${esc(e.displayName || e.category || '-')}</span>
+                    <span class="expense-mobile-description">${esc(e.displayName || e.category || t('common.na', { defaultValue: '-' }))}</span>
                     <span class="expense-mobile-amount">${amount}</span>
                 </div>
                 <div class="expense-mobile-date">${date}</div>
             </div>`;
-        }).join('') : '<div class="expense-empty-state">No expenses found.</div>';
+        }).join('') : `<div class="expense-empty-state">${t('expenses.noExpensesFound', { defaultValue: 'No expenses found.' })}</div>`;
     }
 
     document.querySelectorAll('.expense-table th .fa-sort, .expense-table th .fa-sort-up, .expense-table th .fa-sort-down').forEach(icon => {
@@ -393,24 +393,24 @@ function renderExpenseTable() {
 
 function statusBadge(status, category, storeName, storeWebsite) {
     switch(status) {
-        case 'PROCESSING': return '<span class="status-dot status-processing" title="Processing"><i class="fa-solid fa-spinner fa-spin"></i></span>';
+        case 'PROCESSING': return `<span class="status-dot status-processing" title="${t('expenses.processing', { defaultValue: 'Processing' })}"><i class="fa-solid fa-spinner fa-spin"></i></span>`;
         case 'COMPLETED': {
             if (storeWebsite && appConfig?.logoDevToken) {
                 const domain = getRootDomain(storeWebsite);
                 if (domain) {
                     const label = esc(storeName || 'Store');
-                    return `<span class="status-dot status-completed" title="Completed · ${label}">
+                    return `<span class="status-dot status-completed" title="${t('expenses.completed', { defaultValue: 'Completed' })} · ${label}">
                         <img class="status-inline-logo" data-fallback-selector=".status-fallback-icon" src="https://img.logo.dev/${encodeURIComponent(domain)}?token=${encodeURIComponent(appConfig.logoDevToken)}" alt="${label}">
                         <i class="fa-solid fa-store status-fallback-icon" style="display:none"></i>
                     </span>`;
                 }
             }
             if (storeName) {
-                return `<span class="status-dot status-completed" title="Completed"><i class="fa-solid fa-store"></i></span>`;
+                return `<span class="status-dot status-completed" title="${t('expenses.completed', { defaultValue: 'Completed' })}"><i class="fa-solid fa-store"></i></span>`;
             }
-            return `<span class="status-dot status-completed" title="Completed"><i class="fa-solid fa-${categoryIcon(category)}"></i></span>`;
+            return `<span class="status-dot status-completed" title="${t('expenses.completed', { defaultValue: 'Completed' })}"><i class="fa-solid fa-${categoryIcon(category)}"></i></span>`;
         }
-        case 'FAILED': return '<span class="status-dot status-failed" title="Failed"><i class="fa-solid fa-xmark"></i></span>';
+        case 'FAILED': return `<span class="status-dot status-failed" title="${t('expenses.failed', { defaultValue: 'Failed' })}"><i class="fa-solid fa-xmark"></i></span>`;
         default: return '<span class="status-dot"></span>';
     }
 }
@@ -418,12 +418,12 @@ function statusBadge(status, category, storeName, storeWebsite) {
 function renderPagination(totalPages) {
     const container = document.getElementById('expensePagination');
     if (!container) return;
-    if (totalPages <= 1) { container.innerHTML = `<span class="pagination-info">${_allExpenses.length} expense${_allExpenses.length !== 1 ? 's' : ''}</span>`; return; }
+    if (totalPages <= 1) { container.innerHTML = `<span class="pagination-info">${t('chat.expenseCount', { count: _allExpenses.length, defaultValue: _allExpenses.length === 1 ? '{{count}} expense' : '{{count}} expenses' })}</span>`; return; }
 
     const mobile = isMobile();
     const maxPageBtns = mobile ? 3 : 5;
 
-    let html = `<span class="pagination-info">${_allExpenses.length} expense${_allExpenses.length !== 1 ? 's' : ''} · Page ${_expensePage + 1}/${totalPages}</span><div class="pagination-btns">`;
+    let html = `<span class="pagination-info">${t('chat.expenseCount', { count: _allExpenses.length, defaultValue: _allExpenses.length === 1 ? '{{count}} expense' : '{{count}} expenses' })} · ${t('expenses.page', { defaultValue: 'Page' })} ${_expensePage + 1}/${totalPages}</span><div class="pagination-btns">`;
     html += `<button class="btn btn-outline btn-sm" ${_expensePage === 0 ? 'disabled' : ''} onclick="goExpensePage(0)"><i class="fa-solid fa-angles-left"></i></button>`;
     html += `<button class="btn btn-outline btn-sm" ${_expensePage === 0 ? 'disabled' : ''} onclick="goExpensePage(${_expensePage - 1})"><i class="fa-solid fa-chevron-left"></i></button>`;
 
@@ -464,23 +464,23 @@ function initExpenseStatusIcons() {
 }
 
 async function deleteExpense(id) {
-    if (!confirm('Delete this expense?')) return;
+    if (!confirm(t('expenses.deleteConfirm', { defaultValue: 'Delete this expense?' }))) return;
     await api(`/api/expenses/${id}`, { method: 'DELETE' });
-    toast('Expense deleted', 'success');
+    toast(t('expenses.deletedToast', { defaultValue: 'Expense deleted' }), 'success');
     loadExpenses();
 }
 async function restoreExpense(id) {
     await api(`/api/expenses/${id}/restore`, { method: 'PATCH' });
-    toast('Expense restored', 'success');
+    toast(t('profile.trash.expenseRestored', { defaultValue: 'Expense restored' }), 'success');
     loadExpenses();
 }
 async function duplicateExpense(id) {
     const copy = await api(`/api/expenses/${id}/duplicate`, { method: 'POST' });
-    if (copy && copy.id) { toast('Expense duplicated', 'success'); navigate('#/expenses/' + copy.urlId); }
+    if (copy && copy.id) { toast(t('expenses.duplicatedToast', { defaultValue: 'Expense duplicated' }), 'success'); navigate('#/expenses/' + copy.urlId); }
 }
 async function retryExpense(id) {
     await api(`/api/expenses/${id}/retry`, { method: 'POST' });
-    toast('Retry initiated', 'info');
+    toast(t('expenses.retryInitiated', { defaultValue: 'Retry initiated' }), 'info');
     loadExpenses();
 }
 async function exportExpenses(format) {
@@ -500,6 +500,6 @@ async function exportExpenses(format) {
         const a = document.createElement('a'); a.href = url; a.download = 'expenses.json'; a.click();
         URL.revokeObjectURL(url);
     }
-    toast(`Exported as ${format.toUpperCase()}`, 'success');
+    toast(t('expenses.exportedAs', { defaultValue: 'Exported as {{format}}', format: format.toUpperCase() }), 'success');
 }
 

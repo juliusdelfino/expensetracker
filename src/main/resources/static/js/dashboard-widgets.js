@@ -25,28 +25,28 @@ function renderHeroCard(elementId, data, selectId, mode) {
 
     heroCard.innerHTML = `
         <div class="hero-header-row">
-            <div class="hero-title"><i class="fa-solid fa-chart-simple"></i> Summary</div>
+            <div class="hero-title"><i class="fa-solid fa-chart-simple"></i> ${t('dashboard.summary', { defaultValue: 'Summary' })}</div>
             <div class="hero-controls">
                 <select class="hero-period-select interactive-element" id="${selectId}"
                         onchange="onHeroPeriodChange('${elementId}', '${selectId}', '${mode}')">
-                    <optgroup label="Monthly">
+                    <optgroup label="${t('dashboard.monthly', { defaultValue: 'Monthly' })}">
                         ${monthKeys.map(m => `<option value="month:${m}" ${m === defaultMonth ? 'selected' : ''}>${formatYearMonth(m)}</option>`).join('')}
                     </optgroup>
-                    <optgroup label="Annual">
+                    <optgroup label="${t('dashboard.annual', { defaultValue: 'Annual' })}">
                         ${yearKeys.map(y => `<option value="year:${y}">${y}</option>`).join('')}
                     </optgroup>
-                    <option value="all">All Time</option>
+                    <option value="all">${t('dashboard.allTime', { defaultValue: 'All Time' })}</option>
                 </select>
-                <button class="btn btn-outline btn-sm" onclick="openDashFilterDialog('${selectId}','${mode}')" title="More filters">
+                <button class="btn btn-outline btn-sm" onclick="openDashFilterDialog('${selectId}','${mode}')" title="${t('expenses.moreFilters', { defaultValue: 'More filters' })}">
                     <i class="fa-solid fa-filter"></i>
                 </button>
             </div>
         </div>
         <div class="hero-filter-badges" id="${elementId}Badges">${renderFilterBadges(mode)}</div>
-        <div class="hero-amount" id="${elementId}Amount">${defaultAmt.toFixed(2)} <span class="hero-currency">${baseCur}</span></div>
+        <div class="hero-amount" id="${elementId}Amount">${formatCurrency(defaultAmt, baseCur)}</div>
         <div class="hero-stats" id="${elementId}Stats">
-            <div class="hero-stat"><span class="hero-stat-value" id="${elementId}TxCount">${periodInfo.txCount}</span><span class="hero-stat-label">transactions</span></div>
-            <div class="hero-stat"><span class="hero-stat-value" id="${elementId}TopCat">${periodInfo.topCategory}</span><span class="hero-stat-label">top category</span></div>
+            <div class="hero-stat"><span class="hero-stat-value" id="${elementId}TxCount">${periodInfo.txCount}</span><span class="hero-stat-label">${t('dashboard.transactions', { defaultValue: 'transactions' })}</span></div>
+            <div class="hero-stat"><span class="hero-stat-value" id="${elementId}TopCat">${periodInfo.topCategory}</span><span class="hero-stat-label">${t('dashboard.topCategory', { defaultValue: 'top category' })}</span></div>
         </div>`;
     heroCard._dashData = data;
 }
@@ -88,7 +88,7 @@ function onHeroPeriodChange(elementId, selectId, mode) {
         amount = Number(data.annualTotals?.[val.split(':')[1]] || 0);
     }
     const amtEl = document.getElementById(elementId + 'Amount');
-    if (amtEl) amtEl.innerHTML = `${amount.toFixed(2)} <span class="hero-currency">${baseCur}</span>`;
+    if (amtEl) amtEl.textContent = formatCurrency(amount, baseCur);
 
     const periodInfo = computePeriodStats(data, val);
     const txEl = document.getElementById(elementId + 'TxCount');
@@ -121,7 +121,7 @@ function updateHeroFromFilteredData(elementId, selectId, filteredData) {
         amount = Number(filteredData.annualTotals?.[val.split(':')[1]] || 0);
     }
     const amtEl = document.getElementById(elementId + 'Amount');
-    if (amtEl) amtEl.innerHTML = `${amount.toFixed(2)} <span class="hero-currency">${baseCur}</span>`;
+    if (amtEl) amtEl.textContent = formatCurrency(amount, baseCur);
 
     // Stats from filtered data
     const txCount = filteredData.totalExpenses ?? '\u2014';
@@ -195,7 +195,7 @@ function updateChartStatusBar(statusBarId, label, value, navUrl) {
     const el = document.getElementById(statusBarId);
     if (!el) return;
     if (!label) { el.innerHTML = ''; return; }
-    const linkHtml = navUrl ? `&nbsp;<a class="chart-status-link" href="${navUrl}">View expenses →</a>` : '';
+    const linkHtml = navUrl ? `&nbsp;<a class="chart-status-link" href="${navUrl}">${t('dashboard.viewExpenses', { defaultValue: 'View expenses ->' })}</a>` : '';
     el.innerHTML = `<span class="chart-status-info"><strong>${label}</strong>: ${value}</span>${linkHtml}`;
 }
 
@@ -221,7 +221,7 @@ function createTimelineChart(canvasId, chartKey, data) {
     chartInstances[chartKey] = new Chart(tc, {
         type: 'line',
         data: { labels: timelineLabels,
-            datasets: [{ label: 'Daily Spending',
+            datasets: [{ label: t('dashboard.dailySpending', { defaultValue: 'Daily Spending' }),
                 data: timelineValues,
                 borderColor: '#42A5F5', backgroundColor: 'rgba(66,165,245,0.1)',
                 fill: true, tension: 0.3, pointRadius: 3 }] },
@@ -255,10 +255,10 @@ async function renderRecentExpenses(elementId, count, filterParams) {
                 <div class="mini-card-icon">${recentExpenseIconHtml(e)}</div>
                 <div class="mini-card-info">
                     <div class="mini-card-category">${e.displayName || e.category || 'Uncategorized'}</div>
-                    <div class="mini-card-date">${e.transactionDatetime ? new Date(e.transactionDatetime).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}</div>
+                    <div class="mini-card-date">${e.transactionDatetime ? formatDateTime(e.transactionDatetime) : t('common.na', { defaultValue: '-' })}</div>
                 </div>
-                <div class="mini-card-amount">${e.amount != null ? Number(e.amount).toFixed(2) : '-'} ${e.currency || ''}</div>
-            </a>`).join('') : '<p style="color:var(--text-light); text-align:center; padding:1rem;">No expenses yet</p>';
+                <div class="mini-card-amount">${e.amount != null ? formatCurrency(e.amount, e.currency || '') : t('common.na', { defaultValue: '-' })}</div>
+            </a>`).join('') : `<p style="color:var(--text-light); text-align:center; padding:1rem;">${t('dashboard.noExpensesYet', { defaultValue: 'No expenses yet' })}</p>`;
     }
 }
 
@@ -266,7 +266,7 @@ function recentExpenseIconHtml(expense) {
     if (expense?.status === 'COMPLETED' && expense.storeWebsite && appConfig?.logoDevToken) {
         const domain = getRootDomain(expense.storeWebsite);
         if (domain) {
-            const label = esc(expense.storeName || 'Store');
+            const label = esc(expense.storeName || t('reports.storeFallback', { defaultValue: 'Store' }));
             return `<img class="mini-card-logo" src="https://img.logo.dev/${encodeURIComponent(domain)}?token=${encodeURIComponent(appConfig.logoDevToken)}" alt="${label}" title="${label}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block'">
                     <i class="fa-solid fa-store mini-card-logo-fallback" style="display:none"></i>`;
         }
@@ -278,20 +278,20 @@ function renderTopShops(elementId, topShops) {
     const el = document.getElementById(elementId);
     if (!el) return;
     if (!topShops || topShops.length === 0) {
-        el.innerHTML = '<p style="color:var(--text-light); text-align:center; padding:1rem;">No shop data yet</p>';
+        el.innerHTML = `<p style="color:var(--text-light); text-align:center; padding:1rem;">${t('dashboard.noShopDataYet', { defaultValue: 'No shop data yet' })}</p>`;
         return;
     }
     el.innerHTML = topShops.map((s, i) => {
         const recentHtml = (s.recentTransactions || []).map(t =>
             `<a href="#/expenses/${t.urlId}" class="rank-recent-tx">
                 <span class="rank-recent-cat">${t.category || 'Uncategorized'}</span>
-                <span class="rank-recent-detail">${t.amount != null ? Number(t.amount).toFixed(2) : '-'} ${t.currency || ''} · ${t.date || ''}</span>
+                <span class="rank-recent-detail">${t.amount != null ? formatCurrency(t.amount, t.currency || '') : t('common.na', { defaultValue: '-' })} · ${t.date || ''}</span>
             </a>`).join('');
         return `<div class="rank-row-wrap">
             <div class="rank-row">
                 <span class="rank-badge">${i + 1}</span>
                 <a href="#/expenses?search=${encodeURIComponent(s.name)}" class="rank-name rank-name-link">${s.name}</a>
-                <span class="rank-value">${s.visits} visit${s.visits > 1 ? 's' : ''}</span>
+                <span class="rank-value">${t('dashboard.visitCount', { count: s.visits, defaultValue: s.visits === 1 ? '{{count}} visit' : '{{count}} visits' })}</span>
             </div>
             ${recentHtml ? `<div class="rank-recent-list">${recentHtml}</div>` : ''}
         </div>`;
@@ -302,14 +302,14 @@ function renderTopItems(elementId, topItems) {
     const el = document.getElementById(elementId);
     if (!el) return;
     if (!topItems || topItems.length === 0) {
-        el.innerHTML = '<p style="color:var(--text-light); text-align:center; padding:1rem;">No item data yet</p>';
+        el.innerHTML = `<p style="color:var(--text-light); text-align:center; padding:1rem;">${t('dashboard.noItemDataYet', { defaultValue: 'No item data yet' })}</p>`;
         return;
     }
     el.innerHTML = topItems.map((item, i) => {
         const recentHtml = (item.recentTransactions || []).map(t => {
             const storeLabel = t.storeName ? ` · ${t.storeName}` : '';
             return `<a href="#/expenses/${t.urlId}" class="rank-recent-tx">
-                <span class="rank-recent-cat">${t.unitPrice != null ? Number(t.unitPrice).toFixed(2) : '-'} ${t.currency || ''}</span>
+                <span class="rank-recent-cat">${t.unitPrice != null ? formatCurrency(t.unitPrice, t.currency || '') : t('common.na', { defaultValue: '-' })}</span>
                 <span class="rank-recent-detail">${t.date || ''}${storeLabel}</span>
             </a>`;
         }).join('');
@@ -328,24 +328,24 @@ function renderTopExpenses(elementId, topExpenses) {
     const el = document.getElementById(elementId);
     if (!el) return;
     if (!topExpenses || topExpenses.length === 0) {
-        el.innerHTML = '<p style="color:var(--text-light); text-align:center; padding:1rem;">No expense data yet</p>';
+        el.innerHTML = `<p style="color:var(--text-light); text-align:center; padding:1rem;">${t('dashboard.noExpenseDataYet', { defaultValue: 'No expense data yet' })}</p>`;
         return;
     }
     const baseCur = currentUser?.baseCurrency || 'USD';
     el.innerHTML = topExpenses.map((e, i) => {
-        const date = e.transactionDatetime ? new Date(e.transactionDatetime).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-        const baseAmt = e.amountInBase != null ? Number(e.amountInBase).toFixed(2) : (e.amount != null ? Number(e.amount).toFixed(2) : '-');
-        const origAmt = e.amount != null ? Number(e.amount).toFixed(2) : '-';
+        const date = e.transactionDatetime ? formatDate(e.transactionDatetime) : '';
+        const baseAmt = e.amountInBase != null ? formatCurrency(e.amountInBase, baseCur) : (e.amount != null ? formatCurrency(e.amount, e.currency || baseCur) : t('common.na', { defaultValue: '-' }));
+        const origAmt = e.amount != null ? formatCurrency(e.amount, e.currency || '') : t('common.na', { defaultValue: '-' });
         const sameAsCur = e.currency === baseCur;
         return `<a href="#/expenses/${e.urlId}" class="top-expense-card">
             <span class="rank-badge">${i + 1}</span>
             <div class="top-expense-info">
-                <div class="top-expense-name">${e.displayName || e.category || 'Uncategorized'}</div>
+                <div class="top-expense-name">${e.displayName || e.category || t('profile.trash.uncategorized', { defaultValue: 'Uncategorized' })}</div>
                 <div class="top-expense-date">${date}</div>
             </div>
             <div class="top-expense-amount">
-                <span class="top-expense-base">${baseAmt} ${baseCur}</span>
-                ${!sameAsCur ? `<span class="top-expense-orig">${origAmt} ${e.currency}</span>` : ''}
+                <span class="top-expense-base">${baseAmt}</span>
+                ${!sameAsCur ? `<span class="top-expense-orig">${origAmt}</span>` : ''}
             </div>
         </a>`;
     }).join('');
@@ -379,8 +379,8 @@ function renderGeoMap(elementId, data) {
     const geoByCountry = data.geoByCountry || [];
     geoByCountry.forEach(c => {
         if (c.lat == null || c.lng == null || (c.lat === 0 && c.lng === 0)) return;
-        const total = Number(c.total).toFixed(2);
-        const name = c.countryName || c.country || 'Unknown';
+        const total = formatCurrency(c.total, baseCur);
+        const name = c.countryName || c.country || t('dashboard.unknown', { defaultValue: 'Unknown' });
         const countryIcon = L.divIcon({
             className: 'geo-country-marker',
             html: `<div class="geo-country-dot">${c.count}</div>`,
@@ -390,14 +390,14 @@ function renderGeoMap(elementId, data) {
             .bindPopup(`<div class="geo-popup">
                 <b>${name}</b><br>
                 <span class="geo-popup-row"><i class="fa-solid fa-calendar"></i> ${formatDateShort(c.minDate)} \u2014 ${formatDateShort(c.maxDate)}</span><br>
-                <span class="geo-popup-row"><i class="fa-solid fa-money-bill"></i> ${total} ${baseCur}</span><br>
-                <span class="geo-popup-row"><i class="fa-solid fa-receipt"></i> ${c.count} transaction${c.count > 1 ? 's' : ''}</span>
+                <span class="geo-popup-row"><i class="fa-solid fa-money-bill"></i> ${total}</span><br>
+                <span class="geo-popup-row"><i class="fa-solid fa-receipt"></i> ${t('dashboard.transactionCount', { count: c.count, defaultValue: c.count === 1 ? '{{count}} transaction' : '{{count}} transactions' })}</span>
             </div>`);
     });
 
     (data.geoData || []).forEach(p => {
         if (p.lat == null || p.lng == null || (p.lat === 0 && p.lng === 0)) return;
-        const storeName = p.name || 'Store';
+        const storeName = p.name || t('reports.storeFallback', { defaultValue: 'Store' });
         const storeLink = `<a href="#/expenses?search=${encodeURIComponent(storeName)}" style="color:var(--primary); text-decoration:none; font-weight:600;">${storeName}</a>`;
         L.marker([p.lat, p.lng]).addTo(map)
             .bindPopup(`${storeLink}<br>${p.amount} ${p.currency || ''}<br>${p.date || ''}`);
@@ -444,13 +444,13 @@ function appendDiscoveryBatch(containerId, cards, count) {
         const card = cards[startIdx + i];
         const icon = iconsPool[(startIdx + i) % iconsPool.length];
         const accentColor = colorsPool[(startIdx + i) % colorsPool.length];
-        const total = Number(card.total).toFixed(2);
+        const total = formatCurrency(card.total, baseCur);
         const shopList = (card.shops || []).join(', ');
         const daysStayed = card.daysStayed || 1;
 
         let originalLine = '';
         if (card.originalCurrency && card.originalCurrency !== baseCur && card.originalTotal != null) {
-            originalLine = `<span style="font-size:0.75rem; opacity:0.75;">(${Number(card.originalTotal).toFixed(2)} ${card.originalCurrency})</span>`;
+            originalLine = `<span style="font-size:0.75rem; opacity:0.75;">(${formatCurrency(card.originalTotal, card.originalCurrency)})</span>`;
         }
 
         const div = document.createElement('div');
@@ -463,14 +463,14 @@ function appendDiscoveryBatch(containerId, cards, count) {
         let topExpHtml = '';
         if (topExp.length > 0) {
             topExpHtml = `<div class="discovery-top-expenses">
-                <div class="discovery-top-exp-label"><i class="fa-solid fa-arrow-trend-up"></i> Top expenses</div>
+                <div class="discovery-top-exp-label"><i class="fa-solid fa-arrow-trend-up"></i> ${t('dashboard.topExpenses', { defaultValue: 'Top expenses' })}</div>
                 ${topExp.map(e => {
-                    const base = e.amountInBase != null ? Number(e.amountInBase).toFixed(2) : (e.amount != null ? Number(e.amount).toFixed(2) : '-');
+                    const base = e.amountInBase != null ? formatCurrency(e.amountInBase, baseCur) : (e.amount != null ? formatCurrency(e.amount, e.currency || baseCur) : t('common.na', { defaultValue: '-' }));
                     const orig = (e.currency && e.currency !== baseCur && e.amount != null)
-                        ? ` <span class="discovery-exp-orig">(${Number(e.amount).toFixed(2)} ${e.currency})</span>` : '';
+                        ? ` <span class="discovery-exp-orig">(${formatCurrency(e.amount, e.currency)})</span>` : '';
                     return `<a href="#/expenses/${e.urlId}" class="discovery-exp-row">
-                        <span class="discovery-exp-name">${e.displayName || 'Expense'}</span>
-                        <span class="discovery-exp-amount">${base} ${baseCur}${orig}</span>
+                        <span class="discovery-exp-name">${e.displayName || t('chat.expenseFallback', { defaultValue: 'Expense' })}</span>
+                        <span class="discovery-exp-amount">${base}${orig}</span>
                     </a>`;
                 }).join('')}
             </div>`;
@@ -478,7 +478,7 @@ function appendDiscoveryBatch(containerId, cards, count) {
 
         const reportActionHtml = `<div class="discovery-card-actions">
                 <button class="btn btn-primary btn-sm" onclick="createReportFromDiscoveryCard(window._discoveryReportCardsByContainer['${containerId}'][${reportCardIndex}])">
-                    <i class="fa-solid fa-chart-line"></i> View Report
+                    <i class="fa-solid fa-chart-line"></i> ${t('dashboard.viewReport', { defaultValue: 'View Report' })}
                 </button>
             </div>`;
 
@@ -486,24 +486,24 @@ function appendDiscoveryBatch(containerId, cards, count) {
             <div class="discovery-header" style="border-left-color:${accentColor}">
                 ${flag ? `<div class="discovery-flag-icon">${flag}</div>` : `<div class="discovery-icon" style="background:${accentColor}15; color:${accentColor}"><i class="fa-solid ${icon}"></i></div>`}
                 <div class="discovery-title-area">
-                    <div class="discovery-trip-label">Trip to</div>
-                    <div class="discovery-title">${card.locationLabel || card.countryName || card.country || 'Unknown'}</div>
+                    <div class="discovery-trip-label">${t('dashboard.tripTo', { defaultValue: 'Trip to' })}</div>
+                    <div class="discovery-title">${card.locationLabel || card.countryName || card.country || t('dashboard.unknown', { defaultValue: 'Unknown' })}</div>
                     <div class="discovery-subtitle">${card.month} ${card.year}</div>
                 </div>
             </div>
             <div class="discovery-metrics">
                 <div class="discovery-metric">
                     <span class="discovery-metric-value">${total}</span>
-                    <span class="discovery-metric-label">${baseCur} spent</span>
+                    <span class="discovery-metric-label">${t('dashboard.spent', { defaultValue: 'spent' })}</span>
                     ${originalLine ? `<span class="discovery-metric-orig">${originalLine}</span>` : ''}
                 </div>
                 <div class="discovery-metric">
                     <span class="discovery-metric-value">${card.count}</span>
-                    <span class="discovery-metric-label">expense${card.count > 1 ? 's' : ''}</span>
+                    <span class="discovery-metric-label">${t('chat.expenseCount', { count: card.count, defaultValue: card.count === 1 ? '{{count}} expense' : '{{count}} expenses' })}</span>
                 </div>
                 <div class="discovery-metric">
                     <span class="discovery-metric-value">${daysStayed}</span>
-                    <span class="discovery-metric-label">day${daysStayed > 1 ? 's' : ''} visited</span>
+                    <span class="discovery-metric-label">${t('dashboard.daysVisited', { count: daysStayed, defaultValue: daysStayed === 1 ? '{{count}} day visited' : '{{count}} days visited' })}</span>
                 </div>
             </div>
             ${topExpHtml}
@@ -516,13 +516,13 @@ function appendDiscoveryBatch(containerId, cards, count) {
 
 async function createReportFromDiscoveryCard(card) {
     if (!card || !card.yearMonth || !card.country) {
-        toast('This discovery card cannot generate a report yet.', 'error');
+        toast(t('dashboard.discoveryNoReport', { defaultValue: 'This discovery card cannot generate a report yet.' }), 'error');
         return;
     }
 
     const [year, month] = card.yearMonth.split('-');
     if (!year || !month) {
-        toast('This discovery card has an invalid date range.', 'error');
+        toast(t('dashboard.discoveryInvalidDateRange', { defaultValue: 'This discovery card has an invalid date range.' }), 'error');
         return;
     }
 
@@ -540,11 +540,11 @@ async function createReportFromDiscoveryCard(card) {
 
     const result = await api('/api/reports', { method: 'POST', body });
     if (!result || result.error) {
-        toast(result?.error || 'Failed to create report', 'error');
+        toast(result?.error || t('dashboard.failedCreateReport', { defaultValue: 'Failed to create report' }), 'error');
         return;
     }
 
-    toast('Report generated', 'success');
+    toast(t('dashboard.reportGenerated', { defaultValue: 'Report generated' }), 'success');
     navigate(`#/reports/${result.id}`);
 }
 
@@ -576,7 +576,7 @@ function initDiscoveryScroll(scrollContainerId, cardsContainerId, loadingId, car
                 if (idx < cards.length) {
                     appendDiscoveryBatch(cardsContainerId, cards, 2);
                 } else {
-                    loadEl.innerHTML = '<p style="color:var(--text-light); text-align:center; font-size:0.8rem;">No more discoveries</p>';
+                    loadEl.innerHTML = `<p style="color:var(--text-light); text-align:center; font-size:0.8rem;">${t('dashboard.noMoreDiscoveries', { defaultValue: 'No more discoveries' })}</p>`;
                     _discoveryObserver.disconnect();
                 }
             }
@@ -590,15 +590,12 @@ function initDiscoveryScroll(scrollContainerId, cardsContainerId, loadingId, car
 // ============================================
 function formatYearMonth(ym) {
     if (!ym) return '';
-    const [y, m] = ym.split('-');
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return months[parseInt(m) - 1] + ' ' + y;
+    return formatMonth(ym + '-01');
 }
 
 function formatDateShort(dateStr) {
     if (!dateStr) return '';
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    return formatDate(dateStr + 'T00:00:00');
 }
 
 function getTopCategory(categoryTotals) {
@@ -693,10 +690,10 @@ function renderFilterBadges(mode) {
         const arr = Array.isArray(val) ? val : (val ? [val] : []);
         arr.forEach(v => badges.push({ key, label, value: v }));
     };
-    addBadges('category', 'Category', f.category);
-    addBadges('country', 'Country', f.country);
-    addBadges('storeName', 'Store', f.storeName);
-    if (f.search) badges.push({ key: 'search', label: 'Keyword', value: f.search });
+    addBadges('category', t('profile.trash.category', { defaultValue: 'Category' }), f.category);
+    addBadges('country', t('expenses.country', { defaultValue: 'Country' }), f.country);
+    addBadges('storeName', t('reports.storeFallback', { defaultValue: 'Store' }), f.storeName);
+    if (f.search) badges.push({ key: 'search', label: t('dashboard.keyword', { defaultValue: 'Keyword' }), value: f.search });
     if (badges.length === 0) return '';
     return badges.map(b =>
         `<span class="filter-badge">${b.label}: <strong>${esc(b.value)}</strong>
@@ -719,7 +716,7 @@ function removeDashFilterValue(key, value, mode) {
 
 function _checkboxList(id, items, selected) {
     if (!items || items.length === 0)
-        return `<div class="filter-checkbox-list"><div class="filter-checkbox-empty">No options available</div></div>`;
+        return `<div class="filter-checkbox-list"><div class="filter-checkbox-empty">${t('dashboard.noOptions', { defaultValue: 'No options available' })}</div></div>`;
     const rows = items.map(v =>
         `<label class="filter-checkbox-item">
             <input type="checkbox" name="${id}" value="${esc(v)}" ${selected.includes(v) ? 'checked' : ''}>
@@ -731,7 +728,7 @@ function _checkboxList(id, items, selected) {
 
 function _checkboxListCountries(id, codes, selected) {
     if (!codes || codes.length === 0)
-        return `<div class="filter-checkbox-list"><div class="filter-checkbox-empty">No options available</div></div>`;
+        return `<div class="filter-checkbox-list"><div class="filter-checkbox-empty">${t('dashboard.noOptions', { defaultValue: 'No options available' })}</div></div>`;
     const rows = codes.map(code => {
         const label = getCountryName(code) || code;
         return `<label class="filter-checkbox-item">
@@ -761,31 +758,31 @@ function openDashFilterDialog(selectId, mode) {
     dialog.innerHTML = `
         <div class="modal-content" style="max-width:420px; max-height:80vh; display:flex; flex-direction:column; padding:0; overflow:hidden;">
             <div class="modal-header" style="padding:1.25rem 1.5rem 1rem; flex-shrink:0;">
-                <h3><i class="fa-solid fa-filter"></i> More Filters</h3>
+                <h3><i class="fa-solid fa-filter"></i> ${t('dashboard.moreFilters', { defaultValue: 'More Filters' })}</h3>
                 <button class="modal-close" onclick="closeDashFilterDialog()">&times;</button>
             </div>
             <div style="overflow-y:auto; flex:1; min-height:0; padding:0 1.5rem;">
                 <div class="form-group">
-                    <label>Category</label>
+                    <label>${t('profile.trash.category', { defaultValue: 'Category' })}</label>
                     ${_checkboxList('dfCategory', cats, selCat)}
                 </div>
                 <div class="form-group">
-                    <label>Country</label>
+                    <label>${t('expenses.country', { defaultValue: 'Country' })}</label>
                     ${_checkboxListCountries('dfCountry', countries, selCountry)}
                 </div>
                 <div class="form-group">
-                    <label>Store</label>
+                    <label>${t('reports.storeFallback', { defaultValue: 'Store' })}</label>
                     ${_checkboxList('dfStoreName', storeNames, selStore)}
                 </div>
                 <div class="form-group">
-                    <label>Keyword (tags / notes)</label>
-                    <input type="text" class="form-control" id="dfSearch" maxlength="100" value="${esc(f.search || '')}" placeholder="e.g. lunch, travel">
+                    <label>${t('dashboard.keywordTagsNotes', { defaultValue: 'Keyword (tags / notes)' })}</label>
+                    <input type="text" class="form-control" id="dfSearch" maxlength="100" value="${esc(f.search || '')}" placeholder="${t('dashboard.keywordPlaceholder', { defaultValue: 'e.g. lunch, travel' })}">
                 </div>
             </div>
             <div style="display:flex; gap:0.5rem; padding:1rem 1.5rem; flex-shrink:0; border-top:1px solid var(--border-color); background:var(--bg-card);">
-                <button class="btn btn-primary" onclick="saveDashFilters('${mode}')"><i class="fa-solid fa-check"></i> Apply</button>
-                <button class="btn btn-outline" onclick="clearDashFilters('${mode}')"><i class="fa-solid fa-eraser"></i> Clear</button>
-                <button class="btn btn-outline" onclick="closeDashFilterDialog()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveDashFilters('${mode}')"><i class="fa-solid fa-check"></i> ${t('expenses.apply', { defaultValue: 'Apply' })}</button>
+                <button class="btn btn-outline" onclick="clearDashFilters('${mode}')"><i class="fa-solid fa-eraser"></i> ${t('expenses.clear', { defaultValue: 'Clear' })}</button>
+                <button class="btn btn-outline" onclick="closeDashFilterDialog()">${t('common.cancel', { defaultValue: 'Cancel' })}</button>
             </div>
         </div>`;
     dialog.addEventListener('click', e => { if (e.target === dialog) closeDashFilterDialog(); });

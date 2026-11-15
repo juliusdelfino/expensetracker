@@ -18,7 +18,8 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
     @Query("SELECT s FROM Store s WHERE s.userId = :userId AND " +
            "LOWER(COALESCE(s.name,'')) = LOWER(COALESCE(:name,'')) AND " +
            "LOWER(COALESCE(s.address,'')) = LOWER(COALESCE(:address,'')) AND " +
-           "LOWER(COALESCE(s.city,'')) = LOWER(COALESCE(:city,'')) AND " +
+           "(LOWER(COALESCE(:city,'')) = '' OR LOWER(COALESCE(s.city,'')) = '' OR " +
+           " LOWER(COALESCE(s.city,'')) = LOWER(COALESCE(:city,''))) AND " +
            "LOWER(COALESCE(s.country,'')) = LOWER(COALESCE(:country,'')) AND " +
            "LOWER(COALESCE(s.postalCode,'')) = LOWER(COALESCE(:postalCode,''))")
     Optional<Store> findMatchingStore(@Param("userId") Long userId,

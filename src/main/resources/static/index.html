@@ -10,7 +10,7 @@
     <link rel="manifest" href="/manifest.json">
     <link rel="apple-touch-icon" href="/images/logo-large.png">
     <link rel="apple-touch-icon" sizes="192x192" href="./images/logo192.png" />
-    <title>Expense Tracker</title>
+    <title data-i18n="app.name">Expense Tracker</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -34,26 +34,42 @@
 <!-- Navbar -->
 <nav class="navbar" id="navbar" aria-label="Primary navigation" style="display:none;">
     <a href="#/dashboard" class="navbar-brand" onclick="if(isMobile()){ goToDashboard(); return false; }">
-        <img src="/images/logo192.png" alt="logo" style="width:28px;height:28px;border-radius:6px;"> Expense Tracker
+        <img src="/images/logo192.png" alt="logo" style="width:28px;height:28px;border-radius:6px;"> <span data-i18n="app.name">Expense Tracker</span>
     </a>
     <div class="nav-inline" id="navInline">
-        <a href="#/dashboard" onclick="if(isMobile()){ goToDashboard(); return false; }"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
-        <a href="#/expenses"><i class="fa-solid fa-receipt"></i> Expenses</a>
-        <a href="#/reports"><i class="fa-solid fa-chart-line"></i> Reports</a>
-        <a href="#/chat" onclick="openChat(event)"><i class="fa-solid fa-comment"></i> Chat</a>
-        <a href="#/admin" id="navAdminLink" style="display:none;"><i class="fa-solid fa-user-shield"></i> Admin</a>
+        <a href="#/dashboard" onclick="if(isMobile()){ goToDashboard(); return false; }"><i class="fa-solid fa-chart-pie"></i> <span data-i18n="nav.dashboard">Dashboard</span></a>
+        <a href="#/expenses"><i class="fa-solid fa-receipt"></i> <span data-i18n="nav.expenses">Expenses</span></a>
+        <a href="#/reports"><i class="fa-solid fa-chart-line"></i> <span data-i18n="nav.reports">Reports</span></a>
+        <a href="#/chat" onclick="openChat(event)"><i class="fa-solid fa-comment"></i> <span data-i18n="nav.chat">Chat</span></a>
+        <a href="#/admin" id="navAdminLink" style="display:none;"><i class="fa-solid fa-user-shield"></i> <span data-i18n="nav.admin">Admin</span></a>
+        <label for="menuLanguageSelect" style="display:flex; align-items:center; gap:0.4rem; margin-left:0.4rem; font-size:0.85rem; color:var(--text-light);">
+            <i class="fa-solid fa-language"></i>
+            <span data-i18n="nav.language">Language</span>
+            <select id="menuLanguageSelect" style="border:1px solid var(--border-color); border-radius:8px; padding:0.25rem 0.4rem; background:var(--card-bg); color:var(--text);">
+                <option value="en">EN</option>
+                <option value="de">DE</option>
+            </select>
+        </label>
     </div>
     <button class="burger-btn" id="burgerBtn" onclick="toggleNavDrawer()">
         <i class="fa-solid fa-bars"></i>
     </button>
     <div class="nav-drawer" id="navDrawer">
-        <a href="#/dashboard" class="drawer-mobile-only" onclick="goToDashboard(); closeNavDrawer()"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
-        <a href="#/expenses" class="drawer-mobile-only" onclick="closeNavDrawer()"><i class="fa-solid fa-receipt"></i> Expenses</a>
-        <a href="#/reports" onclick="closeNavDrawer()"><i class="fa-solid fa-chart-line"></i> Reports</a>
-        <a href="#/chat" class="drawer-mobile-only" onclick="openChat(event); closeNavDrawer()"><i class="fa-solid fa-comment"></i> Chat</a>
-        <a href="#/admin" id="drawerAdminLink" onclick="closeNavDrawer()" style="display:none;"><i class="fa-solid fa-user-shield"></i> Admin</a>
+        <a href="#/dashboard" class="drawer-mobile-only" onclick="goToDashboard(); closeNavDrawer()"><i class="fa-solid fa-chart-pie"></i> <span data-i18n="nav.dashboard">Dashboard</span></a>
+        <a href="#/expenses" class="drawer-mobile-only" onclick="closeNavDrawer()"><i class="fa-solid fa-receipt"></i> <span data-i18n="nav.expenses">Expenses</span></a>
+        <a href="#/reports" onclick="closeNavDrawer()"><i class="fa-solid fa-chart-line"></i> <span data-i18n="nav.reports">Reports</span></a>
+        <a href="#/chat" class="drawer-mobile-only" onclick="openChat(event); closeNavDrawer()"><i class="fa-solid fa-comment"></i> <span data-i18n="nav.chat">Chat</span></a>
+        <a href="#/admin" id="drawerAdminLink" onclick="closeNavDrawer()" style="display:none;"><i class="fa-solid fa-user-shield"></i> <span data-i18n="nav.admin">Admin</span></a>
+        <div style="display:flex; align-items:center; gap:0.5rem; padding:0.5rem 0.4rem; margin:0.2rem 0 0.5rem;">
+            <i class="fa-solid fa-language" style="width:1.1rem; text-align:center;"></i>
+            <label for="drawerLanguageSelect" data-i18n="nav.language" style="font-size:0.95rem;">Language</label>
+            <select id="drawerLanguageSelect" style="margin-left:auto; border:1px solid var(--border-color); border-radius:8px; padding:0.25rem 0.4rem; background:var(--card-bg); color:var(--text);">
+                <option value="en">EN</option>
+                <option value="de">DE</option>
+            </select>
+        </div>
         <a href="#/profile" onclick="closeNavDrawer()"><i class="fa-solid fa-user-gear"></i> <span id="nav-username"></span></a>
-        <a href="#" onclick="logout(); closeNavDrawer(); return false;"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+        <a href="#" onclick="logout(); closeNavDrawer(); return false;"><i class="fa-solid fa-right-from-bracket"></i> <span data-i18n="nav.logout">Logout</span></a>
     </div>
 </nav>
 
@@ -74,25 +90,25 @@
 <nav class="bottom-tab-bar" id="bottomTabBar" aria-label="Mobile tabs" style="display:none;">
     <button class="tab-btn" data-panel="0" onclick="goToPanel(0)">
         <i class="fa-solid fa-camera"></i>
-        <span>Scan</span>
+        <span data-i18n="mobile.scan">Scan</span>
     </button>
     <button class="tab-btn active" data-panel="1" onclick="goToPanel(1)">
         <i class="fa-solid fa-house"></i>
-        <span>Home</span>
+        <span data-i18n="mobile.home">Home</span>
     </button>
     <button class="tab-btn" data-panel="2" onclick="goToPanel(2)">
         <i class="fa-solid fa-comment"></i>
-        <span>Chat</span>
+        <span data-i18n="mobile.chat">Chat</span>
     </button>
 </nav>
 
 <!-- Desktop: Chatbot FAB + Panel -->
-<button class="desktop-chat-fab" id="desktopChatFab" onclick="toggleDesktopChat()" title="Chat with Expense Assistant">
+<button class="desktop-chat-fab" id="desktopChatFab" onclick="toggleDesktopChat()" title="Chat with Expense Assistant" data-i18n-title="chat.fabTitle">
     <i class="fa-solid fa-comment"></i>
 </button>
 <div class="desktop-chat-panel" id="desktopChatPanel" style="display:none;">
     <div class="desktop-chat-panel-header">
-        <span><i class="fa-solid fa-robot"></i> Expense Assistant</span>
+        <span><i class="fa-solid fa-robot"></i> <span data-i18n="chat.assistant">Expense Assistant</span></span>
         <button class="desktop-chat-close" onclick="toggleDesktopChat()"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div id="desktopChatContent" class="desktop-chat-content"></div>
@@ -104,15 +120,18 @@
 <footer class="site-footer" id="siteFooter">
     <div class="footer-content">
         <div class="footer-links">
-            <a href="https://github.com/jdelfino/expensetracker/wiki" target="_blank"><i class="fa-solid fa-book"></i> Wiki</a>
-            <a href="#/terms">Terms of Service</a>
-            <a href="#/privacy">Privacy Policy</a>
+            <a href="https://github.com/jdelfino/expensetracker/wiki" target="_blank"><i class="fa-solid fa-book"></i> <span data-i18n="footer.wiki">Wiki</span></a>
+            <a href="#/terms" data-i18n="footer.terms">Terms of Service</a>
+            <a href="#/privacy" data-i18n="footer.privacy">Privacy Policy</a>
         </div>
-        <div class="footer-copy">&copy; 2026 Expense Tracker. All rights reserved.</div>
+        <div class="footer-copy" data-i18n="footer.copyright">&copy; 2026 Expense Tracker. All rights reserved.</div>
     </div>
 </footer>
 
 <!-- Split JS files by feature -->
+<script src="https://cdn.jsdelivr.net/npm/i18next@23.15.2/dist/umd/i18next.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/i18next-http-backend@2.6.1/i18nextHttpBackend.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/i18next-browser-languagedetector@8.0.0/i18nextBrowserLanguageDetector.min.js"></script>
 <script src="/js/utils.js"></script>
 <script src="/js/router.js"></script>
 <script src="/js/scan.js"></script>

@@ -9,13 +9,16 @@ import com.delfino.expensetracker.model.AiUsageType;
 import com.delfino.expensetracker.model.ChatMessage;
 import com.delfino.expensetracker.model.Expense;
 import com.delfino.expensetracker.model.ExpenseItem;
+import com.delfino.expensetracker.model.ExpenseType;
 import com.delfino.expensetracker.model.User;
 import com.delfino.expensetracker.repository.ChatMessageRepository;
 import com.delfino.expensetracker.repository.ExpenseItemRepository;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.UserRepository;
 import com.delfino.expensetracker.service.mcp.ChatReportContext;
+import com.delfino.expensetracker.util.LocaleSupport;
 import com.delfino.expensetracker.util.MoneyUtils;
+import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -53,6 +56,7 @@ public class ChatService {
     private final ChatBotProperties chatBotProperties;
     private final ExpenseItemRepository expenseItemRepository;
     private final AiUsageService aiUsageService;
+    private final I18nService i18nService;
     private final MeterRegistry meterRegistry;
     private final Map<String, ChatClient> chatClients = new HashMap<>();
     private final ChatReportContext chatReportContext;
@@ -64,6 +68,7 @@ public class ChatService {
                        ChatBotProperties chatBotProperties,
                        ExpenseItemRepository expenseItemRepository,
                        AiUsageService aiUsageService,
+                       I18nService i18nService,
                        MeterRegistry meterRegistry,
                        ChatReportContext chatReportContext) {
         this.chatMessageRepository = chatMessageRepository;
@@ -76,6 +81,7 @@ public class ChatService {
         this.chatBotProperties = chatBotProperties;
         this.expenseItemRepository = expenseItemRepository;
         this.aiUsageService = aiUsageService;
+        this.i18nService = i18nService;
         this.meterRegistry = meterRegistry;
         this.chatReportContext = chatReportContext;
     }
@@ -117,7 +123,8 @@ public class ChatService {
         try {
             String resolvedSystemPrompt = chatBotProperties.getSystemPrompt()
                     .replace("{today}", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
-                    .replace("{currency}", user.getBaseCurrency());
+                    .replace("{currency}", user.getBaseCurrency())
+                    .replace("{language}", LocaleSupport.normalizeLanguageTag(user.getLocale()));
 
             log.info("Processing chat message for user {}: '{}'", userId, messageText);
 
@@ -136,8 +143,9 @@ public class ChatService {
         } catch (Exception e) {
             log.error("Chatbot processing failed", e);
             return saveBotMessage(userId,
-                    "Sorry, I had trouble processing that. Could you try rephrasing? " +
-                            "For example: \"lunch 12.50 SGD\" or \"How much did I spend on groceries last month?\"",
+                    i18nService.message(
+                            "chat.error.rephrase",
+                            "Sorry, I had trouble processing that. Could you try rephrasing? For example: \"lunch 12.50 SGD\" or \"How much did I spend on groceries last month?\""),
                     List.of(),
                     List.of());
         }
@@ -222,14 +230,18 @@ public class ChatService {
                 ChatExpenseResponseDto response = objectMapper.readValue(cleaned, ChatExpenseResponseDto.class);
 
                 if (response.expenses() != null && !response.expenses().isEmpty()) {
-                    String summary = response.summary() != null ? response.summary() : "Expenses recorded.";
+                    String summary = response.summary() != null
+                            ? response.summary()
+                            : i18nService.message("chat.expenses_recorded", "Expenses recorded.");
                     savedExpenseIds = saveExpensesFromDto(response.expenses(), userId, user);
                     BigDecimal dailyTotal = computeDailyTotal(userId);
-                    botText = summary + "\n\n\uD83D\uDCB0 Today's total: "
+                    botText = summary + "\n\n\uD83D\uDCB0 "
+                            + i18nService.message("chat.todays_total", "Today's total:")
+                            + " "
                             + dailyTotal.setScale(2, RoundingMode.HALF_UP).toPlainString()
                             + " " + user.getBaseCurrency();
                 }
-            } catch (Exception e) {
+            } catch (JacksonException e) {
                 // Not valid JSON — treat llmResponse as plain text (likely a query answer)
                 log.debug("LLM response is not parseable as expense JSON, treating as plain text reply");
             }
@@ -257,6 +269,7 @@ public class ChatService {
      */
     private Expense buildExpenseFromDto(ChatExpenseDto dto, User user) {
         Expense expense = new Expense();
+        expense.setType(ExpenseType.CHATBOT);
 
         if (dto.transactionDatetime() != null) {
             try {

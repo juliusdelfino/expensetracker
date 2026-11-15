@@ -22,18 +22,18 @@ function renderChatPanel(container) {
     <div class="chat-container">
         <div class="chat-load-older" id="chatLoadOlder" style="display:none">
             <button class="btn btn-outline btn-sm" onclick="loadOlderMessages()">
-                <i class="fa-solid fa-chevron-up"></i> Load earlier messages
+                <i class="fa-solid fa-chevron-up"></i> ${t('chat.loadOlder', { defaultValue: 'Load earlier messages' })}
             </button>
         </div>
         <div class="chat-messages" id="chatMessages">
             <div class="chat-bubble bot">
-                <p>Hi! I can help you log expenses quickly. Just type something like:</p>
+                <p>${t('chat.welcome', { defaultValue: 'Hi! I can help you log expenses quickly. Just type something like:' })}</p>
                 <p style="font-style:italic; margin-top:0.5rem; color:var(--text-light);">"lunch 12.50 SGD"<br>"coffee 5, taxi 15 USD"<br>"yesterday dinner 45 EUR at Italian restaurant"</p>
             </div>
         </div>
         <div class="chat-quota-banner" id="chatQuotaBanner" style="display:none;"></div>
         <div class="chat-input-area">
-            <textarea class="chat-input" id="chatInput" placeholder="Type expenses here..." rows="1" maxlength="500" onkeydown="chatKeydown(event)"></textarea>
+            <textarea class="chat-input" id="chatInput" placeholder="${t('chat.placeholder', { defaultValue: 'Type expenses here...' })}" rows="1" maxlength="500" onkeydown="chatKeydown(event)"></textarea>
             <button class="btn btn-primary chat-send-btn" id="chatSendBtn" onclick="sendChat()">
                 <i class="fa-solid fa-paper-plane"></i>
             </button>
@@ -56,14 +56,14 @@ function applyChatQuotaState() {
     if (input) {
         input.disabled = blocked;
         input.placeholder = blocked
-            ? 'Your monthly chat quota has been reached.'
-            : 'Type expenses here...';
+            ? t('chat.quotaReachedShort', { defaultValue: 'Your monthly chat quota has been reached.' })
+            : t('chat.placeholder', { defaultValue: 'Type expenses here...' });
     }
     if (sendBtn) sendBtn.disabled = blocked;
     if (banner) {
         if (blocked) {
             const quota = currentAiStatus.chat?.quota ?? 0;
-            banner.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Your monthly chat quota has been reached (${quota} messages). Chat will be available again next month.`;
+            banner.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${t('chat.quotaReachedBanner', { defaultValue: 'Your monthly chat quota has been reached ({{quota}} messages). Chat will be available again next month.', quota })}`;
             banner.style.display = 'flex';
         } else {
             banner.style.display = 'none';
@@ -130,10 +130,10 @@ function formatChatTime(isoString) {
     const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
     const isYesterday = d.toDateString() === yesterday.toDateString();
 
-    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const time = new Intl.DateTimeFormat(getActiveLocale(), { hour: '2-digit', minute: '2-digit' }).format(d);
     if (isToday) return time;
-    if (isYesterday) return `Yesterday ${time}`;
-    return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
+    if (isYesterday) return `${t('chat.yesterday', { defaultValue: 'Yesterday' })} ${time}`;
+    return `${new Intl.DateTimeFormat(getActiveLocale(), { month: 'short', day: 'numeric' }).format(d)} ${time}`;
 }
 
 function buildChatBubble(role, text, linkedExpenseIds, linkedReportIds, timestamp) {
@@ -166,10 +166,10 @@ function renderChatExpenseCards(linkedExpenseIds) {
         return `<a href="#/expenses/${exp.urlId}" class="chat-expense-card" onclick="hideMobileUI()">
             <div class="chat-card-icon"><i class="fa-solid fa-${categoryIcon(exp.category)}"></i></div>
             <div class="chat-card-info">
-                <div class="chat-card-cat">${exp.category || 'Expense'}</div>
+                <div class="chat-card-cat">${exp.category || t('chat.expenseFallback', { defaultValue: 'Expense' })}</div>
                 <div class="chat-card-note">${exp.notes || ''}</div>
             </div>
-            <div class="chat-card-amount">${exp.amount != null ? Number(exp.amount).toFixed(2) : '-'} ${exp.currency || ''}</div>
+            <div class="chat-card-amount">${exp.amount != null ? formatCurrency(exp.amount, exp.currency) : t('common.na', { defaultValue: '-' })}</div>
         </a>`;
     }).join('');
 }
@@ -183,25 +183,28 @@ function renderChatReportCards(linkedReportIds) {
         return `<a href="#/reports/${report.id}" class="chat-report-card" onclick="hideMobileUI()">
             <div class="chat-card-icon chat-card-icon-report"><i class="fa-solid fa-chart-line"></i></div>
             <div class="chat-card-info">
-                <div class="chat-card-cat">${report.title || 'Report'}</div>
+                <div class="chat-card-cat">${report.title || t('chat.reportFallback', { defaultValue: 'Report' })}</div>
                 <div class="chat-card-note">${formatChatReportMeta(report.groupBy, expenseCount)}</div>
             </div>
-            <div class="chat-card-amount chat-card-action">Open</div>
+            <div class="chat-card-amount chat-card-action">${t('chat.open', { defaultValue: 'Open' })}</div>
         </a>`;
     }).join('');
 }
 
 function formatChatReportMeta(groupBy, expenseCount) {
     const groupLabel = formatReportGroupByLabel(groupBy);
-    const countLabel = `${expenseCount} expense${expenseCount === 1 ? '' : 's'}`;
+    const countLabel = t('chat.expenseCount', {
+        count: expenseCount,
+        defaultValue: expenseCount === 1 ? '{{count}} expense' : '{{count}} expenses'
+    });
     return groupLabel ? `${groupLabel} • ${countLabel}` : countLabel;
 }
 
 function formatReportGroupByLabel(groupBy) {
     switch ((groupBy || '').toUpperCase()) {
-        case 'CATEGORY': return 'Category report';
-        case 'STORE_LOCATION': return 'Location report';
-        case 'KEYWORD': return 'Keyword report';
+        case 'CATEGORY': return t('chat.reportTypeCategory', { defaultValue: 'Category report' });
+        case 'STORE_LOCATION': return t('chat.reportTypeLocation', { defaultValue: 'Location report' });
+        case 'KEYWORD': return t('chat.reportTypeKeyword', { defaultValue: 'Keyword report' });
         default: return groupBy || '';
     }
 }
@@ -226,7 +229,7 @@ async function sendChat() {
     const input = document.getElementById('chatInput');
     if (!input || (currentAiStatus && !currentAiStatus.chatAllowed)) {
         applyChatQuotaState();
-        toast('Your monthly chat quota has been reached.', 'error');
+        toast(t('chat.quotaReachedShort', { defaultValue: 'Your monthly chat quota has been reached.' }), 'error');
         return;
     }
     const message = input.value.trim();
@@ -238,7 +241,7 @@ async function sendChat() {
     const container = document.getElementById('chatMessages');
     const typing = document.createElement('div');
     typing.className = 'chat-bubble bot chat-typing';
-    typing.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Thinking...';
+    typing.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('chat.thinking', { defaultValue: 'Thinking...' })}`;
     container.appendChild(typing);
     container.scrollTop = container.scrollHeight;
 
@@ -262,12 +265,12 @@ async function sendChat() {
         await loadAiStatus(true);
     } else {
         if (result?.code === 'AI_CHAT_QUOTA_EXCEEDED') {
-            appendChatBubble('bot', 'Your monthly chat quota has been reached. You can still view earlier messages, but sending new ones will be available again next month.', [], [], new Date().toISOString());
+            appendChatBubble('bot', t('chat.quotaReachedLong', { defaultValue: 'Your monthly chat quota has been reached. You can still view earlier messages, but sending new ones will be available again next month.' }), [], [], new Date().toISOString());
             await loadAiStatus(true);
             applyChatQuotaState();
             return;
         }
-        appendChatBubble('bot', result?.error || 'Sorry, something went wrong. Please try again.', [], [], new Date().toISOString());
+        appendChatBubble('bot', result?.error || t('chat.genericError', { defaultValue: 'Sorry, something went wrong. Please try again.' }), [], [], new Date().toISOString());
         _chatOffset += 1;
     }
 

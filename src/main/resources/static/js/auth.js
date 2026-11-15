@@ -10,21 +10,21 @@ function renderLogin(app) {
             <div style="text-align:center; margin-bottom:1rem;">
                 <img src="/images/logo-large.png" alt="Expense Tracker" style="width:80px;height:80px;border-radius:16px;">
             </div>
-            <h2 class="card-title" style="text-align:center;">Expense Tracker</h2>
+            <h2 class="card-title" style="text-align:center;">${t('app.name', { defaultValue: 'Expense Tracker' })}</h2>
             <form id="loginForm">
                 <div class="form-group">
-                    <label><i class="fa-solid fa-user"></i> Username</label>
+                    <label><i class="fa-solid fa-user"></i> ${t('auth.username', { defaultValue: 'Username' })}</label>
                     <input type="text" class="form-control" id="loginUsername" maxlength="100" required>
                 </div>
                 <div class="form-group">
-                    <label><i class="fa-solid fa-lock"></i> Password</label>
+                    <label><i class="fa-solid fa-lock"></i> ${t('auth.password', { defaultValue: 'Password' })}</label>
                     <input type="password" class="form-control" id="loginPassword" required>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%">
-                    <i class="fa-solid fa-right-to-bracket"></i> Login
+                    <i class="fa-solid fa-right-to-bracket"></i> ${t('auth.login', { defaultValue: 'Login' })}
                 </button>
             </form>
-            <p class="auth-switch">Don't have an account? <a href="#/register">Register</a></p>
+            <p class="auth-switch">${t('auth.dontHaveAccount', { defaultValue: "Don't have an account?" })} <a href="#/register">${t('auth.register', { defaultValue: 'Register' })}</a></p>
         </div>
     </div>`;
     document.getElementById('loginForm').onsubmit = async (e) => {
@@ -33,8 +33,8 @@ function renderLogin(app) {
             username: document.getElementById('loginUsername').value,
             password: document.getElementById('loginPassword').value
         }});
-        if (data && data.userId) { toast('Welcome back!', 'success'); navigate('#/dashboard'); }
-        else toast(data?.error || 'Login failed', 'error');
+        if (data && data.userId) { toast(t('auth.welcomeBack', { defaultValue: 'Welcome back!' }), 'success'); navigate('#/dashboard'); }
+        else toast(data?.error || t('auth.loginFailed', { defaultValue: 'Login failed' }), 'error');
     };
 }
 
@@ -43,28 +43,28 @@ function renderRegister(app) {
     app.innerHTML = `
     <div class="auth-container">
         <div class="card">
-            <h2 class="card-title"><i class="fa-solid fa-user-plus"></i> Register</h2>
+            <h2 class="card-title"><i class="fa-solid fa-user-plus"></i> ${t('auth.register', { defaultValue: 'Register' })}</h2>
             <form id="registerForm">
                 <div class="form-group">
-                    <label>Username</label>
+                    <label>${t('auth.username', { defaultValue: 'Username' })}</label>
                     <input type="text" class="form-control" id="regUsername" maxlength="100" required>
                 </div>
                 <div class="form-group">
-                    <label>Password</label>
+                    <label>${t('auth.password', { defaultValue: 'Password' })}</label>
                     <input type="password" class="form-control" id="regPassword" required>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Email</label>
+                        <label>${t('auth.email', { defaultValue: 'Email' })}</label>
                         <input type="email" class="form-control" id="regEmail" maxlength="100">
                     </div>
                     <div class="form-group">
-                        <label>Phone</label>
+                        <label>${t('auth.phone', { defaultValue: 'Phone' })}</label>
                         <input type="text" class="form-control" id="regPhone" maxlength="30" placeholder="+65...">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Base Currency</label>
+                    <label>${t('auth.baseCurrency', { defaultValue: 'Base Currency' })}</label>
                     <input type="text" class="form-control" id="regCurrency" maxlength="3" list="regCurrencyList" placeholder="e.g. USD">
                     <datalist id="regCurrencyList">
                         <option value="USD"></option><option value="EUR"></option>
@@ -76,20 +76,20 @@ function renderRegister(app) {
                 <div class="form-group" style="margin-top:0.75rem;">
                     <label style="display:flex; align-items:flex-start; gap:0.5rem; font-weight:normal; cursor:pointer;">
                         <input type="checkbox" id="regAgree" required style="margin-top:3px; flex-shrink:0;">
-                        <span>I have read and agree to the <a href="#/terms" target="_blank">Terms of Service</a> and <a href="#/privacy" target="_blank">Privacy Policy</a></span>
+                        <span>${t('auth.agreeTerms', { defaultValue: 'I have read and agree to the <a href="#/terms" target="_blank">Terms of Service</a> and <a href="#/privacy" target="_blank">Privacy Policy</a>' })}</span>
                     </label>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%">
-                    <i class="fa-solid fa-user-plus"></i> Register
+                    <i class="fa-solid fa-user-plus"></i> ${t('auth.register', { defaultValue: 'Register' })}
                 </button>
             </form>
-            <p class="auth-switch">Already have an account? <a href="#/login">Login</a></p>
+            <p class="auth-switch">${t('auth.alreadyHaveAccount', { defaultValue: 'Already have an account?' })} <a href="#/login">${t('auth.login', { defaultValue: 'Login' })}</a></p>
         </div>
     </div>`;
     document.getElementById('registerForm').onsubmit = async (e) => {
         e.preventDefault();
         if (!document.getElementById('regAgree').checked) {
-            toast('You must agree to the Terms of Service and Privacy Policy to register.', 'error');
+            toast(t('auth.mustAgree', { defaultValue: 'You must agree to the Terms of Service and Privacy Policy to register.' }), 'error');
             return;
         }
         const data = await api('/api/auth/register', { method: 'POST', body: {
@@ -97,10 +97,11 @@ function renderRegister(app) {
             password: document.getElementById('regPassword').value,
             email: document.getElementById('regEmail').value,
             phoneNumber: document.getElementById('regPhone').value,
-            baseCurrency: document.getElementById('regCurrency').value
+            baseCurrency: document.getElementById('regCurrency').value,
+            locale: getActiveLocale()
         }});
-        if (data && data.userId) { toast('Registration successful! Please login.', 'success'); navigate('#/login'); }
-        else toast(data?.error || 'Registration failed', 'error');
+        if (data && data.userId) { toast(t('auth.registerSuccess', { defaultValue: 'Registration successful! Please login.' }), 'success'); navigate('#/login'); }
+        else toast(data?.error || t('auth.registerFailed', { defaultValue: 'Registration failed' }), 'error');
     };
 
     // Populate currency datalist for register form
@@ -127,10 +128,10 @@ async function renderProfile(app) {
     const trashedCount = summary?.trashedExpenseCount ?? 0;
 
     const tabs = [
-        { id: 'account',    label: 'Account',    icon: 'fa-user' },
-        { id: 'appearance', label: 'Appearance', icon: 'fa-palette' },
-        { id: 'ai-usage',   label: 'AI Usage',   icon: 'fa-robot' },
-        { id: 'data',       label: 'Data',        icon: 'fa-download' },
+        { id: 'account',    label: t('profile.tabs.account', { defaultValue: 'Account' }),    icon: 'fa-user' },
+        { id: 'appearance', label: t('profile.tabs.appearance', { defaultValue: 'Appearance' }), icon: 'fa-palette' },
+        { id: 'ai-usage',   label: t('profile.tabs.aiUsage', { defaultValue: 'AI Usage' }),   icon: 'fa-robot' },
+        { id: 'data',       label: t('profile.tabs.data', { defaultValue: 'Data' }),        icon: 'fa-download' },
     ];
 
     app.innerHTML = `
@@ -247,9 +248,9 @@ function renderAccountTabContent(tab, user, selectableModels, selectedAiModel, a
     if (tab === 'appearance') {
         return `
         <div class="card">
-            <h2 class="card-title"><i class="fa-solid fa-palette"></i> Appearance</h2>
+            <h2 class="card-title"><i class="fa-solid fa-palette"></i> ${t('profile.tabs.appearance', { defaultValue: 'Appearance' })}</h2>
             <div class="form-group">
-                <label>Theme</label>
+                <label>${t('profile.appearance.theme', { defaultValue: 'Theme' })}</label>
                 <div class="theme-selector">
                     <button class="theme-btn ${currentTheme === 'light' ? 'active' : ''}" onclick="setTheme('light'); updateThemeBtns()">
                         <i class="fa-solid fa-sun"></i> Light
@@ -262,7 +263,33 @@ function renderAccountTabContent(tab, user, selectableModels, selectedAiModel, a
                     </button>
                 </div>
             </div>
+            <div class="form-group" style="margin-top:1rem;">
+                <label>${t('profile.appearance.language', { defaultValue: 'Language' })}</label>
+                <select class="form-control" id="appearanceLanguage">
+                    <option value="en" ${getActiveLocale() === 'en' ? 'selected' : ''}>EN</option>
+                    <option value="de" ${getActiveLocale() === 'de' ? 'selected' : ''}>DE</option>
+                </select>
+                <div class="form-help">${t('profile.appearance.languageHint', { defaultValue: 'Used for dates, currency display, and translated UI text.' })}</div>
+            </div>
+            <button class="btn btn-primary" id="saveAppearanceLanguage">
+                <i class="fa-solid fa-save"></i> ${t('profile.appearance.saveLanguage', { defaultValue: 'Save Language' })}
+            </button>
         </div>`;
+    }
+
+    if (tab === 'appearance') {
+        const saveBtn = document.getElementById('saveAppearanceLanguage');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', async () => {
+                const nextLocale = document.getElementById('appearanceLanguage')?.value || 'en';
+                const result = await persistLocalePreference(nextLocale);
+                if (!result.ok) {
+                    toast(result.error || 'Failed to update language', 'error');
+                    return;
+                }
+                toast(result.message || t('profile.appearance.languageSaved', { defaultValue: 'Language updated' }), 'success');
+            });
+        }
     }
 
     if (tab === 'ai-usage') {
@@ -356,7 +383,7 @@ function bindAccountTabHandlers(tab, app, user) {
                 };
                 const result = await api('/api/user/profile', { method: 'PUT', body });
                 if (result?.error) { toast(result.error, 'error'); return; }
-                toast('Profile updated!', 'success');
+                toast(result?.message || 'Profile updated!', 'success');
                 await checkAuth();
                 await renderProfile(app);
             };
@@ -416,7 +443,7 @@ function bindAccountTabHandlers(tab, app, user) {
 // =====================================================
 
 function renderTrashLoading() {
-    return `<div class="card"><div class="account-empty-state"><i class="fa-solid fa-spinner fa-spin"></i><span>Loading trash…</span></div></div>`;
+    return `<div class="card"><div class="account-empty-state"><i class="fa-solid fa-spinner fa-spin"></i><span>${t('profile.trash.loading', { defaultValue: 'Loading trash...' })}</span></div></div>`;
 }
 
 async function renderTrashTab(containerEl, app) {
@@ -432,26 +459,26 @@ async function renderTrashTab(containerEl, app) {
 
     function buildHtml(list) {
         if (list.length === 0) {
-            return `<div class="card"><h2 class="card-title"><i class="fa-solid fa-trash-can"></i> Expense Trash</h2>
-                <div class="account-empty-state"><i class="fa-solid fa-circle-check"></i><span>Trash is empty</span></div></div>`;
+            return `<div class="card"><h2 class="card-title"><i class="fa-solid fa-trash-can"></i> ${t('profile.trash.title', { defaultValue: 'Expense Trash' })}</h2>
+                <div class="account-empty-state"><i class="fa-solid fa-circle-check"></i><span>${t('profile.trash.empty', { defaultValue: 'Trash is empty' })}</span></div></div>`;
         }
         const rows = list.map(e => {
-            const date = e.transactionDatetime ? new Date(e.transactionDatetime).toLocaleDateString() : '—';
-            const amt = e.amount != null ? `${e.amount} ${e.currency || ''}` : '—';
-            const cat = esc(e.category || 'Uncategorized');
+            const date = e.transactionDatetime ? formatDate(e.transactionDatetime) : t('common.na', { defaultValue: '-' });
+            const amt = e.amount != null ? formatCurrency(e.amount, e.currency) : t('common.na', { defaultValue: '-' });
+            const cat = esc(e.category || t('profile.trash.uncategorized', { defaultValue: 'Uncategorized' }));
             const icons = [
-                e.hasReceipt ? `<i class="fa-solid fa-image" title="Has receipt" style="color:var(--primary)"></i>` : '',
-                e.attachmentCount > 0 ? `<i class="fa-solid fa-paperclip" title="${e.attachmentCount} attachment(s)" style="color:var(--primary)"></i>` : ''
+                e.hasReceipt ? `<i class="fa-solid fa-image" title="${esc(t('profile.trash.hasReceipt', { defaultValue: 'Has receipt' }))}" style="color:var(--primary)"></i>` : '',
+                e.attachmentCount > 0 ? `<i class="fa-solid fa-paperclip" title="${esc(t('profile.trash.attachments', { defaultValue: '{{count}} attachment(s)', count: e.attachmentCount }))}" style="color:var(--primary)"></i>` : ''
             ].filter(Boolean).join(' ');
             return `<tr data-id="${esc(e.expenseId)}">
                 <td style="width:36px;text-align:center;"><input type="checkbox" class="trash-select" data-id="${esc(e.expenseId)}"></td>
                 <td>${date}</td>
                 <td>${cat}</td>
                 <td>${amt}</td>
-                <td style="text-align:center;">${icons || '—'}</td>
+                <td style="text-align:center;">${icons || t('common.na', { defaultValue: '-' })}</td>
                 <td style="white-space:nowrap;">
-                    <button class="btn btn-sm btn-outline trash-restore-btn" data-id="${esc(e.expenseId)}" title="Restore">
-                        <i class="fa-solid fa-rotate-left"></i> Restore
+                    <button class="btn btn-sm btn-outline trash-restore-btn" data-id="${esc(e.expenseId)}" title="${esc(t('profile.trash.restore', { defaultValue: 'Restore' }))}">
+                        <i class="fa-solid fa-rotate-left"></i> ${t('profile.trash.restore', { defaultValue: 'Restore' })}
                     </button>
                     <button class="btn btn-sm btn-danger trash-delete-btn" data-id="${esc(e.expenseId)}" title="Permanently delete" style="margin-left:0.35rem;">
                         <i class="fa-solid fa-trash"></i>
@@ -462,11 +489,11 @@ async function renderTrashTab(containerEl, app) {
 
         return `<div class="card">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
-                <h2 class="card-title" style="margin-bottom:0;"><i class="fa-solid fa-trash-can"></i> Expense Trash <span style="font-size:0.85rem;font-weight:normal;color:var(--text-light);">(${list.length})</span></h2>
+                <h2 class="card-title" style="margin-bottom:0;"><i class="fa-solid fa-trash-can"></i> ${t('profile.trash.title', { defaultValue: 'Expense Trash' })} <span style="font-size:0.85rem;font-weight:normal;color:var(--text-light);">(${list.length})</span></h2>
                 <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                    <button id="trashSelectAll" class="btn btn-sm btn-outline"><i class="fa-solid fa-check-double"></i> Select All</button>
-                    <button id="trashBulkDelete" class="btn btn-sm btn-danger" disabled><i class="fa-solid fa-trash"></i> Delete Selected</button>
-                    <button id="trashPurgeAll" class="btn btn-sm btn-danger"><i class="fa-solid fa-fire"></i> Empty Trash</button>
+                    <button id="trashSelectAll" class="btn btn-sm btn-outline"><i class="fa-solid fa-check-double"></i> ${t('profile.trash.selectAll', { defaultValue: 'Select All' })}</button>
+                    <button id="trashBulkDelete" class="btn btn-sm btn-danger" disabled><i class="fa-solid fa-trash"></i> ${t('profile.trash.deleteSelected', { defaultValue: 'Delete Selected' })}</button>
+                    <button id="trashPurgeAll" class="btn btn-sm btn-danger"><i class="fa-solid fa-fire"></i> ${t('profile.trash.emptyTrash', { defaultValue: 'Empty Trash' })}</button>
                 </div>
             </div>
             <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:1rem;">
@@ -475,7 +502,7 @@ async function renderTrashTab(containerEl, app) {
             <div class="table-responsive">
                 <table class="expense-table">
                     <thead><tr>
-                        <th></th><th>Date</th><th>Category</th><th>Amount</th><th>Files</th><th>Actions</th>
+                        <th></th><th>${t('profile.trash.date', { defaultValue: 'Date' })}</th><th>${t('profile.trash.category', { defaultValue: 'Category' })}</th><th>${t('profile.trash.amount', { defaultValue: 'Amount' })}</th><th>${t('profile.trash.files', { defaultValue: 'Files' })}</th><th>${t('profile.trash.actions', { defaultValue: 'Actions' })}</th>
                     </tr></thead>
                     <tbody id="trashTableBody">${rows}</tbody>
                 </table>
@@ -526,7 +553,7 @@ async function renderTrashTab(containerEl, app) {
             restoreBtn.disabled = true;
             const result = await api(`/api/user/trash/expenses/${id}/restore`, { method: 'POST' });
             if (result?.error) { toast(result.error, 'error'); restoreBtn.disabled = false; return; }
-            toast('Expense restored', 'success');
+            toast(t('profile.trash.expenseRestored', { defaultValue: 'Expense restored' }), 'success');
             await reloadTrash();
         }
     });
@@ -535,12 +562,12 @@ async function renderTrashTab(containerEl, app) {
     containerEl.addEventListener('click', async e => {
         const deleteBtn = e.target.closest('.trash-delete-btn');
         if (deleteBtn) {
-            if (!confirm('Permanently delete this expense? This cannot be undone.')) return;
+            if (!confirm(t('profile.trash.confirmDeleteOne', { defaultValue: 'Permanently delete this expense? This cannot be undone.' }))) return;
             const id = deleteBtn.dataset.id;
             deleteBtn.disabled = true;
             const result = await api(`/api/user/trash/expenses/${id}`, { method: 'DELETE' });
             if (result?.error) { toast(result.error, 'error'); deleteBtn.disabled = false; return; }
-            toast('Expense permanently deleted', 'success');
+            toast(t('profile.trash.expenseDeleted', { defaultValue: 'Expense permanently deleted' }), 'success');
             await reloadTrash();
         }
     });
@@ -550,13 +577,13 @@ async function renderTrashTab(containerEl, app) {
     if (bulkBtn) {
         bulkBtn.addEventListener('click', async () => {
             if (selectedIds.size === 0) return;
-            if (!confirm(`Permanently delete ${selectedIds.size} expense(s)? This cannot be undone.`)) return;
+            if (!confirm(t('profile.trash.confirmDeleteMany', { defaultValue: 'Permanently delete {{count}} expense(s)? This cannot be undone.', count: selectedIds.size }))) return;
             bulkBtn.disabled = true;
             const result = await api('/api/user/trash/expenses/purge', {
                 method: 'POST', body: { expenseIds: [...selectedIds] }
             });
             if (result?.error) { toast(result.error, 'error'); return; }
-            toast(result.message || 'Expenses deleted', 'success');
+            toast(result.message || t('profile.trash.expensesDeleted', { defaultValue: 'Expenses deleted' }), 'success');
             selectedIds.clear();
             await reloadTrash();
         });
@@ -566,11 +593,11 @@ async function renderTrashTab(containerEl, app) {
     const purgeAllBtn = document.getElementById('trashPurgeAll');
     if (purgeAllBtn) {
         purgeAllBtn.addEventListener('click', async () => {
-            if (!confirm('Permanently delete ALL trashed expenses? This cannot be undone.')) return;
+            if (!confirm(t('profile.trash.confirmPurgeAll', { defaultValue: 'Permanently delete ALL trashed expenses? This cannot be undone.' }))) return;
             purgeAllBtn.disabled = true;
             const result = await api('/api/user/trash/expenses/purge', { method: 'POST', body: {} });
             if (result?.error) { toast(result.error, 'error'); purgeAllBtn.disabled = false; return; }
-            toast(result.message || 'Trash emptied', 'success');
+            toast(result.message || t('profile.trash.trashEmptied', { defaultValue: 'Trash emptied' }), 'success');
             selectedIds.clear();
             await reloadTrash();
         });
