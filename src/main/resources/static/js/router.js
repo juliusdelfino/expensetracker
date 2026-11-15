@@ -40,11 +40,15 @@ async function ensureAdminRouteScripts() {
 
 function renderRouteLoading(app, message) {
     if (!app) return;
-    app.innerHTML = `<div class="container"><div class="card" style="text-align:center; padding:1.25rem;"><i class="fa-solid fa-spinner fa-spin"></i> ${esc(message || 'Loading...')}</div></div>`;
+    app.innerHTML = `<div class="container"><div class="card" style="text-align:center; padding:1.25rem;"><i class="fa-solid fa-spinner fa-spin"></i> ${esc(message || t('common.loading', { defaultValue: 'Loading...' }))}</div></div>`;
 }
 
 function applyAuthenticatedUser(data) {
     currentUser = data;
+    const profileLocale = data?.locale;
+    if (profileLocale) {
+        setLocale(profileLocale, { rerender: false }).catch(() => {});
+    }
     document.getElementById('navbar').style.display = 'flex';
     renderNavigationState();
     if (!_aiWarmupTriggered) {
@@ -132,7 +136,7 @@ async function router() {
     if (isMobile()) {
         // On mobile, #/dashboard shows the swipe panels always starting at Home (panel 1)
         if (routeOnly === '#/dashboard' || routeOnly === '' || routeOnly === '#/') {
-            renderRouteLoading(app, 'Loading dashboard...');
+            renderRouteLoading(app, t('router.loadingDashboard', { defaultValue: 'Loading dashboard...' }));
             await ensureDashboardRouteScripts();
             app.innerHTML = '';
             currentPanel = 1; // Always snap to Home when navigating to dashboard
@@ -150,7 +154,7 @@ async function router() {
     }
 
     if (routeOnly === '#/dashboard') {
-        renderRouteLoading(app, 'Loading dashboard...');
+        renderRouteLoading(app, t('router.loadingDashboard', { defaultValue: 'Loading dashboard...' }));
         await ensureDashboardRouteScripts();
         await renderDashboard(app);
     }
@@ -163,19 +167,19 @@ async function router() {
         renderNewExpense(app);
     }
     else if (routeOnly === '#/reports') {
-        renderRouteLoading(app, 'Loading reports...');
+        renderRouteLoading(app, t('router.loadingReports', { defaultValue: 'Loading reports...' }));
         await ensureReportsRouteScripts();
         await renderReportsPage(app);
     }
     else if (routeOnly.match(/^#\/reports\/\d+$/)) {
-        renderRouteLoading(app, 'Loading report details...');
+        renderRouteLoading(app, t('router.loadingReportDetails', { defaultValue: 'Loading report details...' }));
         await ensureReportsRouteScripts();
         await renderReportDetail(app, routeOnly.split('/')[2]);
     }
     else if (routeOnly === '#/profile') renderProfile(app);
     else if (routeOnly === '#/admin') {
         if (!isAdminUser()) {
-            toast('Admin access is required to open this page.', 'error');
+            toast(t('admin.accessRequired', { defaultValue: 'Admin access is required to open this page.' }), 'error');
             navigate('#/dashboard');
             return;
         }
@@ -190,7 +194,11 @@ async function router() {
 }
 
 window.addEventListener('hashchange', router);
-window.addEventListener('load', () => { loadAppConfig(); router(); });
+window.addEventListener('load', async () => {
+    await initI18n();
+    await loadAppConfig();
+    await router();
+});
 window.addEventListener('resize', () => {
     // If switching between mobile/desktop, re-route
     if (isMobile() && !document.getElementById('swipeWrapper').style.display !== 'none' && currentUser) {

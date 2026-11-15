@@ -13,8 +13,10 @@ import com.delfino.expensetracker.model.User;
 import com.delfino.expensetracker.repository.ExpenseRepository;
 import com.delfino.expensetracker.repository.UserRepository;
 import com.delfino.expensetracker.service.AiUsageService;
+import com.delfino.expensetracker.service.I18nService;
 import com.delfino.expensetracker.service.SupportedCurrencyService;
 import com.delfino.expensetracker.service.UserAiSettingsService;
+import com.delfino.expensetracker.util.LocaleSupport;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -33,18 +35,21 @@ public class UserController {
     private final SupportedCurrencyService supportedCurrencyService;
     private final UserAiSettingsService userAiSettingsService;
     private final AiUsageService aiUsageService;
+    private final I18nService i18nService;
 
     public UserController(UserRepository userRepository, ExpenseRepository expenseRepository,
                           PasswordEncoder passwordEncoder,
                           SupportedCurrencyService supportedCurrencyService,
                           UserAiSettingsService userAiSettingsService,
-                          AiUsageService aiUsageService) {
+                          AiUsageService aiUsageService,
+                          I18nService i18nService) {
         this.userRepository = userRepository;
         this.expenseRepository = expenseRepository;
         this.passwordEncoder = passwordEncoder;
         this.supportedCurrencyService = supportedCurrencyService;
         this.userAiSettingsService = userAiSettingsService;
         this.aiUsageService = aiUsageService;
+        this.i18nService = i18nService;
     }
 
     @GetMapping("/account/summary")
@@ -91,12 +96,15 @@ public class UserController {
         if (body.baseCurrency() != null) {
             String bc = body.baseCurrency();
             if (!supportedCurrencyService.isSupported(bc)) {
-                return ResponseEntity.badRequest().body(new ErrorResponse("Unsupported base currency: " + bc));
+                return ResponseEntity.badRequest().body(new ErrorResponse(
+                        i18nService.message("user.error.unsupported_base_currency", "Unsupported base currency: {0}", bc),
+                        "UNSUPPORTED_BASE_CURRENCY"));
             }
             user.setBaseCurrency(bc);
         }
         if (body.baseCity() != null) user.setBaseCity(body.baseCity());
         if (body.baseCountry() != null) user.setBaseCountry(body.baseCountry());
+        if (body.locale() != null) user.setLocale(LocaleSupport.normalizeLanguageTag(body.locale()));
         if (body.aiModel() != null) {
             try {
                 userAiSettingsService.validateAiModelOverride(body.aiModel());
@@ -113,6 +121,6 @@ public class UserController {
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
 
-        return ResponseEntity.ok(new MessageResponse("Profile updated"));
+        return ResponseEntity.ok(new MessageResponse(i18nService.message("user.profile.updated", "Profile updated")));
     }
 }

@@ -11,7 +11,9 @@ import com.delfino.expensetracker.dto.common.MessageResponse;
 import com.delfino.expensetracker.model.User;
 import com.delfino.expensetracker.model.UserRole;
 import com.delfino.expensetracker.repository.UserRepository;
+import com.delfino.expensetracker.service.I18nService;
 import com.delfino.expensetracker.service.SupportedCurrencyService;
+import com.delfino.expensetracker.util.LocaleSupport;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,11 +30,14 @@ public class AuthController {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final SupportedCurrencyService supportedCurrencyService;
+    private final I18nService i18nService;
 
-    public AuthController(UserRepository userRepository, PasswordEncoder passwordEncoder, SupportedCurrencyService supportedCurrencyService) {
+    public AuthController(UserRepository userRepository, PasswordEncoder passwordEncoder,
+                          SupportedCurrencyService supportedCurrencyService, I18nService i18nService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.supportedCurrencyService = supportedCurrencyService;
+        this.i18nService = i18nService;
     }
 
     @PostMapping("/register")
@@ -42,16 +47,23 @@ public class AuthController {
         String email = body.email();
         String phone = body.phoneNumber();
         String baseCurrency = body.baseCurrency() != null ? body.baseCurrency() : "USD";
+        String locale = LocaleSupport.normalizeLanguageTag(body.locale());
 
         if (username == null || password == null || username.isBlank() || password.isBlank()) {
-            return ResponseEntity.badRequest().body(new ErrorResponse("Username and password required"));
+            return ResponseEntity.badRequest().body(new ErrorResponse(
+                    i18nService.message("auth.error.username_password_required", "Username and password required"),
+                    "INVALID_REQUEST"));
         }
         if (userRepository.findByUsernameIgnoreCase(username).isPresent()) {
-            return ResponseEntity.badRequest().body(new ErrorResponse("Username already exists"));
+            return ResponseEntity.badRequest().body(new ErrorResponse(
+                    i18nService.message("auth.error.username_exists", "Username already exists"),
+                    "USERNAME_EXISTS"));
         }
 
         if (!baseCurrency.isBlank() && !supportedCurrencyService.isSupported(baseCurrency)) {
-            return ResponseEntity.badRequest().body(new ErrorResponse("Unsupported base currency: " + baseCurrency));
+            return ResponseEntity.badRequest().body(new ErrorResponse(
+                    i18nService.message("auth.error.unsupported_base_currency", "Unsupported base currency: {0}", baseCurrency),
+                    "UNSUPPORTED_BASE_CURRENCY"));
         }
 
         User user = new User();
@@ -60,12 +72,15 @@ public class AuthController {
         user.setEmail(email);
         user.setPhoneNumber(phone);
         user.setBaseCurrency(baseCurrency);
+        user.setLocale(locale);
         user.setRole(UserRole.USER);
         user.setCreatedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
 
-        return ResponseEntity.ok(new RegisterResponse("Registration successful", user.getId()));
+        return ResponseEntity.ok(new RegisterResponse(
+                i18nService.message("auth.register.success", "Registration successful"),
+                user.getId()));
     }
 
     @PostMapping("/login")
@@ -78,19 +93,21 @@ public class AuthController {
                 .map(u -> {
                     session.setAttribute("userId", u.getId());
                     return ResponseEntity.ok((Object) new LoginResponse(
-                            "Login successful",
+                            i18nService.message("auth.login.success", "Login successful"),
                             u.getId(),
                             u.getUsername(),
                             u.getBaseCurrency()
                     ));
                 })
-                .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse("Invalid credentials")));
+                .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse(
+                        i18nService.message("auth.error.invalid_credentials", "Invalid credentials"),
+                        "INVALID_CREDENTIALS")));
     }
 
     @PostMapping("/logout")
     public ResponseEntity<MessageResponse> logout(HttpSession session) {
         session.invalidate();
-        return ResponseEntity.ok(new MessageResponse("Logged out"));
+        return ResponseEntity.ok(new MessageResponse(i18nService.message("auth.logout.success", "Logged out")));
     }
 
     @GetMapping("/me")
@@ -105,9 +122,12 @@ public class AuthController {
                         u.getBaseCurrency(),
                         u.getBaseCity(),
                         u.getBaseCountry(),
+                        u.getLocale(),
                         u.getRole(),
                         u.getAiModel()
                 )))
-                .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse("User not found")));
+                .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse(
+                        i18nService.message("auth.error.user_not_found", "User not found"),
+                        "USER_NOT_FOUND")));
     }
 }

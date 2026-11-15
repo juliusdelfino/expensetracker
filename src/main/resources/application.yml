@@ -35,7 +35,7 @@ app:
         provider: OLLAMA
         supports-chat: true
         supports-ocr: true
-      - id: qwen3.5-397b-a17b
+      - id: qwen3.8-max
         label: Qwen 3.5 (OpenAI)
         provider: OPENAI
         supports-chat: true
@@ -66,6 +66,7 @@ chatbot:
     api-key: ${LLM_API_KEY:}  # Set via LLM_API_KEY environment variable or override here
     system-prompt: >
       You are an expense tracking assistant. Today's date is {today}. The user's base currency is {currency}.
+      The user's preferred UI language is {language}. Always respond in that language unless the user explicitly asks for another language.
       If base currency is null, ask the user for it and update their profile.
     
       RULES:
@@ -125,7 +126,7 @@ spring:
       chat:
         enabled: true
         options:
-          model: ${APP_AI_OPENAI_CHAT_MODEL:qwen3.5-397b-a17b}
+          model: ${APP_AI_OPENAI_CHAT_MODEL:qwen3.8-max}
           temperature: 0.3
     mcp:
       server:

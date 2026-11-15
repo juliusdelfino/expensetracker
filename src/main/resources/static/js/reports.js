@@ -595,20 +595,22 @@ function collectReportChartDefinitions() {
 
 
 function formatCoveredDateRange(startDate, endDate) {
-    if (!startDate && !endDate) return '—';
-    return `${startDate || '—'} → ${endDate || '—'}`;
+    if (!startDate && !endDate) return t('common.na', { defaultValue: '-' });
+    const start = startDate ? formatDate(startDate) : t('common.na', { defaultValue: '-' });
+    const end = endDate ? formatDate(endDate) : t('common.na', { defaultValue: '-' });
+    return `${start} -> ${end}`;
 }
 
 function renderChartShells(charts) {
     if (!charts.length) {
-        return `<div class="card report-empty-inline">No charts available for this report.</div>`;
+        return `<div class="card report-empty-inline">${t('reports.noCharts', { defaultValue: 'No charts available for this report.' })}</div>`;
     }
     return charts.map((chart, index) => {
         if ((chart.type || '').toUpperCase() === 'TABLE') {
-            return `<div class="card"><h3 class="card-title"><i class="fa-solid fa-table"></i> ${esc(chart.title || 'Table')}</h3>${renderSimpleChartTable(chart)}</div>`;
+            return `<div class="card"><h3 class="card-title"><i class="fa-solid fa-table"></i> ${esc(chart.title || t('reports.table', { defaultValue: 'Table' }))}</h3>${renderSimpleChartTable(chart)}</div>`;
         }
         return `<div class="card report-chart-card">
-            <h3 class="card-title"><i class="fa-solid fa-chart-column"></i> ${esc(chart.title || 'Chart')}</h3>
+            <h3 class="card-title"><i class="fa-solid fa-chart-column"></i> ${esc(chart.title || t('reports.chart', { defaultValue: 'Chart' }))}</h3>
             <div class="chart-container"><canvas id="reportChartCanvas${index}"></canvas></div>
         </div>`;
     }).join('');
@@ -618,9 +620,9 @@ function renderSimpleChartTable(chart) {
     const rows = (chart.labels || []).map((label, idx) => `
         <tr>
             <td>${esc(label)}</td>
-            <td class="amount-primary">${Number(chart.values?.[idx] || 0).toFixed(2)}</td>
+            <td class="amount-primary">${formatCurrency(chart.values?.[idx] || 0, currentUser?.baseCurrency || 'USD')}</td>
         </tr>`).join('');
-    return `<div class="table-responsive"><table><thead><tr><th>Label</th><th>Value</th></tr></thead><tbody>${rows || '<tr><td colspan="2">No data</td></tr>'}</tbody></table></div>`;
+    return `<div class="table-responsive"><table><thead><tr><th>${t('reports.label', { defaultValue: 'Label' })}</th><th>${t('reports.value', { defaultValue: 'Value' })}</th></tr></thead><tbody>${rows || `<tr><td colspan="2">${t('reports.noData', { defaultValue: 'No data' })}</td></tr>`}</tbody></table></div>`;
 }
 
 function renderReportExpensesTable(expenses) {
@@ -629,7 +631,7 @@ function renderReportExpensesTable(expenses) {
     const source = Array.isArray(expenses) ? expenses : _reportExpenseRows;
     const total = source.length;
     if (!total) {
-        body.innerHTML = '<div class="report-empty-inline">No expenses are included in this report.</div>';
+        body.innerHTML = `<div class="report-empty-inline">${t('reports.noExpenses', { defaultValue: 'No expenses are included in this report.' })}</div>`;
         const pagination = document.getElementById('reportExpensePagination');
         if (pagination) pagination.innerHTML = '';
         return;
@@ -659,9 +661,9 @@ function renderReportExpensesDesktopTable(expenses) {
             <tbody>
                 ${expenses.map(expense => `
                     <tr onclick="navigate('#/expenses/${expense.urlId}')" style="cursor:pointer;">
-                        <td>${expense.transactionDatetime ? new Date(expense.transactionDatetime).toLocaleDateString() : '—'}</td>
-                        <td>${esc(`${expense.category || expense.notes || 'Expense'} -- ${expense.storeName || expense.locationLabel || '—'}`)}</td>
-                        <td>${esc(expense.locationLabel || expense.storeName || '—')}</td>
+                        <td>${expense.transactionDatetime ? formatDate(expense.transactionDatetime) : t('common.na', { defaultValue: '-' })}</td>
+                        <td>${esc(`${expense.category || expense.notes || t('chat.expenseFallback', { defaultValue: 'Expense' })} -- ${expense.storeName || expense.locationLabel || t('common.na', { defaultValue: '-' })}`)}</td>
+                        <td>${esc(expense.locationLabel || expense.storeName || t('common.na', { defaultValue: '-' }))}</td>
                         <td class="amount-primary">${formatMoney(expense.amount, expense.currency || '')}</td>
                         <td class="amount-secondary">${formatMoney(expense.amountInBase, currentUser?.baseCurrency || '')}</td>
                     </tr>`).join('')}
@@ -673,8 +675,8 @@ function renderReportExpensesDesktopTable(expenses) {
 function renderReportExpensesMobileList(expenses) {
     return `<div class="report-expenses-mobile">
         ${expenses.map(expense => {
-            const store = expense.storeName || expense.locationLabel || 'Store';
-            const dateLabel = expense.transactionDatetime ? new Date(expense.transactionDatetime).toLocaleDateString() : '—';
+            const store = expense.storeName || expense.locationLabel || t('reports.storeFallback', { defaultValue: 'Store' });
+            const dateLabel = expense.transactionDatetime ? formatDate(expense.transactionDatetime) : t('common.na', { defaultValue: '-' });
             return `<a class="report-expense-mobile-card" href="#/expenses/${expense.urlId}">
                 <div class="report-expense-mobile-top">
                     <span class="expense-mobile-icon">${getReportExpenseIconHtml(expense)}</span>
@@ -1019,19 +1021,18 @@ function formatGroupBy(groupBy) {
         case 'CATEGORY': return 'Category';
         case 'STORE_LOCATION': return 'Store Location';
         case 'KEYWORD': return 'Keyword';
-        default: return groupBy || '—';
+        default: return groupBy || t('common.na', { defaultValue: '-' });
     }
 }
 
 function formatMoney(value, currency) {
-    if (value == null || value === '') return '—';
-    const formatted = Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return `${formatted} ${currency || ''}`.trim();
+    if (value == null || value === '') return t('common.na', { defaultValue: '-' });
+    return formatCurrency(value, currency);
 }
 
 function formatReportDate(value) {
-    if (!value) return '—';
-    return new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    if (!value) return t('common.na', { defaultValue: '-' });
+    return formatDate(value);
 }
 
 function toggleReportDetailMenu() {

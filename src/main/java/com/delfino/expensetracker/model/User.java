@@ -44,6 +44,9 @@ public class User {
     @Size(max = 2)
     private String baseCountry;
 
+    @Size(max = 10)
+    private String locale;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @NotNull
@@ -82,6 +85,11 @@ public class User {
     public String getBaseCountry() { return baseCountry; }
     public void setBaseCountry(String baseCountry) { this.baseCountry = baseCountry; }
 
+    public String getLocale() { return locale; }
+    public void setLocale(String locale) {
+        this.locale = locale == null || locale.isBlank() ? null : locale.trim();
+    }
+
     public UserRole getRole() { return role != null ? role : UserRole.USER; }
     public void setRole(UserRole role) { this.role = role != null ? role : UserRole.USER; }
 
@@ -104,6 +112,9 @@ public class User {
         }
         if (aiModel != null && aiModel.isBlank()) {
             aiModel = null;
+        }
+        if (locale == null || locale.isBlank()) {
+            locale = "en";
         }
     }
 }

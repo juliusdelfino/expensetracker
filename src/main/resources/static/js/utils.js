@@ -10,6 +10,184 @@ let availableAiModels = null;
 let _aiStatusRequest = null;
 let _aiModelsRequest = null;
 const _externalScriptPromises = {};
+const supportedLocales = ['en', 'de'];
+let activeLocale = 'en';
+
+function normalizeLocale(locale) {
+    if (!locale) return 'en';
+    const raw = String(locale).trim();
+    if (!raw) return 'en';
+    const base = raw.toLowerCase().split('-')[0];
+    return supportedLocales.includes(base) ? base : 'en';
+}
+
+function getStoredLocale() {
+    const raw = localStorage.getItem('locale');
+    return raw ? normalizeLocale(raw) : null;
+}
+
+function detectBrowserLocale() {
+    return normalizeLocale(navigator.language || navigator.userLanguage || 'en');
+}
+
+function getActiveLocale() {
+    return normalizeLocale(activeLocale || getStoredLocale() || detectBrowserLocale());
+}
+
+function t(key, options = {}) {
+    if (!window.i18next?.isInitialized) return key;
+    return window.i18next.t(key, options);
+}
+
+function applyStaticTranslations(root = document) {
+    if (!window.i18next?.isInitialized) return;
+    root.querySelectorAll('[data-i18n]').forEach((el) => {
+        const key = el.getAttribute('data-i18n');
+        if (!key) return;
+        el.innerHTML = t(key);
+    });
+    root.querySelectorAll('[data-i18n-title]').forEach((el) => {
+        const key = el.getAttribute('data-i18n-title');
+        if (!key) return;
+        el.setAttribute('title', t(key));
+    });
+    document.documentElement.setAttribute('lang', getActiveLocale());
+    const titleEl = document.querySelector('title[data-i18n]');
+    if (titleEl) {
+        document.title = t(titleEl.getAttribute('data-i18n'));
+    }
+    syncLanguageSelectors();
+}
+
+function syncLanguageSelectors() {
+    const locale = getActiveLocale();
+    const menuSelect = document.getElementById('menuLanguageSelect');
+    const drawerSelect = document.getElementById('drawerLanguageSelect');
+    if (menuSelect && menuSelect.value !== locale) menuSelect.value = locale;
+    if (drawerSelect && drawerSelect.value !== locale) drawerSelect.value = locale;
+}
+
+function bindLanguageSelectors() {
+    const bind = (id) => {
+        const el = document.getElementById(id);
+        if (!el || el.dataset.bound === 'true') return;
+        el.dataset.bound = 'true';
+        el.addEventListener('change', async (e) => {
+            const locale = e.target.value;
+            const result = await persistLocalePreference(locale);
+            if (!result.ok) {
+                toast(result.error || t('language.updateFailed', { defaultValue: 'Failed to update language' }), 'error');
+                syncLanguageSelectors();
+            }
+        });
+    };
+    bind('menuLanguageSelect');
+    bind('drawerLanguageSelect');
+}
+
+async function persistLocalePreference(locale) {
+    const next = normalizeLocale(locale);
+    if (!currentUser) {
+        await setLocale(next, { rerender: true });
+        return { ok: true };
+    }
+    const result = await api('/api/user/profile', {
+        method: 'PUT',
+        body: { locale: next }
+    });
+    if (result?.error) {
+        return { ok: false, error: result.error };
+    }
+    await setLocale(next, { rerender: true });
+    return { ok: true, message: result?.message };
+}
+
+async function initI18n() {
+    const initialLocale = getStoredLocale() || detectBrowserLocale();
+    activeLocale = initialLocale;
+    if (!window.i18next?.use) {
+        applyStaticTranslations();
+        return;
+    }
+    await window.i18next
+        .use(window.i18nextHttpBackend)
+        .use(window.i18nextBrowserLanguageDetector)
+        .init({
+            fallbackLng: 'en',
+            lng: initialLocale,
+            supportedLngs: supportedLocales,
+            nonExplicitSupportedLngs: true,
+            saveMissing: true,
+            defaultNS: 'common',
+            ns: ['common'],
+            backend: {
+                loadPath: '/locales/{{lng}}/{{ns}}.json'
+            },
+            missingKeyHandler: (lngs, ns, key) => {
+                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                    console.warn('[i18n] Missing key', { lngs, ns, key });
+                }
+            }
+        });
+    activeLocale = normalizeLocale(window.i18next.language);
+    localStorage.setItem('locale', activeLocale);
+    applyStaticTranslations();
+    bindLanguageSelectors();
+}
+
+async function setLocale(locale, options = {}) {
+    const next = normalizeLocale(locale);
+    const { rerender = true } = options;
+    if (window.i18next?.isInitialized) {
+        await window.i18next.changeLanguage(next);
+        activeLocale = normalizeLocale(window.i18next.language);
+    } else {
+        activeLocale = next;
+    }
+    localStorage.setItem('locale', activeLocale);
+    applyStaticTranslations();
+    bindLanguageSelectors();
+    if (rerender && typeof router === 'function') {
+        await router();
+    }
+}
+
+function formatDate(value, opts = {}) {
+    if (!value) return t('common.na', { defaultValue: '-' });
+    return new Intl.DateTimeFormat(getActiveLocale(), { year: 'numeric', month: 'short', day: 'numeric', ...opts })
+        .format(new Date(value));
+}
+
+function formatDateTime(value, opts = {}) {
+    if (!value) return t('common.na', { defaultValue: '-' });
+    return new Intl.DateTimeFormat(getActiveLocale(), {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        ...opts
+    }).format(new Date(value));
+}
+
+function formatMonth(value, opts = {}) {
+    if (!value) return t('common.na', { defaultValue: '-' });
+    const dateValue = String(value).length === 7 ? `${value}-01` : value;
+    return new Intl.DateTimeFormat(getActiveLocale(), { year: 'numeric', month: 'long', ...opts })
+        .format(new Date(dateValue));
+}
+
+function formatCurrency(amount, currency, opts = {}) {
+    if (amount == null) return t('common.na', { defaultValue: '-' });
+    const normalizedCurrency = (currency || currentUser?.baseCurrency || 'USD').toUpperCase();
+    return new Intl.NumberFormat(getActiveLocale(), {
+        style: 'currency',
+        currency: normalizedCurrency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+        ...opts
+    }).format(Number(amount));
+}
 
 function loadExternalScriptOnce(src) {
     if (!src) return Promise.reject(new Error('Script URL is required'));
@@ -115,17 +293,17 @@ function getAiModelOption(modelId) {
 
 function getAiModelLabel(modelId) {
     const model = getAiModelOption(modelId);
-    return model?.label || modelId || 'Default';
+    return model?.label || modelId || t('common.default', { defaultValue: 'Default' });
 }
 
 function getAiDefaultOptionLabel(modelsResponse = availableAiModels) {
-    if (!modelsResponse) return 'Default (configured by admin)';
+    if (!modelsResponse) return `${t('common.default', { defaultValue: 'Default' })} (configured by admin)`;
     const chatLabel = getAiModelLabel(modelsResponse.defaultChatModel);
     const ocrLabel = getAiModelLabel(modelsResponse.defaultOcrModel);
     if (modelsResponse.defaultChatModel && modelsResponse.defaultChatModel === modelsResponse.defaultOcrModel) {
-        return `Default (${chatLabel})`;
+        return `${t('common.default', { defaultValue: 'Default' })} (${chatLabel})`;
     }
-    return `Default (Chat: ${chatLabel} • OCR: ${ocrLabel})`;
+    return `${t('common.default', { defaultValue: 'Default' })} (Chat: ${chatLabel} • OCR: ${ocrLabel})`;
 }
 
 function getEffectiveAiModelSummary(status = currentAiStatus) {

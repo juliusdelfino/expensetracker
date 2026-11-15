@@ -21,74 +21,74 @@ function renderHomePanel() {
     panel.innerHTML = `
     <div class="home-feed" id="homeFeed">
         <div class="feed-card hero-card" id="heroCard">
-            <div class="hero-loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div>
+            <div class="hero-loading"><i class="fa-solid fa-spinner fa-spin"></i> ${t('common.loading', { defaultValue: 'Loading...' })}</div>
         </div>
         <div class="feed-card quick-actions-card">
             <div class="quick-actions-grid">
                 <a href="#/expenses/new" class="quick-action-btn" onclick="closeNavDrawer()">
                     <div class="quick-action-icon"><i class="fa-solid fa-plus"></i></div>
-                    <span>Add Expense</span>
+                    <span>${t('expenses.new', { defaultValue: 'New Expense' })}</span>
                 </a>
                 <a href="#/expenses/new?tab=scan&camera=1" class="quick-action-btn" onclick="closeNavDrawer()">
                     <div class="quick-action-icon"><i class="fa-solid fa-camera"></i></div>
-                    <span>Scan Receipt</span>
+                    <span>${t('dashboard.scanReceipt', { defaultValue: 'Scan Receipt' })}</span>
                 </a>
                 <a href="#/expenses" class="quick-action-btn" onclick="closeNavDrawer()">
                     <div class="quick-action-icon"><i class="fa-solid fa-receipt"></i></div>
-                    <span>Expenses</span>
+                    <span>${t('nav.expenses', { defaultValue: 'Expenses' })}</span>
                 </a>
                 <a href="#/reports" class="quick-action-btn" onclick="closeNavDrawer()">
                     <div class="quick-action-icon"><i class="fa-solid fa-chart-line"></i></div>
-                    <span>Reports</span>
+                    <span>${t('nav.reports', { defaultValue: 'Reports' })}</span>
                 </a>
                 <a href="#/chat" class="quick-action-btn" onclick="openChat(event); closeNavDrawer()">
                     <div class="quick-action-icon"><i class="fa-solid fa-comment"></i></div>
-                    <span>Chat</span>
+                    <span>${t('nav.chat', { defaultValue: 'Chat' })}</span>
                 </a>
             </div>
         </div>
         <div class="feed-card">
-            <h3 class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Most Recent Expenses</h3>
+            <h3 class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> ${t('dashboard.mostRecentExpenses', { defaultValue: 'Most Recent Expenses' })}</h3>
             <div id="homeRecentExpenses"></div>
         </div>
         <div class="feed-card">
             <div class="card-title-row">
-                <h3 class="card-title"><i class="fa-solid fa-chart-column"></i> Totals</h3>
+                <h3 class="card-title"><i class="fa-solid fa-chart-column"></i> ${t('dashboard.totals', { defaultValue: 'Totals' })}</h3>
                 <select class="chart-period-select interactive-element" id="homeTotalsPeriod" onchange="updateHomeCharts()">
-                    <option value="monthly" selected>Monthly</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="annual">Annual</option>
+                    <option value="monthly" selected>${t('dashboard.monthly', { defaultValue: 'Monthly' })}</option>
+                    <option value="weekly">${t('dashboard.weekly', { defaultValue: 'Weekly' })}</option>
+                    <option value="annual">${t('dashboard.annual', { defaultValue: 'Annual' })}</option>
                 </select>
             </div>
             <div class="chart-container-sm"><canvas id="homeMonthlyChart"></canvas></div>
             <div class="chart-status-bar" id="homeMonthlyChartStatus"></div>
         </div>
         <div class="feed-card">
-            <h3 class="card-title"><i class="fa-solid fa-chart-line"></i> Daily Spending</h3>
+            <h3 class="card-title"><i class="fa-solid fa-chart-line"></i> ${t('dashboard.dailySpending', { defaultValue: 'Daily Spending' })}</h3>
             <div class="chart-container-sm"><canvas id="homeTimelineChart"></canvas></div>
             <div class="chart-status-bar" id="homeTimelineChartStatus"></div>
         </div>
         <div class="feed-card">
             <div class="card-title-row">
-                <h3 class="card-title"><i class="fa-solid fa-chart-pie"></i> By Category</h3>
+                <h3 class="card-title"><i class="fa-solid fa-chart-pie"></i> ${t('dashboard.byCategory', { defaultValue: 'By Category' })}</h3>
                 <div class="chart-view-toggle" id="homeCategoryToggle">
-                    <button class="active" onclick="switchCategoryView('homeCategoryChart','homeCategory','pie',this)" title="Pie chart"><i class="fa-solid fa-chart-pie"></i></button>
-                    <button onclick="switchCategoryView('homeCategoryChart','homeCategory','bar',this)" title="Bar chart"><i class="fa-solid fa-chart-bar"></i></button>
+                    <button class="active" onclick="switchCategoryView('homeCategoryChart','homeCategory','pie',this)" title="${t('dashboard.pieChart', { defaultValue: 'Pie chart' })}"><i class="fa-solid fa-chart-pie"></i></button>
+                    <button onclick="switchCategoryView('homeCategoryChart','homeCategory','bar',this)" title="${t('dashboard.barChart', { defaultValue: 'Bar chart' })}"><i class="fa-solid fa-chart-bar"></i></button>
                 </div>
             </div>
             <div class="chart-container-sm"><canvas id="homeCategoryChart"></canvas></div>
             <div class="chart-status-bar" id="homeCategoryChartStatus"></div>
         </div>
         <div class="feed-card">
-            <h3 class="card-title"><i class="fa-solid fa-store"></i> Most Visited Shops</h3>
+            <h3 class="card-title"><i class="fa-solid fa-store"></i> ${t('dashboard.mostVisitedShops', { defaultValue: 'Most Visited Shops' })}</h3>
             <div id="homeTopShops"></div>
         </div>
         <div class="feed-card">
-            <h3 class="card-title"><i class="fa-solid fa-basket-shopping"></i> Most Bought Items</h3>
+            <h3 class="card-title"><i class="fa-solid fa-basket-shopping"></i> ${t('dashboard.mostBoughtItems', { defaultValue: 'Most Bought Items' })}</h3>
             <div id="homeTopItems"></div>
         </div>
         <div class="feed-card">
-            <h3 class="card-title"><i class="fa-solid fa-map-location-dot"></i> Where You Spend</h3>
+            <h3 class="card-title"><i class="fa-solid fa-map-location-dot"></i> ${t('dashboard.whereYouSpend', { defaultValue: 'Where You Spend' })}</h3>
             <div id="homeGeoMap" style="height:280px; border-radius:var(--radius);"></div>
         </div>
         <div id="homeDiscoveryCards"></div>
@@ -165,7 +165,7 @@ function updateHomeCharts() {
     chartInstances.homeMonthly = new Chart(mc, {
         type: 'bar',
         data: { labels: totalsLabels,
-            datasets: [{ label: 'Total (' + baseCur + ')',
+            datasets: [{ label: t('dashboard.totalByCurrency', { defaultValue: 'Total ({{currency}})', currency: baseCur }),
                 data: totalsValues,
                 backgroundColor: 'rgba(25, 118, 210, 0.7)', borderRadius: 6 }] },
         options: { responsive: true, maintainAspectRatio: false,
@@ -207,21 +207,21 @@ async function renderDashboard(app) {
     <div class="container">
         <div class="desktop-hero-wrapper">
             <div class="feed-card hero-card" id="desktopHeroCard">
-                <div class="hero-loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div>
+                <div class="hero-loading"><i class="fa-solid fa-spinner fa-spin"></i> ${t('common.loading', { defaultValue: 'Loading...' })}</div>
             </div>
         </div>
         <div class="dashboard-grid">
             <div class="card" style="grid-column: 1 / -1;">
-                <h3 class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Most Recent Expenses</h3>
+                <h3 class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> ${t('dashboard.mostRecentExpenses', { defaultValue: 'Most Recent Expenses' })}</h3>
                 <div id="deskRecentExpenses"></div>
             </div>
             <div class="card">
                 <div class="card-title-row">
-                    <h3 class="card-title"><i class="fa-solid fa-chart-column"></i> Totals</h3>
+                    <h3 class="card-title"><i class="fa-solid fa-chart-column"></i> ${t('dashboard.totals', { defaultValue: 'Totals' })}</h3>
                     <select class="chart-period-select" id="deskTotalsPeriod" onchange="updateDesktopCharts()">
-                        <option value="monthly" selected>Monthly</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="annual">Annual</option>
+                        <option value="monthly" selected>${t('dashboard.monthly', { defaultValue: 'Monthly' })}</option>
+                        <option value="weekly">${t('dashboard.weekly', { defaultValue: 'Weekly' })}</option>
+                        <option value="annual">${t('dashboard.annual', { defaultValue: 'Annual' })}</option>
                     </select>
                 </div>
                 <div class="chart-container"><canvas id="monthlyChart"></canvas></div>
@@ -229,30 +229,30 @@ async function renderDashboard(app) {
             </div>
             <div class="card">
                 <div class="card-title-row">
-                    <h3 class="card-title"><i class="fa-solid fa-chart-pie"></i> By Category</h3>
+                    <h3 class="card-title"><i class="fa-solid fa-chart-pie"></i> ${t('dashboard.byCategory', { defaultValue: 'By Category' })}</h3>
                     <div class="chart-view-toggle" id="deskCategoryToggle">
-                        <button class="active" onclick="switchCategoryView('categoryChart','category','pie',this)" title="Pie chart"><i class="fa-solid fa-chart-pie"></i></button>
-                        <button onclick="switchCategoryView('categoryChart','category','bar',this)" title="Bar chart"><i class="fa-solid fa-chart-bar"></i></button>
+                        <button class="active" onclick="switchCategoryView('categoryChart','category','pie',this)" title="${t('dashboard.pieChart', { defaultValue: 'Pie chart' })}"><i class="fa-solid fa-chart-pie"></i></button>
+                        <button onclick="switchCategoryView('categoryChart','category','bar',this)" title="${t('dashboard.barChart', { defaultValue: 'Bar chart' })}"><i class="fa-solid fa-chart-bar"></i></button>
                     </div>
                 </div>
                 <div class="chart-container"><canvas id="categoryChart"></canvas></div>
                 <div class="chart-status-bar" id="categoryChartStatus"></div>
             </div>
             <div class="card">
-                <h3 class="card-title"><i class="fa-solid fa-chart-line"></i> Daily Spending</h3>
+                <h3 class="card-title"><i class="fa-solid fa-chart-line"></i> ${t('dashboard.dailySpending', { defaultValue: 'Daily Spending' })}</h3>
                 <div class="chart-container"><canvas id="timelineChart"></canvas></div>
                 <div class="chart-status-bar" id="timelineChartStatus"></div>
             </div>
             <div class="card">
-                <h3 class="card-title"><i class="fa-solid fa-map-location-dot"></i> Geographical Map</h3>
+                <h3 class="card-title"><i class="fa-solid fa-map-location-dot"></i> ${t('dashboard.geoMap', { defaultValue: 'Geographical Map' })}</h3>
                 <div id="geoMap"></div>
             </div>
             <div class="card">
-                <h3 class="card-title"><i class="fa-solid fa-store"></i> Most Visited Shops</h3>
+                <h3 class="card-title"><i class="fa-solid fa-store"></i> ${t('dashboard.mostVisitedShops', { defaultValue: 'Most Visited Shops' })}</h3>
                 <div id="deskTopShops"></div>
             </div>
             <div class="card">
-                <h3 class="card-title"><i class="fa-solid fa-basket-shopping"></i> Most Bought Items</h3>
+                <h3 class="card-title"><i class="fa-solid fa-basket-shopping"></i> ${t('dashboard.mostBoughtItems', { defaultValue: 'Most Bought Items' })}</h3>
                 <div id="deskTopItems"></div>
             </div>
         </div>
@@ -323,7 +323,7 @@ function updateDesktopCharts() {
     chartInstances.monthly = new Chart(mc, {
         type: 'bar',
         data: { labels: totalsLabels,
-            datasets: [{ label: 'Total (' + baseCur + ')',
+            datasets: [{ label: t('dashboard.totalByCurrency', { defaultValue: 'Total ({{currency}})', currency: baseCur }),
                 data: totalsValues,
                 backgroundColor: 'rgba(25, 118, 210, 0.7)', borderRadius: 6 }] },
         options: { responsive: true, maintainAspectRatio: false,

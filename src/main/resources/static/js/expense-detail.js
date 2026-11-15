@@ -118,26 +118,14 @@ function formatShareDateTime(dateValue) {
     if (!dateValue) return '';
     const date = new Date(dateValue);
     if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit'
-    });
+    return formatDateTime(date);
 }
 
 function formatShortHumanDateTime(dateValue) {
     if (!dateValue) return '\u2014';
     const date = new Date(dateValue);
     if (Number.isNaN(date.getTime())) return '\u2014';
-    return date.toLocaleString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit'
-    });
+    return formatDateTime(date);
 }
 
 function toDateTimeLocalValue(dateValue) {
@@ -155,7 +143,7 @@ function normalizeWebsiteUrl(url) {
 
 function formatAmountCurrency(value, currency) {
     if (value == null || value === '') return '\u2014';
-    return `${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency || ''}`.trim();
+    return formatCurrency(value, currency);
 }
 
 function formatRelativeTimeFromNow(dateValue) {
@@ -167,43 +155,37 @@ function formatRelativeTimeFromNow(dateValue) {
     const isFuture = diffMs >= 0;
     diffMs = Math.abs(diffMs);
 
-    const units = [
-        { label: 'day', ms: 24 * 60 * 60 * 1000 },
-        { label: 'hour', ms: 60 * 60 * 1000 },
-        { label: 'minute', ms: 60 * 1000 }
-    ];
-
-    for (const unit of units) {
-        if (diffMs >= unit.ms || unit.label === 'minute') {
-            const value = Math.max(1, Math.round(diffMs / unit.ms));
-            const suffix = value === 1 ? '' : 's';
-            return isFuture
-                ? `in ${value} ${unit.label}${suffix}`
-                : `${value} ${unit.label}${suffix} ago`;
-        }
+    const rtf = new Intl.RelativeTimeFormat(getActiveLocale(), { numeric: 'auto' });
+    if (diffMs >= 24 * 60 * 60 * 1000) {
+        const days = Math.max(1, Math.round(diffMs / (24 * 60 * 60 * 1000)));
+        return rtf.format(isFuture ? days : -days, 'day');
     }
-
-    return isFuture ? 'in moments' : 'moments ago';
+    if (diffMs >= 60 * 60 * 1000) {
+        const hours = Math.max(1, Math.round(diffMs / (60 * 60 * 1000)));
+        return rtf.format(isFuture ? hours : -hours, 'hour');
+    }
+    const minutes = Math.max(1, Math.round(diffMs / (60 * 1000)));
+    return rtf.format(isFuture ? minutes : -minutes, 'minute');
 }
 
 function renderSharedExpenseBanner(options = {}) {
     if (!options.shared) return '';
 
     return `<div class="card shared-expense-banner">
-        <button type="button" class="share-card-dismiss-btn" onclick="dismissSharedExpenseBanner('${options.shareToken || options.expenseId || ''}')" aria-label="Hide shared expense banner">
+        <button type="button" class="share-card-dismiss-btn" onclick="dismissSharedExpenseBanner('${options.shareToken || options.expenseId || ''}')" aria-label="${t('expenseDetail.hideSharedBanner', { defaultValue: 'Hide shared expense banner' })}">
             <i class="fa-solid fa-xmark"></i>
         </button>
         <div class="shared-expense-banner-main">
             <div class="shared-expense-banner-icon"><i class="fa-solid fa-share-nodes"></i></div>
             <div>
-                <div class="shared-expense-banner-title">Shared expense link</div>
+                <div class="shared-expense-banner-title">${t('expenseDetail.sharedExpenseLink', { defaultValue: 'Shared expense link' })}</div>
                 <div class="shared-expense-banner-text">
-                    You are viewing a shared expense. Anyone with this link can view the expense details and receipt files until the owner revokes access or the link expires.
+                    ${t('expenseDetail.sharedExpenseInfo', { defaultValue: 'You are viewing a shared expense. Anyone with this link can view the expense details and receipt files until the owner revokes access or the link expires.' })}
                 </div>
             </div>
         </div>
         ${!currentUser ? `<div class="shared-expense-banner-actions">
-            <a href="#/login" class="btn btn-primary btn-sm"><i class="fa-solid fa-right-to-bracket"></i> Sign in to track your own expenses</a>
+            <a href="#/login" class="btn btn-primary btn-sm"><i class="fa-solid fa-right-to-bracket"></i> ${t('expenseDetail.signInTrack', { defaultValue: 'Sign in to track your own expenses' })}</a>
         </div>` : ''}
     </div>`;
 }
@@ -233,54 +215,66 @@ function renderOwnerSharePanel(expenseUrlId, shareStatus) {
         const absoluteUrl = getAbsoluteShareUrl(shareStatus.shareUrl);
         const expiryRelative = formatRelativeTimeFromNow(shareStatus.expiresAt);
         const expiryAbsolute = formatShareDateTime(shareStatus.expiresAt);
-        const expiryLabel = `Expires ${expiryRelative || `in ${defaultTtlDays} days`}`;
+        const expiryLabel = t('expenseDetail.expiresLabel', {
+            defaultValue: 'Expires {{value}}',
+            value: expiryRelative || t('expenseDetail.inDays', { defaultValue: 'in {{count}} days', count: defaultTtlDays })
+        });
 
         return `<div class="card share-status-card share-status-card-active">
-            <button type="button" class="share-card-dismiss-btn" onclick="dismissExpenseShareStatusCard('${expenseUrlId}')" aria-label="Hide share access card">
+            <button type="button" class="share-card-dismiss-btn" onclick="dismissExpenseShareStatusCard('${expenseUrlId}')" aria-label="${t('expenseDetail.hideShareCard', { defaultValue: 'Hide share access card' })}">
                 <i class="fa-solid fa-xmark"></i>
             </button>
             <div class="share-status-header-row">
                 <div>
-                    <h3 class="card-title"><i class="fa-solid fa-share-nodes"></i> Share access <span class="share-status-pill share-status-pill-active"><i class="fa-solid fa-check"></i> Active</span></h3>
-                    <p class="share-status-subtitle">Anyone with the link below can open this expense and its receipts without signing in.</p>
+                    <h3 class="card-title"><i class="fa-solid fa-share-nodes"></i> ${t('expenseDetail.shareAccess', { defaultValue: 'Share access' })} <span class="share-status-pill share-status-pill-active"><i class="fa-solid fa-check"></i> ${t('expenseDetail.active', { defaultValue: 'Active' })}</span></h3>
+                    <p class="share-status-subtitle">${t('expenseDetail.shareAccessSubtitle', { defaultValue: 'Anyone with the link below can open this expense and its receipts without signing in.' })}</p>
                 </div>
                 
             </div>
 
             <div class="share-status-link-row">
-                <input class="share-status-link-input" type="text" readonly value="${esc(absoluteUrl)}" onclick="this.select()" aria-label="Share link">
-                <button class="btn btn-outline btn-sm" onclick="copyExpenseLink('${expenseUrlId}', true)"><i class="fa-solid fa-copy"></i> Copy</button>
-                ${hasNativeShare ? `<button class="btn btn-primary btn-sm" onclick="nativeShareExpense('${expenseUrlId}', true)"><i class="fa-solid fa-paper-plane"></i> Share</button>` : ''}
+                <input class="share-status-link-input" type="text" readonly value="${esc(absoluteUrl)}" onclick="this.select()" aria-label="${t('expenseDetail.shareLink', { defaultValue: 'Share link' })}">
+                <button class="btn btn-outline btn-sm" onclick="copyExpenseLink('${expenseUrlId}', true)"><i class="fa-solid fa-copy"></i> ${t('expenseDetail.copy', { defaultValue: 'Copy' })}</button>
+                ${hasNativeShare ? `<button class="btn btn-primary btn-sm" onclick="nativeShareExpense('${expenseUrlId}', true)"><i class="fa-solid fa-paper-plane"></i> ${t('expenseDetail.share', { defaultValue: 'Share' })}</button>` : ''}
             </div>
             <span class="share-status-meta-subvalue">${esc(expiryLabel)}</span> -- 
             ${expiryAbsolute ? `<span class="share-status-meta-subvalue">${esc(expiryAbsolute)}</span> --` : ''}
-            <span class="share-status-meta-subvalue"><a class="share-status-preview-link" href="${esc(absoluteUrl)}" target="_blank" rel="noopener noreferrer">Open shared view</a></span>
+            <span class="share-status-meta-subvalue"><a class="share-status-preview-link" href="${esc(absoluteUrl)}" target="_blank" rel="noopener noreferrer">${t('expenseDetail.openSharedView', { defaultValue: 'Open shared view' })}</a></span>
 
 
             <div class="share-status-actions">
-                <button class="btn btn-danger btn-sm" onclick="revokeExpenseShare('${expenseUrlId}', true)"><i class="fa-solid fa-ban"></i> Revoke link</button>
+                <button class="btn btn-danger btn-sm" onclick="revokeExpenseShare('${expenseUrlId}', true)"><i class="fa-solid fa-ban"></i> ${t('expenseDetail.revokeLink', { defaultValue: 'Revoke link' })}</button>
             </div>
         </div>`;
     }
 
-    let statusHint = `New share links expire automatically after ${defaultTtlDays} day${defaultTtlDays === 1 ? '' : 's'}.`;
+    let statusHint = t('expenseDetail.newShareExpiryHint', {
+        defaultValue: 'New share links expire automatically after {{count}} day(s).',
+        count: defaultTtlDays
+    });
     if (shareStatus && shareStatus.revokedAt) {
-        statusHint = `Your last share link was revoked on ${formatShareDateTime(shareStatus.revokedAt) || 'a previous date'}.`;
+        statusHint = t('expenseDetail.lastShareRevoked', {
+            defaultValue: 'Your last share link was revoked on {{date}}.',
+            date: formatShareDateTime(shareStatus.revokedAt) || t('expenseDetail.previousDate', { defaultValue: 'a previous date' })
+        });
     } else if (shareStatus && shareStatus.expiresAt) {
-        statusHint = `Your last share link expired on ${formatShareDateTime(shareStatus.expiresAt) || 'a previous date'}.`;
+        statusHint = t('expenseDetail.lastShareExpired', {
+            defaultValue: 'Your last share link expired on {{date}}.',
+            date: formatShareDateTime(shareStatus.expiresAt) || t('expenseDetail.previousDate', { defaultValue: 'a previous date' })
+        });
     }
 
     const ttlSelectId = getShareTtlSelectId(expenseUrlId);
     const ttlOptions = getShareTtlOptions(defaultTtlDays);
 
     return `<div class="card share-status-card share-status-card-inactive">
-        <button type="button" class="share-card-dismiss-btn" onclick="dismissExpenseShareStatusCard('${expenseUrlId}')" aria-label="Hide share access card">
+        <button type="button" class="share-card-dismiss-btn" onclick="dismissExpenseShareStatusCard('${expenseUrlId}')" aria-label="${t('expenseDetail.hideShareCard', { defaultValue: 'Hide share access card' })}">
             <i class="fa-solid fa-xmark"></i>
         </button>
         <div class="share-status-header-row">
             <div>
-                <h3 class="card-title"><i class="fa-solid fa-share-nodes"></i> Share access <span class="share-status-pill share-status-pill-inactive"><i class="fa-solid fa-lock"></i> Not shared</span></h3>
-                <p class="share-status-subtitle">Create a temporary link so someone can view this expense and its receipt files.</p>
+                <h3 class="card-title"><i class="fa-solid fa-share-nodes"></i> ${t('expenseDetail.shareAccess', { defaultValue: 'Share access' })} <span class="share-status-pill share-status-pill-inactive"><i class="fa-solid fa-lock"></i> ${t('expenseDetail.notShared', { defaultValue: 'Not shared' })}</span></h3>
+                <p class="share-status-subtitle">${t('expenseDetail.createTemporaryLink', { defaultValue: 'Create a temporary link so someone can view this expense and its receipt files.' })}</p>
             </div>
         </div>
 
@@ -288,30 +282,30 @@ function renderOwnerSharePanel(expenseUrlId, shareStatus) {
             <div class="share-status-empty-copy">
                 <p>${esc(statusHint)}</p>
                 <div class="share-status-ttl-row">
-                    <label class="share-status-ttl-label" for="${ttlSelectId}">Link expiry</label>
+                    <label class="share-status-ttl-label" for="${ttlSelectId}">${t('expenseDetail.linkExpiry', { defaultValue: 'Link expiry' })}</label>
                     <select id="${ttlSelectId}" class="share-status-ttl-select">
-                        ${ttlOptions.map(days => `<option value="${days}" ${days === defaultTtlDays ? 'selected' : ''}>${days === 1 ? '24 hours' : `${days} days`}</option>`).join('')}
+                        ${ttlOptions.map(days => `<option value="${days}" ${days === defaultTtlDays ? 'selected' : ''}>${days === 1 ? t('expenseDetail.hours24', { defaultValue: '24 hours' }) : t('expenseDetail.daysCount', { defaultValue: '{{count}} days', count: days })}</option>`).join('')}
                     </select>
                 </div>
             </div>
-            <button class="btn btn-primary" onclick="createExpenseShare('${expenseUrlId}', true, getSelectedShareTtlDays('${expenseUrlId}'))"><i class="fa-solid fa-link"></i> Create share link</button>
+            <button class="btn btn-primary" onclick="createExpenseShare('${expenseUrlId}', true, getSelectedShareTtlDays('${expenseUrlId}'))"><i class="fa-solid fa-link"></i> ${t('expenseDetail.createShareLink', { defaultValue: 'Create share link' })}</button>
         </div>
     </div>`;
 }
 
 function renderReceiptDetailsHeader(expenseId, isOwner, showScanToggle = false, isPdf = false) {
     return `<div class="card-title-row">
-        <h3 class="card-title"><i class="fa-solid fa-receipt"></i> Receipt Details</h3>
+        <h3 class="card-title"><i class="fa-solid fa-receipt"></i> ${t('expenseDetail.receiptDetails', { defaultValue: 'Receipt Details' })}</h3>
         <div class="receipt-header-actions">
             ${showScanToggle ? `<button class="btn btn-outline btn-sm receipt-scan-toggle-btn" onclick="toggleScannedReceipt()">
-                <i class="fa-solid fa-${isPdf ? 'file-pdf' : 'image'}"></i> View Scan
+                <i class="fa-solid fa-${isPdf ? 'file-pdf' : 'image'}"></i> ${t('expenseDetail.viewScan', { defaultValue: 'View Scan' })}
             </button>` : ''}
             ${isOwner ? `<div class="action-menu-wrap" id="receiptSectionMenuWrap">
-                <button class="btn btn-outline btn-sm btn-icon" onclick="toggleReceiptSectionMenu()" title="Receipt actions"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                <button class="btn btn-outline btn-sm btn-icon" onclick="toggleReceiptSectionMenu()" title="${t('expenseDetail.receiptActions', { defaultValue: 'Receipt actions' })}"><i class="fa-solid fa-ellipsis-vertical"></i></button>
                 <div class="action-dropdown" id="receiptSectionMenuDropdown" style="display:none;">
-                    <button class="action-dropdown-item" onclick="closeReceiptSectionMenu(); openChangeStoreDialog('${expenseId}')"><i class="fa-solid fa-store"></i> Update Store</button>
-                    <button class="action-dropdown-item" onclick="closeReceiptSectionMenu(); openExpenseDetailsDialog('${expenseId}')"><i class="fa-solid fa-pen-to-square"></i> Update Details</button>
-                    <button class="action-dropdown-item" onclick="closeReceiptSectionMenu(); openItemDialog('${expenseId}')"><i class="fa-solid fa-plus"></i> Add Item</button>
+                    <button class="action-dropdown-item" onclick="closeReceiptSectionMenu(); openChangeStoreDialog('${expenseId}')"><i class="fa-solid fa-store"></i> ${t('expenseDetail.updateStore', { defaultValue: 'Update Store' })}</button>
+                    <button class="action-dropdown-item" onclick="closeReceiptSectionMenu(); openExpenseDetailsDialog('${expenseId}')"><i class="fa-solid fa-pen-to-square"></i> ${t('expenseDetail.updateDetails', { defaultValue: 'Update Details' })}</button>
+                    <button class="action-dropdown-item" onclick="closeReceiptSectionMenu(); openItemDialog('${expenseId}')"><i class="fa-solid fa-plus"></i> ${t('expenseDetail.addItem', { defaultValue: 'Add Item' })}</button>
                 </div>
             </div>` : ''}
         </div>
@@ -321,11 +315,11 @@ function renderReceiptDetailsHeader(expenseId, isOwner, showScanToggle = false, 
 function renderExpenseReportsSection(reports) {
     const safe = Array.isArray(reports) ? reports : [];
     return `<div class="card">
-        <h3 class="card-title"><i class="fa-solid fa-chart-line"></i> Reports</h3>
-        ${safe.length === 0 ? '<p class="receipt-section-empty">This expense is not included in any report yet.</p>' : `<div class="expense-reports-list">${safe.map(r => `
+        <h3 class="card-title"><i class="fa-solid fa-chart-line"></i> ${t('nav.reports', { defaultValue: 'Reports' })}</h3>
+        ${safe.length === 0 ? `<p class="receipt-section-empty">${t('expenseDetail.notInAnyReport', { defaultValue: 'This expense is not included in any report yet.' })}</p>` : `<div class="expense-reports-list">${safe.map(r => `
             <a href="#/reports/${r.id}" class="expense-report-link">
-                <span class="expense-report-link-title">${esc(r.title || `Report #${r.id}`)}</span>
-                <span class="expense-report-link-meta">${esc(typeof formatGroupBy === 'function' ? formatGroupBy(r.groupBy) : (r.groupBy || 'Report'))} \u00b7 ${Number(r.expenseCount || 0)} expense${Number(r.expenseCount || 0) === 1 ? '' : 's'}</span>
+                <span class="expense-report-link-title">${esc(r.title || `${t('chat.reportFallback', { defaultValue: 'Report' })} #${r.id}`)}</span>
+                <span class="expense-report-link-meta">${esc(typeof formatGroupBy === 'function' ? formatGroupBy(r.groupBy) : (r.groupBy || t('chat.reportFallback', { defaultValue: 'Report' })))} \u00b7 ${t('chat.expenseCount', { count: Number(r.expenseCount || 0), defaultValue: Number(r.expenseCount || 0) === 1 ? '{{count}} expense' : '{{count}} expenses' })}</span>
             </a>`).join('')}</div>`}
     </div>`;
 }
@@ -333,16 +327,16 @@ function renderExpenseReportsSection(reports) {
 function renderSimilarExpensesSection(similar, options = {}) {
     const safe = Array.isArray(similar) ? similar : [];
     return `<div class="card">
-        <h3 class="card-title"><i class="fa-solid fa-clone"></i> Similar Expenses</h3>
-        ${safe.length === 0 ? '<p class="receipt-section-empty">No similar expenses found.</p>' : `<div class="similar-expenses-row">${safe.map(exp => {
+        <h3 class="card-title"><i class="fa-solid fa-clone"></i> ${t('expenseDetail.similarExpenses', { defaultValue: 'Similar Expenses' })}</h3>
+        ${safe.length === 0 ? `<p class="receipt-section-empty">${t('expenseDetail.noSimilarExpenses', { defaultValue: 'No similar expenses found.' })}</p>` : `<div class="similar-expenses-row">${safe.map(exp => {
             const href = options.shared ? `#/shared/${exp.urlId || ''}` : `#/expenses/${exp.urlId || ''}`;
             const hasImage = !!exp.imagePath;
             const thumb = hasImage
-                ? `<img src="${getReceiptUrl(exp.imagePath, options)}" alt="Receipt preview" class="similar-expense-thumb">`
+                ? `<img src="${getReceiptUrl(exp.imagePath, options)}" alt="${t('expenseDetail.receiptPreview', { defaultValue: 'Receipt preview' })}" class="similar-expense-thumb">`
                 : `<div class="similar-expense-thumb similar-expense-thumb-placeholder"><i class="fa-solid fa-receipt"></i></div>`;
             return `<a class="similar-expense-card" href="${href}">
                 ${thumb}
-                <div class="similar-expense-store" title="${esc(exp.storeName || 'Store')}">${esc(exp.storeName || 'Store')}</div>
+                <div class="similar-expense-store" title="${esc(exp.storeName || t('reports.storeFallback', { defaultValue: 'Store' }))}">${esc(exp.storeName || t('reports.storeFallback', { defaultValue: 'Store' }))}</div>
                 <div class="similar-expense-total">${formatAmountCurrency(exp.amount, exp.currency)}</div>
                 <div class="similar-expense-date">${formatShortHumanDateTime(exp.transactionDatetime)}</div>
             </a>`;
@@ -398,9 +392,9 @@ function bindExchangeRateRefreshOnCurrencyChange(currencyInputId, exchangeRateIn
         const currentCurrency = (currencyInput.value || '').trim().toUpperCase();
         if (currentCurrency && currentCurrency !== initialCurrency) {
             exchangeRateInput.value = '';
-            exchangeRateInput.placeholder = 'Auto-fetched on save';
+            exchangeRateInput.placeholder = t('expenseDetail.autoFetchedOnSave', { defaultValue: 'Auto-fetched on save' });
         } else {
-            exchangeRateInput.placeholder = 'Auto-fetched';
+            exchangeRateInput.placeholder = t('expenseDetail.autoFetched', { defaultValue: 'Auto-fetched' });
             if (!exchangeRateInput.value && initialRate) exchangeRateInput.value = initialRate;
         }
     };
@@ -429,18 +423,18 @@ async function renderExpenseDetail(app, id, options = {}) {
     const data = await loadExpenseDetail(id, resolvedOptions);
     if (!data || !data.expense) {
         const expiredMessage = resolvedOptions.shared
-            ? 'This link has expired or was revoked.'
-            : 'Expense not found.';
-        app.innerHTML = `${!currentUser ? `<div class="shared-header"><a href="/" class="brand"><img src="/images/logo192.png" alt="logo"> Expense Tracker</a></div>` : ''}
+            ? t('expenseDetail.sharedLinkExpired', { defaultValue: 'This link has expired or was revoked.' })
+            : t('expenseDetail.notFound', { defaultValue: 'Expense not found.' });
+        app.innerHTML = `${!currentUser ? `<div class="shared-header"><a href="/" class="brand"><img src="/images/logo192.png" alt="logo"> ${t('app.name', { defaultValue: 'Expense Tracker' })}</a></div>` : ''}
             <div class="container"><div class="card shared-expense-empty-state">
                 <div class="shared-expense-empty-icon"><i class="fa-solid fa-link-slash"></i></div>
-                <h2>${resolvedOptions.shared ? 'Shared link unavailable' : 'Expense not found'}</h2>
+                <h2>${resolvedOptions.shared ? t('expenseDetail.sharedLinkUnavailable', { defaultValue: 'Shared link unavailable' }) : t('expenseDetail.notFound', { defaultValue: 'Expense not found' })}</h2>
                 <p>${expiredMessage}</p>
                 <div class="shared-expense-empty-actions">
                     ${currentUser
-                        ? `<a href="#/expenses" class="btn btn-outline"><i class="fa-solid fa-arrow-left"></i> Back to Expenses</a>`
-                        : `<a href="#/login" class="btn btn-primary"><i class="fa-solid fa-right-to-bracket"></i> Sign in</a>`}
-                    ${!currentUser ? `<a href="/" class="btn btn-outline"><i class="fa-solid fa-house"></i> Go to home page</a>` : ''}
+                        ? `<a href="#/expenses" class="btn btn-outline"><i class="fa-solid fa-arrow-left"></i> ${t('expenseDetail.backToExpenses', { defaultValue: 'Back to Expenses' })}</a>`
+                        : `<a href="#/login" class="btn btn-primary"><i class="fa-solid fa-right-to-bracket"></i> ${t('expenseDetail.signIn', { defaultValue: 'Sign in' })}</a>`}
+                    ${!currentUser ? `<a href="/" class="btn btn-outline"><i class="fa-solid fa-house"></i> ${t('expenseDetail.goHome', { defaultValue: 'Go to home page' })}</a>` : ''}
                 </div>
             </div></div>`;
         return;
@@ -467,22 +461,22 @@ async function renderExpenseDetail(app, id, options = {}) {
     let html = '';
     // Show branded header for shared (non-owner/non-logged-in) views
     if (!currentUser) {
-        html += `<div class="shared-header"><a href="/" class="brand"><img src="/images/logo192.png" alt="logo"> Expense Tracker</a></div>`;
+        html += `<div class="shared-header"><a href="/" class="brand"><img src="/images/logo192.png" alt="logo"> ${t('app.name', { defaultValue: 'Expense Tracker' })}</a></div>`;
     }
     html += `<div class="container">
         <div class="action-bar">
             <div class="action-bar-left">
-                <h2 style="color:var(--primary-dark)">Expense Detail</h2>
+                <h2 style="color:var(--primary-dark)">${t('expenseDetail.title', { defaultValue: 'Expense Detail' })}</h2>
                 <span class="badge badge-${(e.status||'').toLowerCase()}">${statusIcon(e.status)} ${e.status}</span>
             </div>
             <div class="action-bar-right">
                 <div class="action-menu-wrap" id="actionMenuWrap">
-                    <button class="btn btn-outline btn-sm btn-icon" onclick="toggleActionMenu()" title="Actions"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                    <button class="btn btn-outline btn-sm btn-icon" onclick="toggleActionMenu()" title="${t('profile.trash.actions', { defaultValue: 'Actions' })}"><i class="fa-solid fa-ellipsis-vertical"></i></button>
                     <div class="action-dropdown" id="actionDropdown" style="display:none;">
-                        ${isOwner && isReceiptScan && !isProcessing ? `<button class="action-dropdown-item" onclick="toggleActionMenu(); retryExpenseWithConfirm('${e.urlId}', '${e.status}')"><i class="fa-solid fa-rotate"></i> Retry Scan</button>` : ''}
-                        ${isOwner && !isProcessing ? `<button class="action-dropdown-item" onclick="toggleActionMenu(); openShareMenu('${e.urlId}', document.getElementById('actionMenuWrap'))"><i class="fa-solid fa-share-nodes"></i> Share</button>` : ''}
-                        ${isOwner && !isProcessing ? `<button class="action-dropdown-item" onclick="toggleActionMenu(); duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i> Duplicate</button>` : ''}
-                        ${isOwner ? `<button class="action-dropdown-item action-dropdown-danger" onclick="toggleActionMenu(); deleteExpense('${e.urlId}'); navigate('#/expenses')"><i class="fa-solid fa-trash"></i> Delete</button>` : ''}
+                        ${isOwner && isReceiptScan && !isProcessing ? `<button class="action-dropdown-item" onclick="toggleActionMenu(); retryExpenseWithConfirm('${e.urlId}', '${e.status}')"><i class="fa-solid fa-rotate"></i> ${t('expenseDetail.retryScan', { defaultValue: 'Retry Scan' })}</button>` : ''}
+                        ${isOwner && !isProcessing ? `<button class="action-dropdown-item" onclick="toggleActionMenu(); openShareMenu('${e.urlId}', document.getElementById('actionMenuWrap'))"><i class="fa-solid fa-share-nodes"></i> ${t('expenseDetail.share', { defaultValue: 'Share' })}</button>` : ''}
+                        ${isOwner && !isProcessing ? `<button class="action-dropdown-item" onclick="toggleActionMenu(); duplicateExpense('${e.urlId}')"><i class="fa-solid fa-copy"></i> ${t('expenseDetail.duplicate', { defaultValue: 'Duplicate' })}</button>` : ''}
+                        ${isOwner ? `<button class="action-dropdown-item action-dropdown-danger" onclick="toggleActionMenu(); deleteExpense('${e.urlId}'); navigate('#/expenses')"><i class="fa-solid fa-trash"></i> ${t('expenseDetail.delete', { defaultValue: 'Delete' })}</button>` : ''}
                     </div>
                 </div>
             </div>
@@ -505,29 +499,29 @@ async function renderExpenseDetail(app, id, options = {}) {
                 ${renderReceiptDetailsHeader(id, isOwner, true, isPdf)}
                 <div style="text-align:center; padding:2rem 1rem;">
                     <i class="fa-solid fa-spinner fa-spin" style="font-size:2.5rem; color:var(--primary)"></i>
-                    <p style="margin-top:1rem; color:var(--text-light)">Processing receipt...<br>This may take less than a minute.</p>
+                    <p style="margin-top:1rem; color:var(--text-light)">${t('expenseDetail.processingReceiptBr', { defaultValue: 'Processing receipt...<br>This may take less than a minute.' })}</p>
                     <div style="display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap; margin-top:1rem;">
                         <button class="btn btn-primary btn-sm" onclick="refreshExpenseDetail('${id}', ${resolvedOptions.shared ? 'true' : 'false'}, ${resolvedOptions.shareToken ? `'${resolvedOptions.shareToken}'` : 'null'})">
-                            <i class="fa-solid fa-rotate"></i> Refresh
+                            <i class="fa-solid fa-rotate"></i> ${t('expenseDetail.refresh', { defaultValue: 'Refresh' })}
                         </button>
                         ${isOwner ? `<button class="btn btn-outline btn-sm" onclick="navigate('#/expenses/new?tab=scan')">
-                            <i class="fa-solid fa-camera"></i> Scan another
+                            <i class="fa-solid fa-camera"></i> ${t('expenseDetail.scanAnother', { defaultValue: 'Scan another receipt' })}
                         </button>` : ''}
                     </div>
                 </div>
             </div>
             <div class="card scanned-receipt-card">
                 <div class="card-title-row">
-                    <h3 class="card-title"><i class="fa-solid ${isPdf ? 'fa-file-pdf' : 'fa-image'}"></i> Scanned Receipt</h3>
+                    <h3 class="card-title"><i class="fa-solid ${isPdf ? 'fa-file-pdf' : 'fa-image'}"></i> ${t('expenseDetail.scannedReceipt', { defaultValue: 'Scanned Receipt' })}</h3>
                     <button class="btn btn-outline btn-sm receipt-scan-toggle-btn" onclick="toggleScannedReceipt()">
-                        <i class="fa-solid fa-eye-slash"></i> Hide Scan
+                        <i class="fa-solid fa-eye-slash"></i> ${t('expenseDetail.hideScan', { defaultValue: 'Hide Scan' })}
                     </button>
                 </div>
                 ${isPdf ? `
                     <iframe src="/pdfjs-5.6.205-dist/web/viewer.html?file=${encodeURIComponent(receiptUrl)}" style="width:100%; height:600px; border:0;"></iframe>
                 ` : `
                     <div class="receipt-zoom-container" id="receiptZoomContainer">
-                        <img src="${receiptUrl}" class="receipt-image" id="receiptImg" alt="Receipt">
+                        <img src="${receiptUrl}" class="receipt-image" id="receiptImg" alt="${t('expenseDetail.receipt', { defaultValue: 'Receipt' })}">
                     </div>
                 `}
             </div>
@@ -542,13 +536,13 @@ async function renderExpenseDetail(app, id, options = {}) {
     if (isProcessing) {
         html += `<div class="card" style="text-align:center; padding:3rem">
             <i class="fa-solid fa-spinner fa-spin" style="font-size:3rem; color:var(--primary)"></i>
-            <p style="margin-top:1rem; color:var(--text-light)">Processing receipt... This may take less than a minute.</p>
+            <p style="margin-top:1rem; color:var(--text-light)">${t('expenseDetail.processingReceipt', { defaultValue: 'Processing receipt... This may take less than a minute.' })}</p>
             <div style="display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap; margin-top:1rem;">
                 <button class="btn btn-primary" onclick="refreshExpenseDetail('${id}', ${resolvedOptions.shared ? 'true' : 'false'}, ${resolvedOptions.shareToken ? `'${resolvedOptions.shareToken}'` : 'null'})">
-                    <i class="fa-solid fa-rotate"></i> Refresh
+                    <i class="fa-solid fa-rotate"></i> ${t('expenseDetail.refresh', { defaultValue: 'Refresh' })}
                 </button>
                 ${isOwner ? `<button class="btn btn-outline" onclick="navigate('#/expenses/new?tab=scan')">
-                    <i class="fa-solid fa-camera"></i> Scan another receipt
+                    <i class="fa-solid fa-camera"></i> ${t('expenseDetail.scanAnother', { defaultValue: 'Scan another receipt' })}
                 </button>` : ''}
             </div>
         </div></div>`;
@@ -569,16 +563,16 @@ async function renderExpenseDetail(app, id, options = {}) {
             </div>
             <div class="card scanned-receipt-card">
                 <div class="card-title-row">
-                    <h3 class="card-title"><i class="fa-solid ${isPdf ? 'fa-file-pdf' : 'fa-image'}"></i> Scanned Receipt</h3>
+                    <h3 class="card-title"><i class="fa-solid ${isPdf ? 'fa-file-pdf' : 'fa-image'}"></i> ${t('expenseDetail.scannedReceipt', { defaultValue: 'Scanned Receipt' })}</h3>
                     <button class="btn btn-outline btn-sm receipt-scan-toggle-btn" onclick="toggleScannedReceipt()">
-                        <i class="fa-solid fa-eye-slash"></i> Hide Scan
+                        <i class="fa-solid fa-eye-slash"></i> ${t('expenseDetail.hideScan', { defaultValue: 'Hide Scan' })}
                     </button>
                 </div>
                 ${isPdf ? `
                     <iframe src="/pdfjs-5.6.205-dist/web/viewer.html?file=${encodeURIComponent(receiptUrl)}" style="width:100%; height:600px; border:0;"></iframe>
                 ` : `
                     <div class="receipt-zoom-container" id="receiptZoomContainer">
-                        <img src="${receiptUrl}" class="receipt-image" id="receiptImg" alt="Receipt">
+                        <img src="${receiptUrl}" class="receipt-image" id="receiptImg" alt="${t('expenseDetail.receipt', { defaultValue: 'Receipt' })}">
                     </div>
                 `}
             </div>
@@ -592,7 +586,7 @@ async function renderExpenseDetail(app, id, options = {}) {
 
     const attachments = e.attachments || [];
     html += `<div class="card">
-        <h3 class="card-title"><i class="fa-solid fa-paperclip"></i> Attachments</h3>
+        <h3 class="card-title"><i class="fa-solid fa-paperclip"></i> ${t('expenseDetail.attachments', { defaultValue: 'Attachments' })}</h3>
         <ul class="attachment-list" id="attachmentList">
             ${attachments.map(a => {
                 const fname = a.replace(/\\/g, '/').split('/').pop();
@@ -607,7 +601,7 @@ async function renderExpenseDetail(app, id, options = {}) {
         </ul>
         ${isOwner ? `<div style="margin-top:0.75rem">
             <input type="file" id="newAttachment" multiple>
-            <button class="btn btn-outline btn-sm" onclick="uploadAttachments('${e.id}')"><i class="fa-solid fa-upload"></i> Upload</button>
+            <button class="btn btn-outline btn-sm" onclick="uploadAttachments('${e.id}')"><i class="fa-solid fa-upload"></i> ${t('expenseDetail.upload', { defaultValue: 'Upload' })}</button>
         </div>` : ''}
     </div>`;
 
@@ -616,30 +610,30 @@ async function renderExpenseDetail(app, id, options = {}) {
     html += `<div class="card">
         <div class="expand-toggle" onclick="toggleOtherDetails()" style="font-size:1.1rem; font-weight:600; color:var(--primary-dark); border-top:none; margin-top:0; padding-bottom:0;">
             <i class="fa-solid fa-chevron-down" id="otherDetailsIcon" style="font-size:0.85rem;"></i>
-            <span id="otherDetailsLabel">Other details</span>
+            <span id="otherDetailsLabel">${t('expenseDetail.otherDetails', { defaultValue: 'Other details' })}</span>
         </div>
         <div id="otherDetailsSection" style="display:none;">
             <div class="other-details-grid">
                 <div class="other-detail-row">
-                    <span class="other-detail-label">Type</span>
+                    <span class="other-detail-label">${t('expenseDetail.type', { defaultValue: 'Type' })}</span>
                     <span class="badge badge-${isReceiptScan ? 'scan' : 'manual'}">
-                        <i class="fa-solid fa-${isReceiptScan ? 'camera' : (isChatbot ? 'robot' : 'pen')}"></i> ${isReceiptScan ? 'Receipt Scan' : (isChatbot ? 'Chatbot' : 'Manual')}
+                        <i class="fa-solid fa-${isReceiptScan ? 'camera' : (isChatbot ? 'robot' : 'pen')}"></i> ${isReceiptScan ? t('expenseDetail.receiptScan', { defaultValue: 'Receipt Scan' }) : (isChatbot ? t('expenseDetail.chatbot', { defaultValue: 'Chatbot' }) : t('expenseDetail.manual', { defaultValue: 'Manual' }))}
                     </span>
                 </div>
                 ${e.scannedAt ? `<div class="other-detail-row">
-                    <span class="other-detail-label">Scanned</span>
-                    <span>${new Date(e.scannedAt).toLocaleString()}</span>
+                    <span class="other-detail-label">${t('expenseDetail.scanned', { defaultValue: 'Scanned' })}</span>
+                    <span>${formatDateTime(e.scannedAt)}</span>
                 </div>` : ''}
                 ${e.createdAt ? `<div class="other-detail-row">
-                    <span class="other-detail-label">Created</span>
-                    <span>${new Date(e.createdAt).toLocaleString()}</span>
+                    <span class="other-detail-label">${t('expenseDetail.created', { defaultValue: 'Created' })}</span>
+                    <span>${formatDateTime(e.createdAt)}</span>
                 </div>` : ''}
                 ${e.updatedAt ? `<div class="other-detail-row">
-                    <span class="other-detail-label">Updated</span>
-                    <span>${new Date(e.updatedAt).toLocaleString()}</span>
+                    <span class="other-detail-label">${t('expenseDetail.updatedLabel', { defaultValue: 'Updated' })}</span>
+                    <span>${formatDateTime(e.updatedAt)}</span>
                 </div>` : ''}
                 ${storeHasMap ? `<div class="other-detail-row">
-                    <span class="other-detail-label"><i class="fa-solid fa-map-location-dot" style="color:var(--primary); margin-right:0.25rem;"></i> Store location</span>
+                    <span class="other-detail-label"><i class="fa-solid fa-map-location-dot" style="color:var(--primary); margin-right:0.25rem;"></i> ${t('expenseDetail.storeLocation', { defaultValue: 'Store location' })}</span>
                 </div>
                 <div id="storeOtherDetailsMap" style="height:200px; border-radius:var(--radius); margin-top:0.4rem; border:1px solid var(--border-color);"></div>` : ''}
             </div>
@@ -674,7 +668,7 @@ async function renderExpenseDetail(app, id, options = {}) {
             if (exRate) updates.exchangeRate = parseFloat(exRate);
             const data = await api(`/api/expenses/${id}`, { method: 'PUT', body: updates });
             if (data && data.error) toast(data.error, 'error');
-            else { toast('Expense updated!', 'success'); return; }
+            else { toast(t('expenseDetail.updated', { defaultValue: 'Expense updated!' }), 'success'); return; }
             window._allExpenseCategories = null;
             renderExpenseDetail(app, id);
         };
@@ -795,14 +789,14 @@ function toggleOtherDetails() {
     if (section.style.display === 'none') {
         section.style.display = 'block';
         icon.className = 'fa-solid fa-chevron-up';
-        label.textContent = 'Hide details';
+        label.textContent = t('expenseDetail.hideDetails', { defaultValue: 'Hide details' });
         setTimeout(() => {
             if (window._storeOtherDetailsMap) window._storeOtherDetailsMap.invalidateSize();
         }, 100);
     } else {
         section.style.display = 'none';
         icon.className = 'fa-solid fa-chevron-down';
-        label.textContent = 'Other details';
+        label.textContent = t('expenseDetail.otherDetails', { defaultValue: 'Other details' });
     }
 }
 
@@ -819,7 +813,7 @@ function renderReceiptView(e, items, store, id, isOwner) {
 
     const activeItems = (items || []).filter(i => !i.deleted);
     const currency = e.currency || '';
-    const total = e.amount != null ? Number(e.amount).toFixed(2) : '\u2014';
+    const total = e.amount != null ? formatCurrency(e.amount, currency) : '\u2014';
 
     const baseCurr = currentUser?.baseCurrency || '';
     let amountInBase = e.amountInBase != null ? Number(e.amountInBase) : null;
@@ -843,7 +837,7 @@ function renderReceiptView(e, items, store, id, isOwner) {
             }
         }
         html += `<div class="receipt-store-name">${esc(storeName)}</div>`;
-        if (addressStr) html += `<button type="button" class="receipt-store-address receipt-map-link" onclick="scrollToStoreMapFromReceiptAddress()" title="Show store location map">${esc(addressStr)}</button>`;
+        if (addressStr) html += `<button type="button" class="receipt-store-address receipt-map-link" onclick="scrollToStoreMapFromReceiptAddress()" title="${t('expenseDetail.showStoreMap', { defaultValue: 'Show store location map' })}">${esc(addressStr)}</button>`;
         if (phone || website) {
             html += `<div class="receipt-store-contact">`;
             if (phone) html += `<a href="tel:${esc(phone)}" class="receipt-store-link">${esc(phone)}</a>`;
@@ -852,14 +846,14 @@ function renderReceiptView(e, items, store, id, isOwner) {
             html += `</div>`;
         }
     } else {
-        html += `<div class="receipt-store-placeholder">No store info</div>`;
+        html += `<div class="receipt-store-placeholder">${t('expenseDetail.noStoreInfo', { defaultValue: 'No store info' })}</div>`;
     }
     html += `</div><div class="receipt-divider"></div>`;
 
     // Receipt number + date/time (stacked to avoid wrapping conflicts on long values)
     html += `<div class="receipt-meta-section">
         <div class="receipt-meta-line">
-            <span>${receiptNum ? '#' + esc(receiptNum) : '<span style="color:var(--text-light);font-style:italic">No receipt #</span>'}</span>
+            <span>${receiptNum ? '#' + esc(receiptNum) : `<span style="color:var(--text-light);font-style:italic">${t('expenseDetail.noReceiptNumber', { defaultValue: 'No receipt #' })}</span>`}</span>
         </div>
         <div class="receipt-meta-line receipt-meta-line-secondary">
             <span>${dateTimeStr}</span>
@@ -868,7 +862,7 @@ function renderReceiptView(e, items, store, id, isOwner) {
 
     // Items
     html += `<div class="receipt-items-section">`;
-    html += `<div class="receipt-items-count">${activeItems.length} item${activeItems.length !== 1 ? 's' : ''}</div>`;
+    html += `<div class="receipt-items-count">${t('expenseDetail.itemCount', { count: activeItems.length, defaultValue: activeItems.length === 1 ? '{{count}} item' : '{{count}} items' })}</div>`;
     if (activeItems.length > 0) {
         activeItems.forEach(i => {
             const qty = Number(i.quantity);
@@ -879,7 +873,7 @@ function renderReceiptView(e, items, store, id, isOwner) {
             const hasAdj = adj !== 0;
             const adjStr = adj > 0 ? `+${adj.toFixed(2)}` : adj.toFixed(2);
             const itemClick = isOwner
-                ? `onclick="openItemDialog('${id}','${i.id}','${esc(i.itemName).replace(/'/g, "\\'")}',${i.quantity},${i.unitPrice},${i.adjustment != null ? i.adjustment : 0})" title="Click to edit item"`
+                ? `onclick="openItemDialog('${id}','${i.id}','${esc(i.itemName).replace(/'/g, "\\'")}',${i.quantity},${i.unitPrice},${i.adjustment != null ? i.adjustment : 0})" title="${t('expenseDetail.clickToEditItem', { defaultValue: 'Click to edit item' })}"`
                 : '';
             html += `<div class="receipt-item-row${isOwner ? ' receipt-clickable' : ''}" ${itemClick}>
                 <div class="receipt-item-name">${esc(i.itemName)}</div>
@@ -893,7 +887,7 @@ function renderReceiptView(e, items, store, id, isOwner) {
     } else if (e.notes) {
         html += `<div class="receipt-notes-in-items">${esc(e.notes)}</div>`;
     } else {
-        html += `<div class="receipt-no-items">No items</div>`;
+        html += `<div class="receipt-no-items">${t('expenseDetail.noItems', { defaultValue: 'No items' })}</div>`;
     }
     html += `</div>`;
 
@@ -902,10 +896,10 @@ function renderReceiptView(e, items, store, id, isOwner) {
     // Total
     html += `<div class="receipt-total-section">
         <div class="receipt-total-line">
-            <span class="receipt-total-label">TOTAL</span>
-            <span class="receipt-total-amount">${total} ${esc(currency)}</span>
+            <span class="receipt-total-label">${t('expenseDetail.total', { defaultValue: 'TOTAL' })}</span>
+            <span class="receipt-total-amount">${total}</span>
         </div>
-        ${showBase ? `<div class="receipt-base-amount"><i class="fa-solid fa-exchange-alt" style="font-size:0.7rem"></i> ${amountInBase.toFixed(2)} ${esc(baseCurr)}</div>` : ''}
+        ${showBase ? `<div class="receipt-base-amount"><i class="fa-solid fa-exchange-alt" style="font-size:0.7rem"></i> ${formatCurrency(amountInBase, baseCurr)}</div>` : ''}
     </div>`;
 
     // Footer
@@ -913,9 +907,9 @@ function renderReceiptView(e, items, store, id, isOwner) {
     if (e.category || (e.tags && e.tags.length) || (e.notes && !notesShownInItems)) {
         html += `<div class="receipt-divider"></div>`;
         html += `<div class="receipt-footer-section">`;
-        if (e.category) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Category:</span> ${esc(e.category)}</div>`;
-        if (e.tags && e.tags.length) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Tags:</span> ${e.tags.map(t => esc(t)).join(', ')}</div>`;
-        if (e.notes && !notesShownInItems) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">Notes:</span> ${esc(e.notes)}</div>`;
+        if (e.category) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">${t('profile.trash.category', { defaultValue: 'Category' })}:</span> ${esc(e.category)}</div>`;
+        if (e.tags && e.tags.length) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">${t('expenseDetail.tags', { defaultValue: 'Tags' })}:</span> ${e.tags.map(t => esc(t)).join(', ')}</div>`;
+        if (e.notes && !notesShownInItems) html += `<div class="receipt-footer-line"><span class="receipt-footer-label">${t('expenseDetail.notes', { defaultValue: 'Notes' })}:</span> ${esc(e.notes)}</div>`;
         html += `</div>`;
     }
 
@@ -929,14 +923,14 @@ function expenseForm(e, id, isOwner = true) {
     const ro = isOwner ? '' : 'readonly disabled';
     return `<form ${isOwner ? 'id="expenseEditForm"' : ''}>
         <div class="form-row">
-            <div class="form-group"><label>Date & Time</label>
+            <div class="form-group"><label>${t('expenseDetail.dateTime', { defaultValue: 'Date & Time' })}</label>
                 <div class="detail-datetime-wrap">
-                    <input type="text" class="form-control detail-datetime" id="eDateDisplay" value="${e.transactionDatetime ? esc(formatShortHumanDateTime(e.transactionDatetime)) : ''}" placeholder="e.g. Oct 13, 2026, 3:45 PM" ${ro} onblur="syncPickerDateTimeFromDisplay('eDateDisplay','eDate')">
+                    <input type="text" class="form-control detail-datetime" id="eDateDisplay" value="${e.transactionDatetime ? esc(formatShortHumanDateTime(e.transactionDatetime)) : ''}" placeholder="${t('expenseDetail.dateTimePlaceholder', { defaultValue: 'e.g. Oct 13, 2026, 3:45 PM' })}" ${ro} onblur="syncPickerDateTimeFromDisplay('eDateDisplay','eDate')">
                     <input type="datetime-local" id="eDate" value="${toDateTimeLocalValue(e.transactionDatetime)}" style="position:absolute; opacity:0; pointer-events:none; width:1px; height:1px;" onchange="syncDisplayDateTimeFromPicker('eDateDisplay','eDate')" ${isOwner ? '' : 'disabled'}>
                     ${isOwner ? `<button type="button" class="btn btn-outline btn-sm" onclick="openDateTimePicker('eDateDisplay','eDate')"><i class="fa-solid fa-calendar-days"></i></button>` : ''}
                 </div>
             </div>
-            <div class="form-group"><label>Category</label>
+            <div class="form-group"><label>${t('profile.trash.category', { defaultValue: 'Category' })}</label>
                 <input type="text" class="form-control" id="eCategory" maxlength="50" value="${esc(e.category)}" list="eCategoryList" autocomplete="off" ${ro}>
                 <datalist id="eCategoryList">
                     ${allCats.map(c => `<option value="${esc(c)}">`).join('')}
@@ -944,10 +938,10 @@ function expenseForm(e, id, isOwner = true) {
             </div>
         </div>
         <div class="form-row detail-amount-row">
-            <div class="form-group"><label>Amount</label>
+            <div class="form-group"><label>${t('profile.trash.amount', { defaultValue: 'Amount' })}</label>
                 <input type="number" step="0.01" min="0" max="9999999999" class="form-control" id="eAmount" value="${e.amount||''}" ${ro}>
             </div>
-            <div class="form-group"><label>Currency</label>
+            <div class="form-group"><label>${t('auth.baseCurrency', { defaultValue: 'Currency' })}</label>
                 <input type="text" class="form-control" id="eCurrency" maxlength="3" value="${esc(e.currency)}" list="eCurrencyList" autocomplete="off" ${ro}>
                 <datalist id="eCurrencyList">
                     <option value="USD"></option><option value="EUR"></option>
@@ -956,23 +950,23 @@ function expenseForm(e, id, isOwner = true) {
                     <option value="CAD"></option><option value="CHF"></option>
                 </datalist>
             </div>
-            <div class="form-group"><label>Exchange Rate</label>
-                <input type="number" step="0.000001" min="0" max="999999" class="form-control" id="eExRate" value="${e.exchangeRate||''}" placeholder="Auto-fetched" ${ro}>
+            <div class="form-group"><label>${t('expenseDetail.exchangeRate', { defaultValue: 'Exchange Rate' })}</label>
+                <input type="number" step="0.000001" min="0" max="999999" class="form-control" id="eExRate" value="${e.exchangeRate||''}" placeholder="${t('expenseDetail.autoFetched', { defaultValue: 'Auto-fetched' })}" ${ro}>
             </div>
         </div>
-        ${e.amountInBase ? `<p class="amount-secondary" style="margin-bottom:1rem"><i class="fa-solid fa-exchange-alt"></i> ${Number(e.amountInBase).toFixed(2)} ${currentUser?.baseCurrency||''}</p>` : ''}
-        <div class="form-group"><label>Receipt Number</label>
+        ${e.amountInBase ? `<p class="amount-secondary" style="margin-bottom:1rem"><i class="fa-solid fa-exchange-alt"></i> ${formatCurrency(e.amountInBase, currentUser?.baseCurrency||'')}</p>` : ''}
+        <div class="form-group"><label>${t('expenseDetail.receiptNumber', { defaultValue: 'Receipt Number' })}</label>
             <input type="text" class="form-control" id="eReceipt" maxlength="50" value="${esc(e.receiptNumber)}" ${ro}>
         </div>
-        <div class="form-group"><label>Tags</label>
+        <div class="form-group"><label>${t('expenseDetail.tags', { defaultValue: 'Tags' })}</label>
             <div class="tags-container" id="eTagsContainer">
-                <input type="text" class="tag-input" id="eTagInput" placeholder="Add tag..." ${ro}>
+                <input type="text" class="tag-input" id="eTagInput" placeholder="${t('expenseDetail.addTag', { defaultValue: 'Add tag...' })}" ${ro}>
             </div>
         </div>
-        <div class="form-group"><label>Notes</label>
+        <div class="form-group"><label>${t('expenseDetail.notes', { defaultValue: 'Notes' })}</label>
             <textarea class="form-control" id="eNotes" rows="2" maxlength="500" ${ro}>${esc(e.notes)}</textarea>
         </div>
-        ${isOwner ? `<button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Save Changes</button>` : ''}
+        ${isOwner ? `<button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> ${t('expenseDetail.saveChanges', { defaultValue: 'Save Changes' })}</button>` : ''}
     </form>`;
 }
 
@@ -983,13 +977,13 @@ async function uploadAttachments(expenseId) {
         const fd = new FormData(); fd.append('file', f);
         await api(`/api/expenses/${expenseId}/attachments`, { method: 'POST', body: fd });
     }
-    toast('Attachments uploaded', 'success');
+    toast(t('expenseDetail.attachmentsUploaded', { defaultValue: 'Attachments uploaded' }), 'success');
     renderExpenseDetail(document.getElementById('app'), expenseId);
 }
 
 async function removeAttachment(expenseId, filename) {
     await api(`/api/expenses/${expenseId}/attachments/${filename}`, { method: 'DELETE' });
-    toast('Attachment removed', 'success');
+    toast(t('expenseDetail.attachmentRemoved', { defaultValue: 'Attachment removed' }), 'success');
     renderExpenseDetail(document.getElementById('app'), expenseId);
 }
 function toggleScannedReceipt() {
@@ -1048,10 +1042,10 @@ function closeReceiptSectionMenu() {
 
 async function retryExpenseWithConfirm(id, status) {
     if (status !== 'FAILED') {
-        const ok = confirm('This expense has already been processed (status: ' + status + '). Retrying will re-scan the receipt and replace the current data. Continue?');
+        const ok = confirm(t('expenseDetail.retryConfirm', { defaultValue: 'This expense has already been processed (status: {{status}}). Retrying will re-scan the receipt and replace the current data. Continue?', status }));
         if (!ok) return;
     }
     await api(`/api/expenses/${id}/retry`, { method: 'POST' });
-    toast('Retry initiated. Refreshing in a moment...', 'info');
+    toast(t('expenseDetail.retryStarted', { defaultValue: 'Retry initiated. Refreshing in a moment...' }), 'info');
     setTimeout(() => renderExpenseDetail(document.getElementById('app'), id), 1500);
 }
